@@ -24,10 +24,40 @@
   --ifm-color-primary-lightest: #cee2fe;
 }
 
+/* Wyśrdkowanie tekstu glwonie przy grafikach*/
 .text-center {
   text-align: center;
 }
 
+/* Justowanie tekstu w akapitach */
 .justify {
   text-align: justify;
+}
+
+/* Przypisy (footnotes) w stylu [1] zamiast małej, podniesionej cyfry */
+h2[id="footnote-label"] {
+  font-size: 0;
+}
+h2[id="footnote-label"]::after {
+  content: "Bibliografia";
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+sup:has(> a[data-footnote-ref]) {
+  vertical-align: baseline;
+  font-size: 1em;
+}
+sup > a[data-footnote-ref] {
+  text-decoration: none;
+}
+sup > a[data-footnote-ref]::before {
+  content: "[";
+}
+sup > a[data-footnote-ref]::after {
+  content: "]";
+}
+
+a[data-footnote-backref] {
+  display: none;
 }
