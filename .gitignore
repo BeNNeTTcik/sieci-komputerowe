@@ -1,0 +1,19 @@
+# Zależności
+node_modules/
+
+# Pliki wygenerowane przez Docusaurus
+.docusaurus/
+build/
+
+# Logi
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Systemowe
+.DS_Store
+Thumbs.db
+
+# Środowisko
+.env
+.env.local
