@@ -1,9 +1,9 @@
 ---
 sidebar_position: 14
-title: "Ćwiczenie 14: NAT/PAT oraz DHCP"
+title: "Ćwiczenie 14: Tworzenie sieci w Cisco Packet Tracer"
 ---
 
-# Ćwiczenie 14: NAT/PAT oraz DHCP
+# Ćwiczenie 14: Tworzenie sieci w Cisco Packet Tracer
 
 *Część II — Zajęcia praktyczne*
 

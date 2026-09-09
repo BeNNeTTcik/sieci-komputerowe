@@ -131,10 +131,6 @@ Tab.3 Kody statusu
 
 ## II. Zadania do wykonania
 
-1. Przechwycić zapytanie HTTP i DNS, wskazać warstwy OSI.
-2. Przeanalizować proces DHCP (DORA).
-3. Opisać krok po kroku, co dzieje się na każdej warstwie OSI dla scenariusza „otwarcie strony WWW”.
-
 ### Przechwytywanie zapytań DNS
 
 <StepByStep>
@@ -144,6 +140,8 @@ Uruchom przechwytywanie ruchu w programie Wireshark. Uruchom przechwytywanie i z
 ```
 Filtr Wyświetlania: dns
 ```
+
+![Rys5](/img/5/dns1.png)
 </Step>
 
 <Step title="Przechwycenie zapytania DNS - 2">
@@ -153,23 +151,33 @@ Pierwsza przy pomocy Wiersza poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ c
 ```bash
 nslookup wp.pl
 ```
+![Rys6](/img/5/dns2a.png)
+
 Druga możliwość uruchomić przeglądarkę i w miejscu URL wpisać strone Internetową:
 ```bash
-wp.pl
+foka.wi.local/pgadmin4
 ```
+![Rys7](/img/5/dns2b.png)
+
 </Step>
 
 <Step title="Przechwycenie zapytania DNS - 3">
 W programie Wireshark kliknij w pojedynczy pakiet zapytania i przyporządkuj jego elementy do warstw modelu OSI:
 
-GRAFIKA!!!
+![Rys8](/img/5/dns3.png)
 
 **Na co zwrócić uwagę:**
-- wyszukaj nazwę domenową w treści zapytania (np. ```wp.pl```)
-- port źródłowy oraz port docelowy (port 53)
-- adres IP źródłowy/docelowy
+- wyszukaj nazwę domenową w treści zapytania (np. ```wp.pl```) (Wireshark -> Domain Name System)
+- port źródłowy oraz port docelowy (port 53 = DNS) (Wireshark -> User Datagram Protocol)
+- adres IP źródłowy/docelowy (Wireshark -> Internet Protocol Version 4)
+</Step>
+
+<Step title="Przechwycenie zapytania DNS - 4">
+Kliknij dwukrotnie w pakiet który analizowałeś. Powinno sie otworzyć nowe okno z danym pakietem.
 </Step>
 </StepByStep>
+
+### Przechwytywanie zapytań HTTP
 
 <StepByStep>
 <Step title="Przechwycenie zapytania HTTP - 1">
@@ -178,44 +186,65 @@ Uruchom przechwytywanie ruchu w programie Wireshark. Uruchom przechwytywanie i z
 ```
 Filtr Wyświetlania: http
 ```
+
+![Rys9](/img/5/http1.png)
 </Step>
 
 <Step title="Przechwycenie zapytania HTTP - 2">
 Wygeneruj świeże zapytanie HTTP wywołując strone ```foka.wi.local``` z poziomu przeglądarki:
 ```bash
-wp.pl
+foka.wi.local/pgadmin4
 ```
+
+![Rys10](/img/5/http2.png)
 </Step>
 
 <Step title="Przechwycenie zapytania HTTP - 3">
 W programie Wireshark kliknij pakiet z żądaniem `GET` i wykonaj analizę struktury pakietu:
 
+![Rys11](/img/5/http3.png)
+
 **Na co zwrócić uwagę:**
-- linia żądania (`GET /index.html HTTP/1.1`)
-- port źródłowy/docelowy (port 80)
-- adres IP źródłowy/docelowy
+- linia żądania (`GET /index.html HTTP/1.1`).
+- port źródłowy/docelowy (port 80).
+- adres IP źródłowy/docelowy.
+</Step>
+
+<Step title="Przechwycenie zapytania HTTP - 4">
+Kliknij dwukrotnie w pakiet który analizowałeś. Otwórz ponownie pakiet z zadania poświęconenu DNS.
+
+:::warning **Zwróć uwagę na różnicę pomiędzy DNS, a HTTP:**
+HTTP korzysta z TCP (na liście pakietów występuje SYN/SYN-ACK/ACK), podczas gdy DNS korzysta z UDP (bez gwarancji otrzymania odpowiedzi od serwera DNS).
+:::
+
+![Rys11](/img/5/http4.png)
+
 </Step>
 </StepByStep>
 
-:::warning **Zwróć uwagę na różnicę pomiędzy DNS, a HTTP:** 
-HTTP korzysta z TCP (na liście pakietów występuje SYN/SYN-ACK/ACK), podczas gdy DNS korzysta z UDP (bez gwarancji otrzymania odpowiedzi od serwera DNS).
-:::
+### Analiza ruchu uwzględniająć wszystkie poznane warstwy
+
 <StepByStep>
+<Step title="Analiza ruchu uwzględniająć wszystkie poznane warstwy">
+Na podstawie tego, co zaobserwowałeś/aś w zadaniu związanym z DNS i HTTP, przejdziemy po koleji po **każdej** z 7 warstw OSI. Przejdź ponownie do Wireshark:
+```
+Filtr Wyświetlania: http
+```
+Następnie ponownie wywołaj adres strony np. ```wp.pl```.
+</Step>
+
 <Step title="Scenariusz „otwarcie strony WWW” warstwa po warstwie">
-Na podstawie tego, co zaobserwowałeś/aś w krokach 1–2, co dzieje się na **każdej** z 7 warstw OSI w momencie wpisania adresu strony w przeglądarce i naciśnięcia Enter:
 
 1. **Aplikacji** — przeglądarka najpierw potrzebuje adresu IP serwera, więc generuje zapytanie DNS; po jego otrzymaniu buduje żądanie HTTP `GET`.
 2. **Prezentacji** — jeśli strona używa HTTPS, w tym miejscu następuje negocjacja TLS i szyfrowanie danych żądania.
-3. **Sesji** — przeglądarka zarządza dialogiem z serwerem (w praktyce internetowej ta funkcja w dużej mierze zanika/łączy się z aplikacją — patrz nasza wcześniejsza notatka o cookies).
+3. **Sesji** — przeglądarka zarządza dialogiem z serwerem.
 4. **Transportowa** — dla DNS: UDP, pojedynczy datagram; dla HTTP: TCP, pełne trójstopniowe uzgadnianie (SYN/SYN-ACK/ACK) przed wysłaniem żądania.
 5. **Sieciowa** — pakiety IP są kierowane przez kolejne routery na trasie do serwera (być może przez bramę domyślną, jeśli serwer jest poza siecią lokalną).
 6. **Łącza danych** — na każdym odcinku trasy dane są opakowywane w ramki Ethernet/Wi-Fi z odpowiednimi adresami MAC (ustalanymi przez ARP na każdym segmencie sieci lokalnej).
 7. **Fizyczna** — bity są fizycznie przesyłane medium transmisyjnym (kabel UTP, światłowód, fale radiowe) między kolejnymi urządzeniami.
 
 Odpowiedź serwera wraca tą samą drogą, przechodząc przez te same warstwy w odwrotnej kolejności (dekapsulacja).
-
 </Step>
-
 </StepByStep>
 
 ### Test zamykający część teoretyczną
