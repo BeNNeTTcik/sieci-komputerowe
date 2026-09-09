@@ -167,7 +167,7 @@ W programie Wireshark kliknij w pojedynczy pakiet zapytania i przyporządkuj jeg
 ![Rys8](/img/5/dns3.png)
 
 **Na co zwrócić uwagę:**
-- wyszukaj nazwę domenową w treści zapytania (np. ```wp.pl```) (Wireshark -> Domain Name System)
+- wyszukaj nazwę domenową w treści zapytania (np. ```foka.wi.local/pgadmin4```) (Wireshark -> Domain Name System)
 - port źródłowy oraz port docelowy (port 53 = DNS) (Wireshark -> User Datagram Protocol)
 - adres IP źródłowy/docelowy (Wireshark -> Internet Protocol Version 4)
 </Step>
@@ -205,35 +205,34 @@ W programie Wireshark kliknij pakiet z żądaniem `GET` i wykonaj analizę struk
 ![Rys11](/img/5/http3.png)
 
 **Na co zwrócić uwagę:**
-- linia żądania (`GET /index.html HTTP/1.1`).
+- linia żądania (`GET /pgadmin4/login/... HTTP/1.1`).
 - port źródłowy/docelowy (port 80).
 - adres IP źródłowy/docelowy.
 </Step>
 
 <Step title="Przechwycenie zapytania HTTP - 4">
-Kliknij dwukrotnie w pakiet który analizowałeś. Otwórz ponownie pakiet z zadania poświęconenu DNS.
+Kliknij dwukrotnie w pakiet który analizowałeś. Otwórz ponownie pakiet z zadania poświęconenu DNS. Aby zobaczyć cała komunikację związaną z przesłąniem strony internetowej. Kliknij **PPM** na jeden z pakietów, nastepnie wybierz **"Podążaj" -> "HTTP Strumień"**.
+
+![Rys11](/img/5/http4.png)
 
 :::warning **Zwróć uwagę na różnicę pomiędzy DNS, a HTTP:**
 HTTP korzysta z TCP (na liście pakietów występuje SYN/SYN-ACK/ACK), podczas gdy DNS korzysta z UDP (bez gwarancji otrzymania odpowiedzi od serwera DNS).
 :::
-
-![Rys11](/img/5/http4.png)
-
 </Step>
 </StepByStep>
 
 ### Analiza ruchu uwzględniająć wszystkie poznane warstwy
 
 <StepByStep>
-<Step title="Analiza ruchu uwzględniająć wszystkie poznane warstwy">
+<Step title="Analiza ruchu uwzględniająć wszystkie poznane warstwy - 1">
 Na podstawie tego, co zaobserwowałeś/aś w zadaniu związanym z DNS i HTTP, przejdziemy po koleji po **każdej** z 7 warstw OSI. Przejdź ponownie do Wireshark:
 ```
 Filtr Wyświetlania: http
 ```
-Następnie ponownie wywołaj adres strony np. ```wp.pl```.
+Następnie ponownie wywołaj adres strony np. ```foka.wi.local/pgadmin4```.
 </Step>
 
-<Step title="Scenariusz „otwarcie strony WWW” warstwa po warstwie">
+<Step title="Scenariusz „otwarcie strony WWW” warstwa po warstwie - 2">
 
 1. **Aplikacji** — przeglądarka najpierw potrzebuje adresu IP serwera, więc generuje zapytanie DNS; po jego otrzymaniu buduje żądanie HTTP `GET`.
 2. **Prezentacji** — jeśli strona używa HTTPS, w tym miejscu następuje negocjacja TLS i szyfrowanie danych żądania.
@@ -244,6 +243,18 @@ Następnie ponownie wywołaj adres strony np. ```wp.pl```.
 7. **Fizyczna** — bity są fizycznie przesyłane medium transmisyjnym (kabel UTP, światłowód, fale radiowe) między kolejnymi urządzeniami.
 
 Odpowiedź serwera wraca tą samą drogą, przechodząc przez te same warstwy w odwrotnej kolejności (dekapsulacja).
+</Step>
+
+<Step title="Scenariusz „otwarcie strony WWW” warstwa po warstwie - 3">
+Podobnie jak w poprzednim zadaniu otwieramy (**PPM** na jeden z pakietów, nastepnie wybierz **"Podążaj" -> "HTTP Strumień"**) śledzenie strumienia HTTP. W nowym oknie pojawiła sie pełna wymiana informacji pomiędzy klientem, a serwerem. Gdzie przenosząc sie okna znajdziemy odesłana strone w wersji dokumentu tekstowego niezaszyfrowanego.
+
+![Rys12](/img/5/www3.png)
+</Step>
+
+<Step title="Scenariusz „otwarcie strony WWW” warstwa po warstwie - 4">
+W głównym oknie programu Wireshark pojawia się kompletny sechmat połączenia dla modelu **żądanie-odpowiedź** w celu dostarczenia strony WWW do klienta.
+
+![Rys12](/img/5/www4.png)
 </Step>
 </StepByStep>
 

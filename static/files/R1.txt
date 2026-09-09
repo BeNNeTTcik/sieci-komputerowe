@@ -1,0 +1,104 @@
+!
+version 16.6.4
+no service timestamps log datetime msec
+no service timestamps debug datetime msec
+no service password-encryption
+!
+hostname R1
+!
+!
+!
+enable password cisco
+!
+!
+ip dhcp excluded-address 172.16.1.253
+ip dhcp excluded-address 172.16.1.254
+!
+ip dhcp pool LAB
+ network 172.16.1.0 255.255.255.0
+ default-router 172.16.1.254
+!
+!
+!
+ip cef
+ipv6 unicast-routing
+!
+no ipv6 cef
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+no ip domain-lookup
+!
+!
+spanning-tree mode pvst
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0/0/0
+ no ip address
+ duplex auto
+ speed auto
+!
+interface GigabitEthernet0/0/0.10
+ encapsulation dot1Q 10 native
+ ip address 172.16.1.254 255.255.255.0
+ ipv6 address FE80::1 link-local
+ ipv6 address 2001:DB8::1/64
+ ipv6 nd other-config-flag
+!
+interface GigabitEthernet0/0/1
+ ip address 10.10.10.5 255.255.255.252
+ duplex auto
+ speed auto
+!
+interface GigabitEthernet0/0/2
+ no ip address
+ duplex auto
+ speed auto
+ shutdown
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+ip classless
+ip route 0.0.0.0 0.0.0.0 10.10.10.6 
+!
+ip flow-export version 9
+!
+!
+!
+banner motd $Unauthorized access prohibited$
+!
+!
+!
+!
+line con 0
+!
+line aux 0
+!
+line vty 0 4
+ password cisco
+ login
+ transport input telnet
+line vty 5 15
+ password cisco
+ login
+ transport input telnet
+!
+!
+!
+end
+
