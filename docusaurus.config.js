@@ -66,7 +66,7 @@ const config = {
             label: 'Ćwiczenia',
           },
           {
-            href: 'https://github.com/TWOJ-LOGIN/sieci-komputerowe',
+            href: 'https://github.com/BeNNeTTcik',
             label: 'GitHub',
             position: 'right',
           },
@@ -83,7 +83,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Materiały dydaktyczne — Sieci komputerowe.`,
+        copyright: `© ${new Date().getFullYear()} Mateusz Dampc. Materiały własne — wszystkie prawa zastrzeżone. Cytowane źródła zewnętrzne pozostają własnością ich autorów (patrz bibliografia przy każdym ćwiczeniu).`,
       },
       prism: {
         additionalLanguages: ['bash', 'diff', 'json'],
