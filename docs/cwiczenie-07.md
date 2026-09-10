@@ -5,6 +5,8 @@ title: "Ćwiczenie 7: Projektowanie adresacji IP i podział na podsieci"
 
 <!--- import bibliotek -->
 import TopologyBuilder from '@site/src/components/TopologyBuilder';
+import StepByStep from '@site/src/components/StepByStep';
+import Step from '@site/src/components/Step';
 
 # Ćwiczenie 7: Projektowanie adresacji IP i podział na podsieci
 
