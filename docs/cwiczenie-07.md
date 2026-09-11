@@ -149,3 +149,6 @@ Jeśli wszystkie testy kończą się sukcesem — para ma w pełni działającą
 </Step>
 
 </StepByStep>
+
+
+[^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)

@@ -61,3 +61,14 @@ sup > a[data-footnote-ref]::after {
 a[data-footnote-backref] {
   display: none;
 }
+
+/* StepByStep render pod PDF */
+.step-content-inactive {
+  display: none;
+}
+ 
+@media print {
+  .step-content-inactive {
+    display: block !important;
+  }
+}

@@ -99,10 +99,22 @@ export default function StepByStep({children}) {
 
   return (
     <div style={card}>
-      <h3 style={title}>{steps[current].props.title}</h3>
-      <div style={desc}>{steps[current]}</div>
+      {/* WAŻNE: renderujemy WSZYSTKIE kroki na raz, przez cały czas — nie tylko
+          aktywny. Na ekranie klasa "step-content-inactive" (zdefiniowana w
+          custom.css) chowa nieaktywne kroki przez display:none. W druku
+          (@media print) ta sama klasa jest nadpisywana na display:block,
+          więc wydruk/PDF zawiera WSZYSTKIE kroki, nie tylko ten jeden widoczny
+          na ekranie w chwili kliknięcia "drukuj". Dodatkowa korzyść: kroki
+          przestają się odmontowywać przy przełączaniu, więc np. wklejony
+          w nich <ScreenshotPaste /> nie traci obrazu po zmianie kroku. */}
+      {steps.map((step, i) => (
+        <div key={i} className={i === current ? 'step-content-active' : 'step-content-inactive'}>
+          <h3 style={title}>{step.props.title}</h3>
+          <div style={desc}>{step}</div>
+        </div>
+      ))}
 
-      <div style={row}>
+      <div style={row} className="no-print">
         {steps.map((_, i) => (
           <button
             key={i}
@@ -135,7 +147,7 @@ export default function StepByStep({children}) {
       </div>
 
       {showAll && (
-        <div style={{marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '12px'}}>
+        <div className="no-print" style={{marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '12px'}}>
           {steps.map((step, i) => (
             <div
               key={i}

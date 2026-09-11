@@ -8,10 +8,20 @@ import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
 import TopologyBuilder from '@site/src/components/TopologyBuilder';
 import KeywordAnswer from '@site/src/components/KeywordAnswer';
+import PrivateAddressTable from '@site/src/components/PrivateAddressTable';
+import SharedValue from '@site/src/components/SharedValue';
+import CodeLine from '@site/src/components/CodeLine';
+import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
 # Ćwiczenie 6: Podstawowa konfiguracja urządzeń i topologii pary
 
 *Część II — Zajęcia praktyczne*
+
+<SprawozdanieHeader
+  exerciseTitle="Ćwiczenie 6: Podstawowa konfiguracja urządzeń i topologii pary"
+  storageKey="cwiczenie-6"
+/>
 
 ## I. Wprowadzenie
 
@@ -24,7 +34,7 @@ Rys.1 Sieć laboratoryjna [^cisco]
 
 ## II. Zadania do wykonania
 
-1. Połączyć urządzenia zgodnie ze schematem (PC–SW-X–R1-X–R2-X).
+1. Połączyć urządzenia zgodnie ze schematem (PC-A-PC-B).
 2. Nadać nazwy hostów, skonfigurować hasła dostępu i baner.
 3. Skonfigurować interfejsy routerów i aktywować je (no shutdown).
 4. Podstawowa konfiguracja przełącznika (nazwa, adres zarządzania).
@@ -33,7 +43,7 @@ Rys.1 Sieć laboratoryjna [^cisco]
 ### Połączenie PC - PC i konfiguracja adresacji
 
 <StepByStep>
-<Step title="Połączenie PC-PC i konfiguracja adresacji">
+<Step title="Połączenie PC-PC">
 Połącz dwa komputery bezpośrednio kablem prostym. **Wykorzystaj dolną kartę sieciową.**
 
 <KeywordAnswer
@@ -45,54 +55,58 @@ Połącz dwa komputery bezpośrednio kablem prostym. **Wykorzystaj dolną kartę
 />
 </Step>
 
+<Step title="Konfiguracja adresacji">
+Adresacja IP nie jest z góry narzucona. Samemu trzeba określić adresację, która zostanie wykorzystana w ćwiczeniu.
+
+:::warning Uwaga!!!
+Trzeci oktet adresu IP powinien być równy numerowi pary. Np. pierwsza para = 1.
+:::
+
+<PrivateAddressTable
+  title="Wprowadź adres IP i maskę, którą wykorzystasz w zadaniu"
+  checkGroupOctet={true}
+  storageKey="cwiczenie-6-zad1"
+  columns={['device', 'ip', 'mask']}
+  initialRows={[{device: 'PC-A', shared: { ip: 'pca_ip', mask: 'maska' }}, {device: 'PC-B', shared: { ip: 'pcb_ip', mask: 'maskb' }}]}
+/>
+
+</Step>
+
 <Step title="Połączenie PC-PC i konfiguracja adresacji">
-Ustaw statyczną adresację IP w tej samej sieci na obu komputerach:
+Ustaw statyczną adresację IP zgdnie z poniższym schematem:
 
 <TopologyBuilder
-  title="Topologia — VLAN i trunking"
-  storageKey="cwiczenie-12"
+  title="Topologia"
+  storageKey="cwiczenie-6"
   topology={{
     vlan: { show: false },
     groups: [
       {
-        node: { icon: '🖥️', label: 'PC-B' },
+        node: { icon: '🖥️', label: 'PC-A' },
         fields: [
-          { key: 'trunk', label: 'port access', placeholder: (x) => 'Fa0/2' },
+          { key: 'port1', label: 'port', placeholder: () => 'IP', type: 'address', shared: 'pca_ip' },
         ],
       },
       {
         node: { icon: '🖥️', label: 'PC-B' },
         fields: [
-          { key: 'trunk', label: 'port access', placeholder: (x) => 'Fa0/2' },
+          { key: 'port2', label: 'port', placeholder: () => 'IP', type: 'address', shared: 'pcb_ip' },
         ],
-      },
+      }
     ],
   }}
 />
 
-Panel sterowania → Centrum sieci → Zmień ustawienia karty → właściwości IPv4:
-- PC-A: `192.168.1.10`, maska `255.255.255.0`
-- PC-B: `192.168.1.20`, maska `255.255.255.0`
+W Windows wejdź w "Panel sterowania" → "Centrum sieci" → "Zmień ustawienia karty" → właściwości "IPv4":
+- PC-A: <SharedValue shared="pca_ip" fallback="—" />, maska <SharedValue shared="maska" fallback="—" />
+- PC-A: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
 
+Zweryfikuj łączność w Wierszu poleceń:
 
+<CodeLine>ping <SharedValue fieldKey="pcb_ip" fallback="adres_IP" /></CodeLine>
 
-```bash
-sudo ip addr add 192.168.1.10/24 dev eth0   # na PC-A
-sudo ip addr add 192.168.1.20/24 dev eth0   # na PC-B
-```
-
-
-Zweryfikuj łączność:
-
-```
-ping 192.168.1.20
-```
-
-Jeśli ping działa — masz najprostszą możliwą, działającą sieć: dwa hosty w tej samej domenie rozgłoszeniowej, bez żadnego urządzenia pośredniczącego.
-
+<ScreenshotPaste label="Zrzut ekranu: polecania ping na adres drugiego komputera" />
 </Step>
 </StepByStep>
 
-## III. Podsumowanie
-
-Działająca, zaadresowana sieć lokalna pojedynczej pary.
+[^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)

@@ -20,6 +20,7 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
   const [answer, setAnswer] = useState('');
   const [checked, setChecked] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [emptyWarning, setEmptyWarning] = useState(false);
 
   useEffect(() => {
     try {
@@ -40,9 +41,16 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
   function handleChange(value) {
     setAnswer(value);
     setChecked(false); // po edycji trzeba sprawdzić ponownie — ukrywamy stary wynik
+    setEmptyWarning(false); // jak tylko ktoś zaczyna pisać, znika komunikat "podaj odpowiedź"
   }
 
   function handleCheck() {
+    if (answer.trim() === '') {
+      setEmptyWarning(true);
+      setChecked(false);
+      return;
+    }
+    setEmptyWarning(false);
     const normalizedAnswer = normalize(answer);
     const found = requiredList.some(k => normalizedAnswer.includes(normalize(k)));
     setIsCorrect(found);
@@ -64,10 +72,11 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
     color: '#111827',
   };
 
-  const darkBtn = {
+  const darkBtn = (disabled) => ({
     padding: '9px 20px', borderRadius: '8px', border: 'none', fontWeight: 600,
-    fontSize: '0.9rem', cursor: 'pointer', background: '#111827', color: '#ffffff', marginTop: '12px',
-  };
+    fontSize: '0.9rem', cursor: disabled ? 'default' : 'pointer', marginTop: '12px',
+    background: disabled ? '#e5e7eb' : '#111827', color: disabled ? '#9ca3af' : '#ffffff',
+  });
 
   return (
     <div style={card}>
@@ -81,7 +90,19 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
         style={textareaStyle}
       />
 
-      <button style={darkBtn} onClick={handleCheck}>Sprawdź</button>
+      <button style={darkBtn(checked)} onClick={handleCheck} disabled={checked}>
+        Sprawdź
+      </button>
+
+      {emptyWarning && (
+        <div style={{
+          marginTop: '14px', padding: '14px 16px', borderRadius: '10px',
+          background: '#eff6ff', border: '1px solid #bfdbfe',
+          fontSize: '0.9rem', color: '#1e3a8a', lineHeight: 1.5, fontWeight: 600,
+        }}>
+          ✏️ Podaj odpowiedź, zanim klikniesz „Sprawdź".
+        </div>
+      )}
 
       {checked && (
         <div style={{
