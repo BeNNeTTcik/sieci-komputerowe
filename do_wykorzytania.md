@@ -141,6 +141,8 @@ Jeśli wszystkie testy kończą się sukcesem — para ma w pełni działającą
 
 
 # to do VLAN
+
+
 <StepByStep>
 <Step title="Podłączenie do przełącznika">
 XXXXXXXXXXXXXXXXXXXXXXX
@@ -162,3 +164,9 @@ Zweryfikuj: `show interfaces trunk` — powinieneś zobaczyć port Fa0/24 w tryb
 <ScreenshotPaste label="Zrzut ekranu: polecenie show interfaces trunk" />
 </Step>
 </StepByStep>
+
+
+ikony 
+node: { icon: '🔀', label: 'SW-X' },
+node: { icon: '🌐', label: 'R1-X' },
+{ node: { icon: '🖥️', label: 'PC-A' } },

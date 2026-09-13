@@ -98,14 +98,28 @@ export default function EditableTable({title, columns, initialRows, allowAddRows
             <tr key={rowIndex}>
               {columns.map(c => (
                 <td key={c.key} style={td}>
-                  <input
-                    type="text"
-                    value={row[c.key] || ''}
-                    onChange={e => setCell(rowIndex, c.key, e.target.value)}
-                    placeholder={c.placeholder || ''}
-                    readOnly={!!c.readOnly}
-                    style={inputStyle((row[c.key] || '').trim() !== '', !!c.readOnly)}
-                  />
+                  {c.readOnly ? (
+                    // Kolumny tylko-do-odczytu renderują się jako zwykły <div>, a nie
+                    // <input> — dzięki temu mogą zawierać CAŁY komponent React (np.
+                    // <SharedValue shared="..." />), a nie tylko zwykły tekst. Pole
+                    // <input> potrafi wyświetlić wyłącznie string, nigdy prawdziwy
+                    // komponent, więc dla wartości statycznych i tak nadal działa
+                    // (React po prostu wyrenderuje string tak samo jak wcześniej).
+                    <div style={{
+                      ...inputStyle(false, true),
+                      display: 'flex', alignItems: 'center', minHeight: '20px',
+                    }}>
+                      {row[c.key]}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={row[c.key] || ''}
+                      onChange={e => setCell(rowIndex, c.key, e.target.value)}
+                      placeholder={c.placeholder || ''}
+                      style={inputStyle((row[c.key] || '').trim() !== '', false)}
+                    />
+                  )}
                 </td>
               ))}
               {allowRemoveRows && (
