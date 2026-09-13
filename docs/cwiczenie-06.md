@@ -107,6 +107,37 @@ Zweryfikuj łączność w Wierszu poleceń:
 
 <ScreenshotPaste label="Zrzut ekranu: polecania ping na adres drugiego komputera" />
 </Step>
+
+<Step title="Przywrócenie ustawień do stanu przed połączeniem">
+Przywróć adresacje na karcie siecowej do stanu przed zmiany konfiguracji.
+
+</Step>
+</StepByStep>
+
+### Wstępna konfiguracja urządzeń sieciowych Cisco
+
+<StepByStep>
+<Step title="Połączenie do przełącznika">
+Wejdzie do Wiersza poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd). Wykorzystaj komende w celu połączenia sie do przełącznika:
+```bash
+telnet <IP-przełącznika>
+```
+
+</Step>
+
+<Step title="Wstępna konfiguracja przełącznika">
+Na **SW-X**:
+
+```
+Switch(config)# hostname SW-1         #zmiana nazwy urządzenia
+SW-1(config)# interface vlan 1        #
+SW-1(config-if)# ip address 10.1.0.2 255.255.255.0
+SW-1(config-if)# no shutdown
+SW-1(config-if)# exit
+SW-1(config)# ip default-gateway 10.1.0.1
+```
+
+</Step>
 </StepByStep>
 
 [^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)

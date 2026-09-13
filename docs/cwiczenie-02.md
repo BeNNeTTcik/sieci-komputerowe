@@ -5,25 +5,32 @@ title: "Ćwiczenie 2: Warstwa łącza danych"
 
 import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
+import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
 # Ćwiczenie 2: Warstwa łącza danych
 
 *Część I — Model ISO/OSI*
 
+<SprawozdanieHeader
+  exerciseTitle="Ćwiczenie 2: Warstwa łącza danych"
+  storageKey="cwiczenie-2"
+/>
+
 ## I. Wprowadzenie
 
 <div className="justify">
-**Warstwa łącza danych** odpowiada natomiast za przekazywanie ramek Ethernet w obrębie sieci lokalnej, adresację fizyczną (**MAC**) oraz przełączanie ruchu przez switch. Mapowanie adresów IP na adresy MAC realizuje protokół **ARP** [[1](#bib1)].
+**Warstwa łącza danych** odpowiada natomiast za przekazywanie ramek Ethernet w obrębie sieci lokalnej, adresację fizyczną (**MAC**) oraz przełączanie ruchu przez switch. Mapowanie adresów IP na adresy MAC realizuje protokół **ARP** [^tanen].
 - ramka Ethernet — podstawowa jednostka danych warstwy 2, zawierająca nagłówek, dane oraz sumę kontrolną FCS,
 - adres MAC — unikalny adres fizyczny karty sieciowej wykorzystywany do przełączania ramek,
 - protokół ARP — mechanizm mapowania adresu IP na adres MAC, będący pomostem do warstwy 3.
 
-**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [[2](#bib2)]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części.
+**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części.
 </div>
 
 ![Rys1](/img/2/ramka.png)
 <div className="text-center">
-Rys. 2 Budowa ramki Ethernet [[2](#bib2)]
+Rys. 2 Budowa ramki Ethernet [^claude]
 </div>
 
 - **Preambuła (7 B)** — ciąg naprzemiennych bitów ```1010...```, służy do synchronizacji zegara odbiornika z nadajnikiem; nie jest wliczana do długości ramki.
@@ -36,22 +43,20 @@ Rys. 2 Budowa ramki Ethernet [[2](#bib2)]
 
 
 <div className="justify">
-**Adres MAC (Media Access Control)** to unikatowy, 48-bitowy (6-bajtowy) adres fizyczny przypisany do interfejsu sieciowego, działający na warstwie 2 (łącza danych) modelu OSI. W odróżnieniu od adresu IP, który jest adresem logicznym i może się zmieniać w zależności od sieci, do której podłączone jest urządzenie, adres MAC jest w założeniu stały i przypisany na stałe do konkretnego sprzętu przez producenta — stąd bywa nazywany adresem fizycznym lub sprzętowym [[3](#bib3)].
+**Adres MAC (Media Access Control)** to unikatowy, 48-bitowy (6-bajtowy) adres fizyczny przypisany do interfejsu sieciowego, działający na warstwie 2 (łącza danych) modelu OSI. W odróżnieniu od adresu IP, który jest adresem logicznym i może się zmieniać w zależności od sieci, do której podłączone jest urządzenie, adres MAC jest w założeniu stały i przypisany na stałe do konkretnego sprzętu przez producenta — stąd bywa nazywany adresem fizycznym lub sprzętowym [^802].
 </div>
 
 <div className="justify">
-Urządzeniem pracującym w tej warstwie jest przełącznik (ang. Switch). **Przełącznik** buduje na podstawie adresów MAC swoją **tablicę CAM**, ucząc się, za którym portem znajduje się dane urządzenie, i na tej podstawie przełącza ramki Ethernet wyłącznie do właściwego portu, zamiast rozsyłać je do wszystkich [[1](#bib1)]. Adres MAC jest też wykorzystywany m.in. do filtrowania dostępu (np. na routerach domowych) oraz jako podstawa niektórych mechanizmów bezpieczeństwa (port security).
+Urządzeniem pracującym w tej warstwie jest przełącznik (ang. Switch). **Przełącznik** buduje na podstawie adresów MAC swoją **tablicę CAM**, ucząc się, za którym portem znajduje się dane urządzenie, i na tej podstawie przełącza ramki Ethernet wyłącznie do właściwego portu, zamiast rozsyłać je do wszystkich [^tanen]. Adres MAC jest też wykorzystywany m.in. do filtrowania dostępu (np. na routerach domowych) oraz jako podstawa niektórych mechanizmów bezpieczeństwa (port security).
 </div>
 
 <div className="justify">
-**ARP (Address Resolution Protocol)** to protokół warstwy pomostowej między warstwą sieciową a warstwą łącza danych, którego zadaniem jest odwzorowanie adresu logicznego IPv4 na odpowiadający mu adres fizyczny MAC w obrębie tej samej sieci lokalnej. Jest on niezbędny, ponieważ ramka Ethernet do dostarczenia danych potrzebuje adresu MAC odbiorcy, a aplikacje i protokoły wyższych warstw „myślą” w kategoriach adresów IP. Protokół definiuje dokument **RFC 826** z 1982 roku [[4](#bib4)].
+**ARP (Address Resolution Protocol)** to protokół warstwy pomostowej między warstwą sieciową a warstwą łącza danych, którego zadaniem jest odwzorowanie adresu logicznego IPv4 na odpowiadający mu adres fizyczny MAC w obrębie tej samej sieci lokalnej. Jest on niezbędny, ponieważ ramka Ethernet do dostarczenia danych potrzebuje adresu MAC odbiorcy, a aplikacje i protokoły wyższych warstw „myślą” w kategoriach adresów IP. Protokół definiuje dokument **RFC 826** z 1982 roku [^RFC826].
 </div>
 
 <div className="justify">
 Aby wiedzieć, które urządzenie podłączone jest do którego portu, tj. do którego portu ma przekazać daną ramkę, przełącznik buduje tzw. **Tablicę MAC** adresów, poprzez obserwowanie przepływającego ruchu sieciowego (dokładniej mówiąc, adresów źródłowych MAC w ramkach pojawiających się na każdym z portów). Kiedy przełącznik nie znajduje docelowego MAC-a w tablicy, zachowuje się jak koncetrator i wysyła ramkę na wszystkie pozostałe porty. To samo może się wydarzyć, kiedy tablica MAC adresów przepełni się i przełącznik nie jest w stanie zapamiętać nowych MAC-ów na swoich portach.
 </div>
-
-
 
 ## II. Zadania do wykonania
 
@@ -81,6 +86,9 @@ ping <IP>
 Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych.
 
 ![WS](/img/2/zad1_4.png)
+
+<ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki" />
+
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet I">
@@ -91,12 +99,18 @@ Zaznacz pierwszą przechwyconą ramkę (zawierającą wysłany od Ciebie Echo (p
 - Wireshark nie wyświetla informacji o sumie kontrolnej.
 
 ![Echo](/img/2/zad1_5.png)
+
+<ScreenshotPaste label="Zrzut ekranu: przechwycona ramka Echo Request" />
+
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet II">
 Zaznacz drugą przechwyconą ramkę (Echo (ping) reply, będącą odpowiedzią na Twojego requesta) i zaobserwuj, jak zmienił się adres źródłowy i docelowy.
 
 ![SRC_DEST](/img/2/zad1_6.png)
+
+<ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki Echo Reply" />
+
 </Step>
 </StepByStep>
 
@@ -112,19 +126,29 @@ arp /?
 
 <Step title="Tablica powiązań ARP na Twoim komputerze">
 Przyjrzyj się wpisom (jeśli żadnych nie ma w tablicy, wywołaj ruch sieciowy, wykonując ```ping``` na komputer sąsiada). Zaobserwuj, że w każdym z nich skojarzony jest adres sieciowy (Internet Address, w tym przypadku adres IP) z adresem fizycznym MAC (Physical Address).
+
+```bash
+arp -a
+```
+
+<ScreenshotPaste label="Zrzut ekranu: tablica powiązań ARP" />
+
 </Step>
 
 <Step title="Usuwanie wpisów z tablicy powiązań ARP">
 W programie Wireshark uruchom przechwytywanie ruchu (filtruj tak, aby wyświetlić jedynie ruch ARP ```arp```).
-Wymuś wyczyszczenie całej tablicy ARP na Twoim komputerze komendą: 
+Wymuś wyczyszczenie całej tablicy ARP na Twoim komputerze komendą:
 ```bash
 arp -d *
 ```
-Natychmiast po ```arp -d *``` wykonaj polecenie: 
+Natychmiast po ```arp -d *``` wykonaj polecenie:
 ```bash
 arp -a
 ```
 Jeśli zaobserwujesz pojedyncze wpisy oznacza to, że poprawnie wykonano ćwiczenie.
+
+<ScreenshotPaste label="Zrzut ekranu: zaobserwowane wpisy w tablica powiązań ARP" />
+
 </Step>
 </StepByStep>
 
@@ -149,6 +173,9 @@ Będąc w trybie uprzywilejowanym, aby wyświetlić tablicę MAC adresów na prz
 show mac address-table dynamic
 ```
 Zobacz, jak zbudowana jest tablica MAC adresów. Najbardziej interesują nas dwie kolumny: Mac Address, w której umieszczane są adresy MAC urządzeń widzianych przez przełącznik, oraz Ports, zawierająca informację o tym, na którym porcie widziany jest dany MAC.
+
+<ScreenshotPaste label="Zrzut ekranu: tablica MAC adresów" />
+
 </Step>
 
 <Step title="Wyszukaj swój MAC adres - komputer">
@@ -188,17 +215,17 @@ show mac address-table dynamic
 To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza, że na 2. warstwie modelu OSI obsługiwane są adresy IP. Adres IP przypisany przełącznikowi służy jedynie temu, aby móc dostać się na niego i go przekonfigurować; nie ma wpływu na sam proces przełączania ramek, który to następuje na podstawie adresów MAC.
 :::
 
-## III. Bibliografia
+[^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
-<a id="bib1"></a>[1] A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
+[^802.3]: [IEEE Std 802.3-2018](https://standards.ieee.org/standard/802_3-2018.html), IEEE Standard for Ethernet, Institute of Electrical and Electronics Engineers.
 
-<a id="bib2"></a>[2] [IEEE Std 802.3-2018](https://standards.ieee.org/standard/802_3-2018.html), IEEE Standard for Ethernet, Institute of Electrical and Electronics Engineers.
+[^802]: [IEEE Std 802-2014](https://ieeexplore.ieee.org/document/6847097), IEEE Standard for Local and Metropolitan Area Networks: Overview and Architecture, Institute of Electrical and Electronics Engineers, 2014.
 
-<a id="bib3"></a>[3] [IEEE Std 802-2014](https://ieeexplore.ieee.org/document/6847097), IEEE Standard for Local and Metropolitan Area Networks: Overview and Architecture, Institute of Electrical and Electronics Engineers, 2014.
+[^RFC826]: IETF, [RFC 826](https://datatracker.ietf.org/doc/rfc826/) — An Ethernet Address Resolution Protocol (ARP), listopad 1982.
 
-<a id="bib4"></a>[4] IETF, [RFC 826](https://datatracker.ietf.org/doc/rfc826/) — An Ethernet Address Resolution Protocol (ARP), listopad 1982.
+[^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
 
-## IV. Uwagi dla prowadzącego
+## III. Uwagi dla prowadzącego
 
 :::note
 Wszytskich studentów trzeba podłączyć do przełączników. Zaczynając od 1-2 portów na Patch-Panel do Przełącznika 1 na porty 1-2. Potrzeba do wykonania zadania z **"Wyświetlenie tablicy MAC adresów na przełączniku"**

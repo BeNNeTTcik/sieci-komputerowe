@@ -1,26 +1,26 @@
 ---
 sidebar_position: 10
-title: "Ćwiczenie 10: Routing dynamiczny — RIP"
+title: "Ćwiczenie 10: Routing dynamiczny — OSPF (single area)"
 ---
 
-# Ćwiczenie 10: Routing dynamiczny — RIP
+# Ćwiczenie 10: Routing dynamiczny — OSPF (single area)
 
 *Część II — Zajęcia praktyczne*
 
 ## I. Wprowadzenie
 
-Wprowadzenie **routingu dynamicznego** opartego na protokole wektora odległości — **RIPv2**, zastępującego część tras statycznych.
+Budowa wspólnej sieci opartej na protokole **OSPF**, obejmującej wszystkie pary w grupie, w ramach jednego obszaru (**Area 0**).
 
-<!-- 💡 Tu możesz wstawić diagram, np.: ![Diagram](/img/cwiczenie-10-diagram.svg) -->
+<!-- 💡 Tu możesz wstawić diagram, np.: ![Diagram](/img/cwiczenie-11-diagram.svg) -->
 
 ## II. Zadania do wykonania
 
-1. Konfiguracja RIPv2 na R1-X i R2-X.
-2. Weryfikacja wymiany tras (show ip route rip).
-3. Rozszerzenie RIP na łącze do sąsiedniej pary.
-4. Symulacja awarii łącza i pomiar czasu konwergencji.
-5. Porównanie routingu statycznego i RIP w sprawozdaniu.
+1. Ustalić wspólny plan adresacji całej grupy.
+2. Konfiguracja OSPF na R1-X i R2-X, przypisanie do Area 0.
+3. Weryfikacja sąsiedztw OSPF (show ip ospf neighbor).
+4. Analiza kosztu tras (show ip route ospf).
+5. Test odporności na awarie i rekonwergencji.
 
 ## III. Podsumowanie
 
-Zrozumienie działania protokołu wektora odległości.
+Wspólna sieć całej grupy działająca w oparciu o protokół stanu łącza.

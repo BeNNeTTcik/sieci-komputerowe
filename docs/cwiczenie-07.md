@@ -1,154 +1,197 @@
 ---
 sidebar_position: 7
-title: "Ćwiczenie 7: Projektowanie adresacji IP i podział na podsieci"
+title: "Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami"
 ---
 
 <!--- import bibliotek -->
 import TopologyBuilder from '@site/src/components/TopologyBuilder';
 import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
+import EditableTable from '@site/src/components/EditableTable';
+import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
-# Ćwiczenie 7: Projektowanie adresacji IP i podział na podsieci
+# Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami
 
 *Część II — Zajęcia praktyczne*
 
+<SprawozdanieHeader
+  exerciseTitle="Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami"
+  storageKey="cwiczenie-7"
+/>
+
 ## I. Wprowadzenie
 
-Zaprojektowanie spójnego planu **adresacji IP** dla sieci pary z wykorzystaniem **VLSM**, a następnie wdrożenie go na wszystkich urządzeniach.
+<div className="justify">
+**VLAN (Virtual Local Area Network)** pozwala logicznie podzielić jedną fizyczną sieć lokalną na wiele wirtulanych sieci lokalnych (maksymalnie 4094). Hosty podłączone do przełącznika komunikują sie ze sobą tak jakby tylko one były podłączone do przełącznika. Każda grupa tworząca VLAN posiada swoją domenę rozgłoszeniową, co oznacza że dane rozgłoszenie trafia tylko do portów z danej grupy [^kurose]. Dwa komputery podłączone do tego samego przełącznika, ale przypisane do różnych VLAN-ów, są dla siebie nawzajem niewidoczne, jakby zostały podłączone do dwóch róznych urządzeń, a w rzeczywsitości dzielą ten sam jeden kabel i jeden port przełącznika.
 
-<TopologyBuilder title="Topologia pary — Ćwiczenie 6" storageKey="cwiczenie-6" />
+Każdy z portów może działać w jednym z dwóch trybów pracy (niektórzy producenci udostępniają trzeci tryb - *port general*):
+</div>
+- **port access (UNTAG)** — należy do jednego, konkretnego VLAN-u; podłącza się do niego urządzenia końcowe np. PC, serwer, drukarka. Urządzenia te nie wiedzą, że VLAN-y w ogóle istnieją.
+- **port trunk (TAG)** — przenosi ruch wielu VLAN-ów jednocześnie przez jeden fizyczny kabel; używany w relacji przełącznik -> przełącznik lub przełącznik -> router.
 
-<!-- 💡 Tu możesz wstawić diagram, np.: ![Diagram](/img/cwiczenie-07-diagram.svg) -->
+<div className="justify">
+**Jak przełącznik rozróżnia, do którego VLAN-u należy dana ramka na trunku?** Dzięki standardowi IEEE 802.1Q [^802.1Q], który wstawia do ramki Ethernet dodatkowy, 4-bajtowy znacznik (tag) zawierający numer VLAN-u (Rysunek 1). Porty access nie wiedzą nic o VLAN-ach, dodawanie znacznika odbywa się tylko na porcie trunk:
+</div>
+
+![Rys1](/img/7/802_1q.png)
+<div className="text-center">
+Rys.4 Żądanie - Odpowiedź [^claude]
+</div>
 
 ## II. Zadania do wykonania
 
-1. Zaprojektować min. 3 podsieci na bazie puli 10.X.0.0/24.
-2. Wdrożyć adresację na interfejsach i hostach.
-3. Uzupełnić dokumentację adresacji (tabela).
-4. Zweryfikować łączność (ping).
+### Konfiguracja port access - UNTAG
 
-## III. Podsumowanie
-
-Poprawnie zaprojektowana i wdrożona hierarchiczna adresacja IP.
 <StepByStep>
-<Step title="Połączenie urządzeń zgodnie ze schematem">
-Podłącz kable zgodnie z rozszerzoną topologią pary:
+<Step title="Podłączenie do przełącznika">
+XXXXXXXXXXXXXXXXXXXXXXX
 
-
-
-- **PC-A, PC-B → SW-X**: porty dostępowe przełącznika (np. FastEthernet 0/1, 0/2).
-- **SW-X → R1-X**: port przełącznika (np. FastEthernet 0/24) → interfejs LAN routera R1-X.
-- **R1-X → R2-X**: osobny interfejs na obu routerach — wewnętrzne łącze pary.
-- **R2-X → PC-C**: dodatkowy komputer podłączony bezpośrednio do drugiego interfejsu R2-X — symuluje "sieć zdalną" po drugiej stronie routingu, bez konieczności czekania na koordynację z sąsiednią parą (to przyjdzie dopiero w Ćwiczeniu 9).
-
+Ustawienie adresacji ta sama siec na wszystkich komputerach!
 </Step>
 
-<Step title="Nazwy hostów, hasła dostępu i baner">
+<Step title="Konfiguracja dwóch VLAN-ów na przełączniku (po 2 porty każdy)">
 
-Na **R1-X**:
+Na **SW-X** utwórz dwa VLAN-y i przypisz do każdego po dwa porty:
 
 ```
-Router> enable
-Router# configure terminal
-Router(config)# hostname R1-1
-R1-1(config)# enable secret CiscoEnable123
-R1-1(config)# line console 0
-R1-1(config-line)# password CiscoConsole123
-R1-1(config-line)# login
-R1-1(config-line)# exit
-R1-1(config)# line vty 0 4
-R1-1(config-line)# password CiscoVty123
-R1-1(config-line)# login
-R1-1(config-line)# exit
-R1-1(config)# banner motd # Dostęp wyłącznie dla autoryzowanych użytkowników — Para 1 #
+# Etap tworzenie VLAN-ów
+
+Switch(config)# vlan 10
+Switch(config-vlan)# name Studenci
+Switch(config-vlan)# exit
+Switch(config)# vlan 20
+Switch(config-vlan)# name Pracownicy
+Switch(config-vlan)# exit
+
+# Etap przypisanie portów do VLAN-u
+
+Switch(config)# interface range fastEthernet 0/1 - 2
+Switch(config-if-range)# switchport mode access
+Switch(config-if-range)# switchport access vlan 10
+Switch(config-if-range)# exit
+
+Switch(config)# interface range fastEthernet 0/3 - 4
+Switch(config-if-range)# switchport mode access
+Switch(config-if-range)# switchport access vlan 20
+Switch(config-if-range)# exit
 ```
 
-Powtórz analogicznie na **R2-X** (`hostname R2-1` itd.).
+Zweryfikuj przypisanie: `show vlan brief`.
 
-**Dlaczego dwa różne hasła (`console` i `vty`)?** `line console 0` zabezpiecza dostęp fizyczny (kabel konsolowy podłączony bezpośrednio do urządzenia), a `line vty 0 4` zabezpiecza dostęp zdalny (Telnet/SSH) — to dwie zupełnie różne drogi wejścia do urządzenia, więc mają osobne hasła.
+<ScreenshotPaste label="Zrzut ekranu: polecenie show vlan brief" />
 
 </Step>
+<Step title="Eksperyment: przepinanie kabli i sprawdzanie łączności pingiem">
 
-<Step title="Konfiguracja interfejsów routerów">
+Sprawdźenie **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty są na tym samym przełączniku i w tej samej podsieci IP. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w tabeli:
 
-Na **R1-1**:
+<EditableTable
+  title="Wyniki testu izolacji VLAN"
+  storageKey="cwiczenie-12-izolacja"
+  columns={[
+    {key: 'zrodlo', label: 'Port źródłowy', readOnly: true},
+    {key: 'cel', label: 'Port docelowy', readOnly: true},
+    {key: 'wynik', label: 'Ping działa? (tak/nie)'},
+    {key: 'wyjasnienie', label: 'Dlaczego?'},
+  ]}
+  initialRows={[
+    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/2 (VLAN 10)'},
+    {zrodlo: 'Fa0/3 (VLAN 20)', cel: 'Fa0/4 (VLAN 20)'},
+    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/3 (VLAN 20)'},
+    {zrodlo: 'Fa0/2 (VLAN 10)', cel: 'Fa0/4 (VLAN 20)'},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 
-```
-R1-1(config)# interface GigabitEthernet0/0
-R1-1(config-if)# ip address 10.1.0.1 255.255.255.0
-R1-1(config-if)# no shutdown
-R1-1(config-if)# exit
-R1-1(config)# interface GigabitEthernet0/1
-R1-1(config-if)# ip address 10.1.1.1 255.255.255.252
-R1-1(config-if)# no shutdown
-R1-1(config-if)# exit
-```
-
-Na **R2-1** — interfejs do R1-1 oraz nowy interfejs do PC-C:
-
-```
-R2-1(config)# interface GigabitEthernet0/0
-R2-1(config-if)# ip address 10.1.1.2 255.255.255.252
-R2-1(config-if)# no shutdown
-R2-1(config-if)# exit
-R2-1(config)# interface GigabitEthernet0/1
-R2-1(config-if)# ip address 10.1.2.1 255.255.255.0
-R2-1(config-if)# no shutdown
-R2-1(config-if)# exit
-```
-
-**Dlaczego `no shutdown` w ogóle jest potrzebne?** Domyślnie wszystkie interfejsy fizyczne routerów Cisco są **administracyjnie wyłączone** — nawet perfekcyjnie skonfigurowany adres IP nie zadziała, dopóki interfejs nie zostanie jawnie aktywowany tym poleceniem.
+**Zanim przejdziesz dalej, możesz zaobserwować:** Mimo identycznej podsieci IP na wszystkich portach. To dochodzi do izolacji **na warstwie 2** dzięki wykorzystaniu VLAN, zanim adresacja IP w ogóle wejdzie do grę.
 
 </Step>
-
-<Step title="Podstawowa konfiguracja przełącznika">
-
-Na **SW-X**:
-
-```
-Switch(config)# hostname SW-1
-SW-1(config)# interface vlan 1
-SW-1(config-if)# ip address 10.1.0.2 255.255.255.0
-SW-1(config-if)# no shutdown
-SW-1(config-if)# exit
-SW-1(config)# ip default-gateway 10.1.0.1
-```
-
-</Step>
-
-<Step title="Weryfikacja konfiguracji">
-
-Na każdym routerze:
-
-```
-R1-1# show ip interface brief
-```
-
-Sprawdź, że interesujące Cię interfejsy mają status `up / up`.
-
-Testy łączności:
-
-```
-R1-1# ping 10.1.1.2
-```
-(R1-1 → R2-1, sprawdza łącze między routerami)
-
-```
-R2-1# ping 10.1.2.10
-```
-(R2-1 → PC-C, po ustawieniu na PC-C statycznego adresu np. `10.1.2.10 /24`, brama `10.1.2.1`)
-
-Na PC-A/PC-B (adresacja `10.1.0.0/24`, brama `10.1.0.1`):
-
-```
-ping 10.1.0.1
-```
-
-Jeśli wszystkie testy kończą się sukcesem — para ma w pełni działającą, dwusegmentową sieć gotową do dalszych ćwiczeń (adresacja szczegółowa w Ćwiczeniu 7, routing statyczny w Ćwiczeniu 8).
-
-</Step>
-
 </StepByStep>
 
+### Konfiguracja routingu wewnatrz przełącznika - SVI
 
-[^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)
+<div className="justify">
+**SVI (Switched Virtual Interface)** to logiczny interfejs warstwy 3 przypisany do konkretnego VLAN-u na przełączniku — nie odpowiada żadnemu fizycznemu portowi, tylko całej grupie portów należących do danego VLAN-u [^SVI]. Głównym zadaniem będzie w zadaniu będzie routing między VLAN-ami. Każdy VLAN dostaje swój **SVI**, a po włączeniu ```ip routing``` switch sam przekazuje ruch między nimi.
+
+Dla przełączników **nie pracujących w wartswie 3** (tam gdzie ROUTER), jedynym rozwiązaniem jest wykorzystanie mechanizmu  **Router-on-a-stick**, aby zapewnić ruch między VLAN-ami. Jednak jak sama nazwa wskazuje wymaga on dodatkowego urządzenia - routera, aby zapewnić komunikację.
+</div>
+<StepByStep>
+<Step title="Podłączenie do przełącznika">
+XXXXXXXXXXXXXXXXXXXXXXX
+
+Ustawienie adresacji ta sama siec na wszystkich komputerach!
+</Step>
+
+<Step title="Konfiguracja przełącznika">
+Na **SW-X** utwórz SVi dla dwóch VLAN-ów:
+
+```
+# Nadanie adresacji VLAN 10
+
+Switch(config)# interface vlan 10
+Switch(config-if)# ip address 10.1.10.1 255.255.255.0
+Switch(config-if)# no shutdown
+Switch(config-if)# exit
+
+# Nadanie adresacji VLAN 20
+
+Switch(config)# interface vlan 20
+Switch(config-if)# ip address 10.1.20.1 255.255.255.0
+Switch(config-if)# no shutdown
+Switch(config-if)# exit
+
+# Główna komenda bez której cały mechanizm nie zadziała
+Switch(config)# ip routing
+```
+
+<ScreenshotPaste label="Zrzut ekranu: konfiguracja SVI" />
+</Step>
+
+<Step title="Weryfikacja izolacji i routingu między VLAN-owego - I">
+Weryfikacja **po** skonfigurowaniu subinterfejsów:
+
+```
+show ip route
+```
+
+W wyniku ```show ip route``` powinieneś zobaczyć obie sieci jako bezpośrednio podłączone.
+
+<ScreenshotPaste label="Zrzut ekranu: weryfikacja wykonanego routingu" />
+</Step>
+
+<Step title="Weryfikacja izolacji i routingu między VLAN-owego - II">
+Sprawdzenie jak działa routing pomimo różncyh VLAN-ów. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w tabeli:
+
+<EditableTable
+  title="Wyniki testu izolacji VLAN"
+  storageKey="cwiczenie-12-izolacja"
+  columns={[
+    {key: 'zrodlo', label: 'Port źródłowy', readOnly: true},
+    {key: 'cel', label: 'Port docelowy', readOnly: true},
+    {key: 'wynik', label: 'Ping działa? (tak/nie)'},
+    {key: 'wyjasnienie', label: 'Dlaczego?'},
+  ]}
+  initialRows={[
+    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/2 (VLAN 10)'},
+    {zrodlo: 'Fa0/3 (VLAN 20)', cel: 'Fa0/4 (VLAN 20)'},
+    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/3 (VLAN 20)'},
+    {zrodlo: 'Fa0/2 (VLAN 10)', cel: 'Fa0/4 (VLAN 20)'},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
+
+</Step>
+</StepByStep>
+
+### Port security
+
+[^kurose]: J. F. Kurose, K. W. Ross, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Kurose+Ross+Helion+wydanie+3), wyd. 7, Helion, Gliwice 2006. 
+
+[^802.1Q]: IEEE Std 802.1Q-2018, IEEE Standard for Local and Metropolitan Area Networks — Bridges and Bridged Networks, Institute of Electrical and Electronics Engineers.
+
+[^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
+
+[^SVI]: Cisco Networking Academy, materiały kursu CCNA: Switching, Routing, and Wireless Essentials, Cisco Systems, Inc., netacad.com.

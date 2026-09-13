@@ -1,26 +1,26 @@
 ---
 sidebar_position: 9
-title: "Ćwiczenie 9: Połączenie z sąsiednią parą — routing statyczny między zespołami"
+title: "Ćwiczenie 9: Routing dynamiczny — RIP"
 ---
 
-# Ćwiczenie 9: Połączenie z sąsiednią parą — routing statyczny między zespołami
+# Ćwiczenie 9: Routing dynamiczny — RIP
 
 *Część II — Zajęcia praktyczne*
 
 ## I. Wprowadzenie
 
-Pierwsze zadanie wymagające **współpracy dwóch par studentów** — połączenie sieci dwóch zespołów przez routery brzegowe R2 i uzyskanie łączności.
+Wprowadzenie **routingu dynamicznego** opartego na protokole wektora odległości — **RIPv2**, zastępującego część tras statycznych.
 
-<!-- 💡 Tu możesz wstawić diagram, np.: ![Diagram](/img/cwiczenie-09-diagram.svg) -->
+<!-- 💡 Tu możesz wstawić diagram, np.: ![Diagram](/img/cwiczenie-10-diagram.svg) -->
 
 ## II. Zadania do wykonania
 
-1. Połączyć port R2-X z portem R2-Y i skonfigurować adresację łącza (np. 10.100.X.0/30).
-2. Wymienić się pulami adresowymi z sąsiednią parą.
-3. Trasy statyczne na R2-X i R2-Y do sieci drugiej pary.
-4. Test ping/traceroute między parami.
-5. Sprawozdanie z napotkanych problemów.
+1. Konfiguracja RIPv2 na R1-X i R2-X.
+2. Weryfikacja wymiany tras (show ip route rip).
+3. Rozszerzenie RIP na łącze do sąsiedniej pary.
+4. Symulacja awarii łącza i pomiar czasu konwergencji.
+5. Porównanie routingu statycznego i RIP w sprawozdaniu.
 
 ## III. Podsumowanie
 
-Dwie sieci (pary) połączone i komunikujące się routingiem statycznym.
+Zrozumienie działania protokołu wektora odległości.

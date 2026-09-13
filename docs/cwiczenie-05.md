@@ -6,10 +6,17 @@ title: "Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji. Podsumowanie OSI"
 import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
 import TestKoncowyCzesc1 from '@site/src/components/TestKoncowyCzesc1';
+import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
 # Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji.
 
 *Część I — Model ISO/OSI*
+
+<SprawozdanieHeader
+  exerciseTitle="Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji. Podsumowanie OSI"
+  storageKey="cwiczenie-5"
+/>
 
 ## I. Wprowadzenie
 <div className="justify">
@@ -262,7 +269,6 @@ W głównym oknie programu Wireshark pojawia się kompletny sechmat połączenia
 
 <TestKoncowyCzesc1 />
 
-
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
 [^RFC1035]: IETF, [RFC 1035](https://datatracker.ietf.org/doc/rfc1035/) — Domain Names — Implementation and Specification, listopad 1987.
@@ -276,4 +282,3 @@ W głównym oknie programu Wireshark pojawia się kompletny sechmat połączenia
 [^kurose]: J. F. Kurose, K. W. Ross, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Kurose+Ross+Helion+wydanie+3), wyd. 7, Helion, Gliwice 2006.
 
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
-

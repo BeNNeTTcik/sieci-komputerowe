@@ -1,0 +1,164 @@
+## I. Wprowadzenie
+
+Zaprojektowanie spójnego planu **adresacji IP** dla sieci pary z wykorzystaniem **VLSM**, a następnie wdrożenie go na wszystkich urządzeniach.
+
+<TopologyBuilder title="Topologia pary — Ćwiczenie 6" storageKey="cwiczenie-6" />
+
+
+## II. Zadania do wykonania
+
+1. Utworzyć VLAN 10 i VLAN 20 na SW-X.
+2. Skonfigurować port trunk (802.1Q) między SW-X a R1-X.
+3. Skonfigurować subinterfejsy na R1-X.
+4. Zweryfikować izolację VLAN i routing międzyVLAN-owy.
+5. Sprawdzić łączność z siecią pary Y.
+
+## III. Podsumowanie
+
+Poprawnie zaprojektowana i wdrożona hierarchiczna adresacja IP.
+<StepByStep>
+<Step title="Połączenie urządzeń zgodnie ze schematem">
+Podłącz kable zgodnie z rozszerzoną topologią pary:
+
+
+
+- **PC-A, PC-B → SW-X**: porty dostępowe przełącznika (np. FastEthernet 0/1, 0/2).
+- **SW-X → R1-X**: port przełącznika (np. FastEthernet 0/24) → interfejs LAN routera R1-X.
+- **R1-X → R2-X**: osobny interfejs na obu routerach — wewnętrzne łącze pary.
+- **R2-X → PC-C**: dodatkowy komputer podłączony bezpośrednio do drugiego interfejsu R2-X — symuluje "sieć zdalną" po drugiej stronie routingu, bez konieczności czekania na koordynację z sąsiednią parą (to przyjdzie dopiero w Ćwiczeniu 9).
+
+</Step>
+
+<Step title="Nazwy hostów, hasła dostępu i baner">
+
+Na **R1-X**:
+
+```
+Router> enable
+Router# configure terminal
+Router(config)# hostname R1-1
+R1-1(config)# enable secret CiscoEnable123
+R1-1(config)# line console 0
+R1-1(config-line)# password CiscoConsole123
+R1-1(config-line)# login
+R1-1(config-line)# exit
+R1-1(config)# line vty 0 4
+R1-1(config-line)# password CiscoVty123
+R1-1(config-line)# login
+R1-1(config-line)# exit
+R1-1(config)# banner motd # Dostęp wyłącznie dla autoryzowanych użytkowników — Para 1 #
+```
+
+Powtórz analogicznie na **R2-X** (`hostname R2-1` itd.).
+
+**Dlaczego dwa różne hasła (`console` i `vty`)?** `line console 0` zabezpiecza dostęp fizyczny (kabel konsolowy podłączony bezpośrednio do urządzenia), a `line vty 0 4` zabezpiecza dostęp zdalny (Telnet/SSH) — to dwie zupełnie różne drogi wejścia do urządzenia, więc mają osobne hasła.
+
+</Step>
+
+<Step title="Konfiguracja interfejsów routerów">
+
+Na **R1-1**:
+
+```
+R1-1(config)# interface GigabitEthernet0/0
+R1-1(config-if)# ip address 10.1.0.1 255.255.255.0
+R1-1(config-if)# no shutdown
+R1-1(config-if)# exit
+R1-1(config)# interface GigabitEthernet0/1
+R1-1(config-if)# ip address 10.1.1.1 255.255.255.252
+R1-1(config-if)# no shutdown
+R1-1(config-if)# exit
+```
+
+Na **R2-1** — interfejs do R1-1 oraz nowy interfejs do PC-C:
+
+```
+R2-1(config)# interface GigabitEthernet0/0
+R2-1(config-if)# ip address 10.1.1.2 255.255.255.252
+R2-1(config-if)# no shutdown
+R2-1(config-if)# exit
+R2-1(config)# interface GigabitEthernet0/1
+R2-1(config-if)# ip address 10.1.2.1 255.255.255.0
+R2-1(config-if)# no shutdown
+R2-1(config-if)# exit
+```
+
+**Dlaczego `no shutdown` w ogóle jest potrzebne?** Domyślnie wszystkie interfejsy fizyczne routerów Cisco są **administracyjnie wyłączone** — nawet perfekcyjnie skonfigurowany adres IP nie zadziała, dopóki interfejs nie zostanie jawnie aktywowany tym poleceniem.
+
+</Step>
+
+<Step title="Podstawowa konfiguracja przełącznika">
+
+Na **SW-X**:
+
+```
+Switch(config)# hostname SW-1
+SW-1(config)# interface vlan 1
+SW-1(config-if)# ip address 10.1.0.2 255.255.255.0
+SW-1(config-if)# no shutdown
+SW-1(config-if)# exit
+SW-1(config)# ip default-gateway 10.1.0.1
+```
+
+</Step>
+
+<Step title="Weryfikacja konfiguracji">
+
+Na każdym routerze:
+
+```
+R1-1# show ip interface brief
+```
+
+Sprawdź, że interesujące Cię interfejsy mają status `up / up`.
+
+Testy łączności:
+
+```
+R1-1# ping 10.1.1.2
+```
+(R1-1 → R2-1, sprawdza łącze między routerami)
+
+```
+R2-1# ping 10.1.2.10
+```
+(R2-1 → PC-C, po ustawieniu na PC-C statycznego adresu np. `10.1.2.10 /24`, brama `10.1.2.1`)
+
+Na PC-A/PC-B (adresacja `10.1.0.0/24`, brama `10.1.0.1`):
+
+```
+ping 10.1.0.1
+```
+
+Jeśli wszystkie testy kończą się sukcesem — para ma w pełni działającą, dwusegmentową sieć gotową do dalszych ćwiczeń (adresacja szczegółowa w Ćwiczeniu 7, routing statyczny w Ćwiczeniu 8).
+
+</Step>
+
+</StepByStep>
+
+
+[^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)
+
+
+# to do VLAN
+<StepByStep>
+<Step title="Podłączenie do przełącznika">
+XXXXXXXXXXXXXXXXXXXXXXX
+
+Ustawienie adresacji ta sama siec na wszystkich komputerach!
+</Step>
+
+<Step title="Konfiguracja portu trunk (802.1Q) między SW-X a R1-X">
+Na **SW-X** utwórz dwa VLAN-y i przypisz do każdego po dwa porty:
+
+```
+Switch(config)# interface fastEthernet 0/24
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# switchport trunk allowed vlan 10,20
+```
+
+Zweryfikuj: `show interfaces trunk` — powinieneś zobaczyć port Fa0/24 w trybie trunk, z dopuszczonymi VLAN-ami 10 i 20.
+
+<ScreenshotPaste label="Zrzut ekranu: polecenie show interfaces trunk" />
+</Step>
+</StepByStep>

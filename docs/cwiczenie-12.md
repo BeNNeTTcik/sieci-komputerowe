@@ -1,9 +1,9 @@
 ---
 sidebar_position: 12
-title: "Ćwiczenie 12: VLAN, trunking i routing między VLAN-ami"
+title: "Ćwiczenie 12: Projektowanie adresacji IP i podział na podsieci"
 ---
 
-# Ćwiczenie 12: VLAN, trunking i routing między VLAN-ami
+# Ćwiczenie 12: Projektowanie adresacji IP i podział na podsieci
 
 *Część II — Zajęcia praktyczne*
 
