@@ -12,6 +12,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 import EditableTable from '@site/src/components/EditableTable';
 import SharedValue from '@site/src/components/SharedValue';
 import CodeBlock from '@site/src/components/CodeBlock';
+import CodeBlank from '@site/src/components/CodeBlank';
 
 # Ćwiczenie 13: Listy kontroli dostępu (ACL)
 
@@ -25,7 +26,7 @@ import CodeBlock from '@site/src/components/CodeBlock';
 ## I. Wprowadzenie
 
 <div className="justify">
-**Listy ACL (Access Control List)** filtrują ruch IP na podstawie zdefiniowanych reguł. Router sprawdza pakiet po kolei od góry listy i stosuje pierwszą pasującą regułę (`permit` lub `deny`) — reszta wpisów jest ignorowana. Na końcu każdej listy ACL znajduje się niewidoczne, domniemane `deny any` — jeśli żadna reguła nie pasuje, pakiet zostaje odrzucony.
+**Listy ACL (Access Control List)** filtrują ruch IP na podstawie zdefiniowanych reguł. Router sprawdza pakiet po kolei od góry listy i stosuje pierwszą pasującą regułę (`permit` lub `deny`) — reszta wpisów jest ignorowana. Na końcu każdej listy ACL znajduje się niewidoczne, domniemane `deny any` — jeśli żadna reguła nie pasuje, pakiet zostaje odrzucony [^cisco].
 </div>
 
 Wyróżniamy dwa rodzaje ACL:
@@ -35,6 +36,18 @@ Wyróżniamy dwa rodzaje ACL:
 :::warning
 Konfigurowanie Access Control List trzeba przejść świadomie i z wielką uwagą, ponieważ w bradzo prosty sposób można odciąć samego siebie od sieci i dostepu podając złe parametry fitrów.
 :::
+
+Wyjaśnienie składni komend:
+
+**permit/deny** - przepuszczenie lub zablokowanie ruchu.
+
+**Maska blankietowa (wildcard)** - odwrotność maski podsieci. Czyli z maski `255.255.255.0` odwrotność wynosi `0.0.0.255` co jest równoważne ze znaczeniem dla dowolonego hostem z sieci.
+
+**Host X** - dokladnie ten adres (przyklad permit ip 192.168.2.0 0.0.0.255 `host 192.168.1.1`).
+
+**any** - wszystko inne (inna sieć, inny host, niż te zadeklarowane itd.).
+
+**eq 80, eq 23, echo** - porty i typy komunikatów.
 
 ## II. Zadania do wykonania
 
@@ -56,32 +69,45 @@ Adresacja nie jest z góry narzucona. Można wybrać sieć podaną w zadaniu lub
       {
         node: { icon: '🖥️', label: 'PC-A' },
         fields: [
-          { key: 'port1', label: 'port', placeholder: (x) => `10.10.${x}.10`, type: 'address', shared: 'pca_ip' },
+          { key: 'port1', label: 'port', placeholder: (x) => `10.10.${x}.10/24`, type: 'cidr', shared: 'pca', showAclHelper: true, deriveShared: { networkCidr: 'siec_pca_ip', ip: 'pca_ip', network: 'pca_net', wildcard: 'pca_wild', mask: 'maska' } }
         ],
       },
       {
         node: { icon: '🌐', label: 'R1' },
         fields: [
-          { key: 'r1_pc1', label: 'brama dla PC-A', placeholder: (x) => `10.10.${x}.1`, type: 'address', shared: 'r1-pc1' },
-          { key: 'r1-r2', label: 'połączenie do R2', placeholder: (x) => `10.${x}.10.1`,type: 'address', shared: 'r1-r2' },
+          { key: 'r1_pc1', label: 'brama dla PC-A : Gi0/0/0', placeholder: (x) => `10.10.${x}.1/24`, type: 'cidr', shared: 'r1-pc1', showAclHelper: true, showAclHelper: true, deriveShared: { networkCidr: 'siec_r1_pc1', ip: 'r1-pc1_ip', network: 'r1_pc1_net', wildcard: 'r1_pc1_wild'} },
+          { key: 'r1-r2', label: 'połączenie do R2 : Gi0/0/1', placeholder: (x) => `10.${x}.10.1/30`,type: 'cidr', shared: 'r1-r2', showAclHelper: true, deriveShared: { networkCidr: 'siec_r1_r2', ip: 'r1-r2_ip', network: 'r1-r2_net', wildcard: 'r1-r2_wild' } },
         ],
       },
       {
         node: { icon: '🌐', label: 'R2' },
         fields: [
-          { key: 'r2-r1', label: 'połączenie do R2', placeholder: (x) => `10.${x}.10.2`, type: 'address', shared: 'r2-r1' },
-          { key: 'r2-pc2', label: 'brama dla PC-B', placeholder: (x) => `192.168.${x}.1`, type: 'address', shared: 'r2-pc2' },
+          { key: 'r2-r1', label: 'połączenie do R2 : Gi0/0/1', placeholder: (x) => `10.${x}.10.2/30`, type: 'cidr', shared: 'r2-r1', showAclHelper: true, deriveShared: { networkCidr: 'siec_r2_r1', ip: 'r2-r1_ip', network: 'r2-r1_net', wildcard: 'r2-r1_wild' } },
+          { key: 'r2-pc2', label: 'brama dla PC-B : Gi0/0/0', placeholder: (x) => `192.168.${x}.1/24`, type: 'cidr', shared: 'r2-pc2', showAclHelper: true, deriveShared: { networkCidr: 'siec_r2_pc2', ip: 'r2-pc2_ip', network: 'r2-pc2_net', wildcard: 'r2-pc2_wild' } },
         ],
       },
       {
         node: { icon: '🖥️', label: 'PC-B' },
         fields: [
-          { key: 'port2', label: 'port', placeholder: (x) => `192.168.${x}.10`, type: 'address', shared: 'pcb_ip' },
+          { key: 'port2', label: 'port', placeholder: (x) => `192.168.${x}.10/24`, type: 'cidr', shared: 'pcb', showAclHelper: true, deriveShared: { networkCidr: 'siec_pcb_ip', ip: 'pcb_ip', network: 'pcb_net', wildcard: 'pcb_wild', mask: 'maskb' } },
         ],
       }
     ],
   }}
 />
+</Step>
+
+<Step title="Przygotowanie sieci do testów">
+Bazując na adresacji z wcześniejszego kroku trzeba przygotować stanowisko przed wdrożeniem ACL.
+
+W Windows wejdź w "Panel sterowania" → "Centrum sieci" → "Zmień ustawienia karty" → właściwości "IPv4":
+- PC-A: <SharedValue shared="pca_ip" fallback="—" />, maska <SharedValue shared="maska" fallback="—" />
+- PC-A: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
+
+Skonfiguruj routery R1 oraz R2 według bazując na wiedzy z poprzednik zadań. Poniżej znajduje się "Checklista", która pomoże w prawidłowej konfiguracji oraz dokumentacja z [ćwiczenia 5.5](http://localhost:3000/sieci-komputerowe/cwiczenie-05%20i%205)
+
+CheckLsita co trzeba skonfigurowac na obu routerach
+
 </Step>
 
 <Step title="Projekt polityki">
@@ -95,11 +121,11 @@ Adresacja nie jest z góry narzucona. Można wybrać sieć podaną w zadaniu lub
     {key: 'wyjasnienie', label: 'Uzasadnienie', readOnly: true}
   ]}
   initialRows={[
-    {zrodlo: <SharedValue shared="pca_ip" fallback="—" />, cel: <SharedValue shared="r1_pc1" fallback="—" />, akcja: "permit", wyjasnienie: "PC2 ma mieć dostęp do routera R1" },
-    {zrodlo: <SharedValue shared="pca_ip" fallback="—" />, cel: <SharedValue shared="pcb_ip" fallback="—" />, akcja: "deny", wyjasnienie: "blokada dostępu PC2 → sieć PC1"},
-    {zrodlo: <SharedValue shared="pca_ip" fallback="—" />, cel: 'dowolny inny cel', akcja: "permit", wyjasnienie: "reszta ruchu PC2 ma działać normalnie"},
-    {zrodlo: <SharedValue shared="pcb_ip" fallback="—" />, cel: <SharedValue shared="pca_ip" fallback="—" />, akcja: "deny", wyjasnienie: "blokada dostępu PC1 → sieć PC2"},
-    {zrodlo: <SharedValue shared="pcb_ip" fallback="—" />, cel: 'dowolny inny cel', akcja: "permit", wyjasnienie: "reszta ruchu PC1 ma działać normalnie"},
+    {zrodlo: <SharedValue shared="siec_pcb_ip" fallback="—" />, cel: <SharedValue shared="r1_pc1_ip" fallback="—" />, akcja: "permit", wyjasnienie: "PC2 ma mieć dostęp do routera R1" },
+    {zrodlo: <SharedValue shared="siec_pcb_ip" fallback="—" />, cel: <SharedValue shared="siec_pca_ip" fallback="—" />, akcja: "deny", wyjasnienie: "blokada dostępu PC2 → sieć PC1"},
+    {zrodlo: <SharedValue shared="siec_pcb_ip" fallback="—" />, cel: 'dowolny inny cel', akcja: "permit", wyjasnienie: "reszta ruchu PC2 ma działać normalnie"},
+    {zrodlo: <SharedValue shared="siec_pca_ip" fallback="—" />, cel: <SharedValue shared="siec_pcb_ip" fallback="—" />, akcja: "deny", wyjasnienie: "blokada dostępu PC1 → sieć PC2"},
+    {zrodlo: <SharedValue shared="siec_pca_ip" fallback="—" />, cel: 'dowolny inny cel', akcja: "permit", wyjasnienie: "reszta ruchu PC1 ma działać normalnie"},
   ]}
   allowAddRows={false}
   allowRemoveRows={false}
@@ -111,32 +137,72 @@ Adresacja nie jest z góry narzucona. Można wybrać sieć podaną w zadaniu lub
 </Step>
 
 <Step title="Konfiguracja R2">
+Wejscie w tryb konfiguracyjny **R2(config)#** przy pomocy komend (`enable` i `configure terminal`).
 <CodeBlock lines={[
-  'enable',
-  'configure terminal',
-  <>ping <SharedValue shared="pcb_ip" fallback="adres_IP" /></>,
+  'ip access-list extended BLOKADA_DO_PCA',
+  'remark Zezwól PCA na dostęp do routera R1',
+  <>permit ip <SharedValue shared="pcb_net" fallback="—" /> <SharedValue shared="pcb_wild" fallback="—" /> host <SharedValue shared="r1-r2_ip" fallback="—" /></>,
+  'remark Zablokuj PCB do reszta sieci PCA',
+  <>deny ip <SharedValue shared="pcb_net" fallback="—" /> <SharedValue shared="pcb_wild" fallback="—" /> <SharedValue shared="pca_net" fallback="—" /> <SharedValue shared="pca_wild" fallback="—" /></>,
+  'remark Zezwól na cały pozostały ruch',
+  'permit ip any any',
+  'exit'
 ]} />
-```
-enable
-configure terminal
 
-ip access-list extended BLOKADA_DO_PCB
-permit ip 192.168.1.0 0.0.0.255 host 10.0.0.2
-remark Zablokuj PC1 -> reszta sieci PC2
-deny   ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255
-remark Zezwól na cały pozostały ruch
-permit ip any any
-exit
+Przypisanie konfiguracji do interfjsu.
 
-interface GigabitEthernet0/0
-ip access-group BLOKADA_DO_PC2 in
-exit
-```
+<CodeBlock lines={[
+  'interface GigabitEthernet0/1',
+  'ip access-group BLOKADA_DO_PCA in',
+  'exit'
+]} />
+
+:::warning KOLEJNOŚĆ!!!
+**Uwaga na kolejność** - pominięcie reguła zezwalająca na dostęp (permit) przed regułą blokującą (deny) spowowduje, że utracimy dotęp do jednego z routerów.
+:::
 </Step>
 
 <Step title="Konfiguracja R1">
-przedstaw komedy do konfiguracji
+Wejscie w tryb konfiguracyjny **R1(config)#** przy pomocy komend (`enable` i `configure terminal`).
+<CodeBlock lines={[
+  'ip access-list extended BLOKADA_DO_PCB',
+  'remark Zezwól PCA na dostęp do routera R2',
+  <>permit ip <CodeBlank shared="r1Lan_ip" /> <CodeBlank shared="pca_wild" /> host <CodeBlank shared="r2-r1_ip" /></>,
+  'remark Zablokuj PCA do reszta sieci PCB',
+  <>deny ip <CodeBlank shared="pca_net" /> <CodeBlank shared="pca_wild" /> <CodeBlank shared="pcb_net" /> <CodeBlank shared="pcb_wild" /></>,
+  'remark Zezwól na cały pozostały ruch',
+  'permit ip any any',
+  'exit'
+]} />
 
+Przypisanie konfiguracji do interfjsu.
+
+<CodeBlock lines={[
+  'interface GigabitEthernet0/1',
+  'ip access-group BLOKADA_DO_PCB in',
+  'exit'
+]} />
+</Step>
+
+<Step title="Wyniki testów - ping IP">
+<EditableTable
+  title="Wyniki"
+  storageKey="cwiczenie-13"
+  columns={[
+    {key: 'zrodlo', label: 'IP źródłowy', readOnly: true},
+    {key: 'cel', label: 'IP docelowy', readOnly: true},
+    {key: 'wynik', label: 'Ping działa (tak/nie)?'}
+  ]}
+  initialRows={[
+    {zrodlo: <SharedValue shared="pca_ip" fallback="—" />, cel: <SharedValue shared="pcb_ip" fallback="—" /> },
+    {zrodlo: <SharedValue shared="pca_ip" fallback="—" />, cel: <SharedValue shared="r2-r1_ip" fallback="—" />},
+    {zrodlo: <SharedValue shared="pcb_ip" fallback="—" />, cel: <SharedValue shared="pca_ip" fallback="—" />},
+    {zrodlo: <SharedValue shared="pcb_ip" fallback="—" />, cel: <SharedValue shared="r1-r2_ip" fallback="—" />},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
+<ScreenshotPaste label="Zrzut ekranu: polecania ping z testów" />
 </Step>
 </StepByStep>
 

@@ -27,52 +27,6 @@ function thirdOctetMatchesX(value, xVal) {
   return parseInt(parts[2], 10) === xNum;
 }
 
-// --- Tryb CIDR (adres + prefiks, np. "10.1.1.1/30") ---
-
-// Filtruje wpisywany tekst dla pól typu "cidr" — dopuszcza cyfry, kropki i "/".
-function filterCidrInput(value) {
-  return value.replace(/[^0-9./]/g, '');
-}
-
-// Rozbija "10.1.1.1/30" na oktety adresu i liczbę prefiksu. Zwraca null,
-// jeśli format jest niepoprawny na którymkolwiek etapie (brak "/", zły adres,
-// prefiks spoza zakresu 0-32, prefiks niebędący samą liczbą).
-function parseCidr(value) {
-  const slashParts = value.split('/');
-  if (slashParts.length !== 2) return null;
-  const [ipPart, prefixPart] = slashParts;
-  if (!isValidAddressFormat(ipPart)) return null;
-  if (!/^\d{1,2}$/.test(prefixPart)) return null;
-  const prefix = parseInt(prefixPart, 10);
-  if (prefix < 0 || prefix > 32) return null;
-  return {ipPart, prefix};
-}
-
-// Sprawdza, czy prefiks pasuje do oczekiwanej wartości — `expected` może być
-// pojedynczą liczbą (np. 30) albo tablicą dozwolonych wartości (np. [24, 25]).
-function prefixMatchesExpected(prefix, expected) {
-  if (expected === undefined || expected === null) return true; // brak wymogu = każdy poprawny prefiks OK
-  if (Array.isArray(expected)) return expected.includes(prefix);
-  return prefix === expected;
-}
-
-// Zamienia długość prefiksu (np. 24) na oktety maski (255.255.255.0).
-function prefixToMaskOctets(prefix) {
-  const maskInt = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
-  return [(maskInt >>> 24) & 255, (maskInt >>> 16) & 255, (maskInt >>> 8) & 255, maskInt & 255];
-}
-
-// Wylicza z adresu+prefiksu gotowy zapis "adres sieci + maska wildcard" —
-// dokładnie w formacie, jakiego wymagają listy ACL na Cisco IOS (odwrócona
-// maska: bity zerowe tam, gdzie maska podsieci ma jedynki, i na odwrót).
-function computeAclNotation(ipPart, prefix) {
-  const ipOctets = ipPart.split('.').map(Number);
-  const maskOctets = prefixToMaskOctets(prefix);
-  const networkOctets = ipOctets.map((o, i) => o & maskOctets[i]);
-  const wildcardOctets = maskOctets.map(m => 255 - m);
-  return {network: networkOctets.join('.'), wildcard: wildcardOctets.join('.')};
-}
-
 // Filtruje wpisywany tekst dla pól typu "vlan" — dopuszcza wyłącznie cyfry.
 function filterVlanInput(value) {
   return value.replace(/[^0-9]/g, '');
@@ -87,14 +41,12 @@ function isValidVlan(value) {
   return n >= 2 && n <= 4094;
 }
 
-function MiniField({label, value, placeholder, onChange, width, type = 'port', xVal, checkGroupOctet = true, isDuplicate = false, expectedPrefix, showAclHelper = false}) {
+function MiniField({label, value, placeholder, onChange, width, type = 'port', xVal, checkGroupOctet = true, isDuplicate = false}) {
   const isAddress = type === 'address';
   const isVlan = type === 'vlan';
-  const isCidr = type === 'cidr';
 
   function handleChange(raw) {
     if (isAddress) onChange(filterAddressInput(raw));
-    else if (isCidr) onChange(filterCidrInput(raw));
     else if (isVlan) onChange(filterVlanInput(raw));
     else onChange(raw);
   }
@@ -105,11 +57,6 @@ function MiniField({label, value, placeholder, onChange, width, type = 'port', x
       const formatOk = isValidAddressFormat(value);
       const octetOk = !checkGroupOctet || thirdOctetMatchesX(value, xVal);
       status = formatOk && octetOk && !isDuplicate;
-    } else if (isCidr) {
-      const parsed = parseCidr(value);
-      const octetOk = parsed && (!checkGroupOctet || thirdOctetMatchesX(parsed.ipPart, xVal));
-      const prefixOk = parsed && prefixMatchesExpected(parsed.prefix, expectedPrefix);
-      status = !!parsed && octetOk && prefixOk && !isDuplicate;
     } else if (isVlan) {
       status = isValidVlan(value);
     } else {
@@ -121,9 +68,8 @@ function MiniField({label, value, placeholder, onChange, width, type = 'port', x
   const bgColor = status === false ? '#fef2f2' : status === true ? '#f0fdf4' : '#ffffff';
 
   // Domyślna szerokość zależna od typu pola (nadpisywalna przez `width`):
-  // adres IP potrzebuje więcej miejsca niż numer VLAN czy krótki port;
-  // CIDR (adres + prefiks) potrzebuje jeszcze trochę więcej niż sam adres.
-  const defaultWidth = isCidr ? '150px' : isAddress ? '132px' : isVlan ? '64px' : '92px';
+  // adres IP potrzebuje więcej miejsca niż numer VLAN czy krótki port.
+  const defaultWidth = isAddress ? '132px' : isVlan ? '64px' : '92px';
   const effectiveWidth = width || defaultWidth;
 
   return (
@@ -149,29 +95,6 @@ function MiniField({label, value, placeholder, onChange, width, type = 'port', x
               : 'duplikat adresu'}
         </div>
       )}
-      {isCidr && value.trim() !== '' && status === false && (
-        <div style={{fontSize: '0.6rem', color: '#dc2626', textAlign: 'center', maxWidth: effectiveWidth, lineHeight: 1.2}}>
-          {(() => {
-            const parsed = parseCidr(value);
-            if (!parsed) return 'format: IP/prefiks';
-            if (checkGroupOctet && !thirdOctetMatchesX(parsed.ipPart, xVal)) return `3. oktet ≠ X (${xVal || '?'})`;
-            if (!prefixMatchesExpected(parsed.prefix, expectedPrefix)) {
-              const exp = Array.isArray(expectedPrefix) ? expectedPrefix.map(p => '/' + p).join(' lub ') : `/${expectedPrefix}`;
-              return `wymagany prefiks ${exp}`;
-            }
-            return 'duplikat adresu';
-          })()}
-        </div>
-      )}
-      {isCidr && showAclHelper && status === true && (() => {
-        const parsed = parseCidr(value);
-        const acl = computeAclNotation(parsed.ipPart, parsed.prefix);
-        return (
-          <div style={{fontSize: '0.6rem', color: '#2563eb', textAlign: 'center', maxWidth: effectiveWidth, lineHeight: 1.3, fontFamily: 'monospace'}}>
-            ACL: {acl.network} {acl.wildcard}
-          </div>
-        );
-      })()}
       {isVlan && value.trim() !== '' && status === false && (
         <div style={{fontSize: '0.6rem', color: '#dc2626', textAlign: 'center', maxWidth: effectiveWidth, lineHeight: 1.2}}>
           {value === '1' ? 'VLAN 1 jest natywny' : 'zakres 2–4094'}
@@ -220,16 +143,16 @@ export const defaultTopology = {
       node: {icon: '🌐', label: 'R1', sublabel: 'ISR4331'},
       fields: [
         {key: 'r1LanPort', label: 'port LAN', placeholder: () => 'Gi0/0', width: '78px', type: 'port'},
-        {key: 'r1Lan', label: 'adr. LAN', placeholder: (x) => `172.16.${x}.254/24`, type: 'cidr', expectedPrefix: 24},
+        {key: 'r1Lan', label: 'adr. LAN', placeholder: (x) => `172.16.${x}.254`, type: 'address'},
         {key: 'r1WanPort', label: 'port do R2', placeholder: () => 'Gi0/1', width: '78px', type: 'port'},
-        {key: 'r1Wan', label: 'adr. do R2', placeholder: (x) => `10.10.${x}.5/30`, type: 'cidr', expectedPrefix: 30},
+        {key: 'r1Wan', label: 'adr. do R2', placeholder: (x) => `10.10.${x}.5`, type: 'address'},
       ],
     },
     {
       node: {icon: '🌐', label: 'R2', sublabel: 'ISR4331'},
       fields: [
         {key: 'r2WanPort', label: 'port do R1', placeholder: () => 'Gi0/0', width: '78px', type: 'port'},
-        {key: 'r2Wan', label: 'adr. do R1', placeholder: (x) => `10.10.${x}.6/30`, type: 'cidr', expectedPrefix: 30},
+        {key: 'r2Wan', label: 'adr. do R1', placeholder: (x) => `10.10.${x}.6`, type: 'address'},
       ],
     },
   ],
@@ -252,47 +175,12 @@ function collectSharedMap(topology) {
   return map;
 }
 
-// Zbiera konfigurację "rozbicia" pól typu cidr na osobne wartości pochodne —
-// {fieldKey: {type, deriveShared: {network: 'klucz1', wildcard: 'klucz2', ...}}}.
-// Dostępne nazwy pochodnych: ip, prefix, network, wildcard, mask.
-function collectDeriveSharedMap(topology) {
-  const map = {};
-  topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => {
-      if (f.deriveShared) map[f.key] = {type: f.type, deriveShared: f.deriveShared};
-    });
-  });
-  return map;
-}
-
-// Rozbija poprawną wartość pola cidr ("10.10.1.10/24") na wszystkie możliwe
-// wartości pochodne naraz.
-function deriveCidrValues(value) {
-  const parsed = parseCidr(value);
-  if (!parsed) return null;
-  const acl = computeAclNotation(parsed.ipPart, parsed.prefix);
-  const maskOctets = prefixToMaskOctets(parsed.prefix);
-  const mask = maskOctets.join('.');
-  return {
-    ip: parsed.ipPart,
-    prefix: String(parsed.prefix),
-    network: acl.network,
-    wildcard: acl.wildcard,
-    mask: mask,
-    // Gotowe, POŁĄCZONE zapisy — po jednym kluczu zamiast dwóch osobnych
-    // <SharedValue>, gdy i tak zawsze wstawiasz je razem obok siebie:
-    networkCidr: `${acl.network}/${parsed.prefix}`,        // "10.10.1.0/24"      — np. do opisu sieci
-    networkMask: `${acl.network} ${mask}`,                  // "10.10.1.0 255.255.255.0" — np. do "ip route"
-    networkWildcard: `${acl.network} ${acl.wildcard}`,      // "10.10.1.0 0.0.0.255"     — np. do ACL / "network" w OSPF
-  };
-}
-
 // Klucze wszystkich pól typu "address" w tej topologii — potrzebne do wykrycia,
 // czy dwa różne urządzenia dostały przypadkiem ten sam adres IP.
 function collectAddressFieldKeys(topology) {
   const keys = [];
   topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => { if (f.type === 'address' || f.type === 'cidr') keys.push(f.key); });
+    (g.fields || []).forEach(f => { if (f.type === 'address') keys.push(f.key); });
   });
   return keys;
 }
@@ -321,7 +209,6 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
   const loadedRef = useRef(false);
   const fieldKeys = collectFieldKeys(topology);
   const sharedMap = collectSharedMap(topology); // {fieldKey: sharedKey}
-  const deriveSharedMap = collectDeriveSharedMap(topology); // {fieldKey: {type, deriveShared}}
   const addressFieldKeys = collectAddressFieldKeys(topology);
 
   const [x, setX] = useState('1');
@@ -339,14 +226,7 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
         const saved = JSON.parse(raw);
         if (saved.x) setX(saved.x);
         if (saved.vlan) setVlan(saved.vlan);
-        if (saved.values) {
-          setValues(prev => ({...prev, ...saved.values}));
-          // Odtwórz też pochodne klucze (ip/prefix/network/wildcard/mask) dla
-          // pól cidr wczytanych z własnego zapisu — inaczej po odświeżeniu
-          // strony <SharedValue> pokazywałby puste pole, dopóki ktoś ręcznie
-          // czegoś nie wpisze ponownie.
-          Object.entries(saved.values).forEach(([fk, v]) => deriveAndWriteShared(fk, v));
-        }
+        if (saved.values) setValues(prev => ({...prev, ...saved.values}));
       }
     } catch (e) { /* ignorujemy */ }
 
@@ -357,7 +237,6 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
     });
     if (Object.keys(fromShared).length > 0) {
       setValues(prev => ({...prev, ...fromShared}));
-      Object.entries(fromShared).forEach(([fk, v]) => deriveAndWriteShared(fk, v));
     }
 
     loadedRef.current = true;
@@ -383,25 +262,11 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
     } catch (e) { /* ignorujemy */ }
   }, [x, vlan, values, key]);
 
-  // Jeśli pole ma skonfigurowane `deriveShared`, rozbija jego wartość na osobne
-  // klucze współdzielone (ip/prefix/network/wildcard/mask). Wywoływane zarówno
-  // przy każdej zmianie pola, jak i raz po wczytaniu zapisanej wcześniej wartości
-  // — żeby pochodne klucze zawsze były aktualne, nawet bez ponownego wpisywania.
-  function deriveAndWriteShared(fieldKey, val) {
-    const cfg = deriveSharedMap[fieldKey];
-    if (!cfg || cfg.type !== 'cidr') return;
-    const derived = deriveCidrValues(val);
-    Object.entries(cfg.deriveShared).forEach(([name, sharedKey]) => {
-      writeSharedField(sharedKey, derived ? (derived[name] ?? '') : '');
-    });
-  }
-
   function setFieldValue(fieldKey, val) {
     setValues(prev => ({...prev, [fieldKey]: val}));
     if (sharedMap[fieldKey]) {
       writeSharedField(sharedMap[fieldKey], val);
     }
-    deriveAndWriteShared(fieldKey, val);
   }
 
   function reset() {
@@ -412,10 +277,6 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
     // topologii (mają `shared`), żeby reset tutaj nie zostawiał starych wartości
     // widocznych np. w tabeli adresacji w innym kroku/na innej stronie.
     Object.values(sharedMap).forEach(sharedKey => clearSharedField(sharedKey));
-    // To samo dla kluczy pochodnych (ip/prefix/network/wildcard/mask) z pól cidr.
-    Object.values(deriveSharedMap).forEach(cfg => {
-      Object.values(cfg.deriveShared).forEach(sharedKey => clearSharedField(sharedKey));
-    });
   }
 
   const xVal = x || 'X';
@@ -500,8 +361,6 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
                         xVal={xVal}
                         checkGroupOctet={checkGroupOctet}
                         isDuplicate={duplicateAddressKeys.has(f.key)}
-                        expectedPrefix={f.expectedPrefix}
-                        showAclHelper={f.showAclHelper}
                       />
                     ))}
                   </div>
@@ -564,40 +423,6 @@ Każde pole w `fields` ma teraz jawny `type`:
     * **VLAN 1 jest celowo odrzucany** — zarezerwowany jako VLAN natywny/domyślny,
       nie do wykorzystania jako "własny" VLAN w ćwiczeniu,
     * pod polem pojawia się komunikat "VLAN 1 jest natywny" albo "zakres 2–4094".
-
-- `type: 'cidr'` — pole adresu Z PREFIKSEM, np. "10.1.1.1/30":
-    * dopuszczone cyfry, kropki i "/" (litery odrzucane natychmiast),
-    * wymaga poprawnego adresu IP, ukośnika i liczby prefiksu w zakresie 0-32,
-    * opcjonalny prop `expectedPrefix` wymusza KONKRETNY prefiks — pojedyncza
-      liczba (np. `expectedPrefix: 30` — łącze punkt-punkt między routerami)
-      albo tablica dozwolonych wartości (np. `expectedPrefix: [24, 25]`),
-    * bez podanego `expectedPrefix` akceptowany jest dowolny poprawny prefiks 0-32,
-    * komunikaty błędów: "format: IP/prefiks", "3. oktet ≠ X", "wymagany prefiks /30",
-    * opcjonalny prop `showAclHelper: true` — gdy pole jest poprawnie wypełnione,
-      pod spodem (na niebiesko) pokazuje gotowy zapis do listy ACL na Cisco IOS:
-      adres sieci + maska WILDCARD (odwrócona maska), np. dla "10.10.1.10/24"
-      pokaże "ACL: 10.10.1.0 0.0.0.255" — zero liczenia w pamięci przez studenta,
-    * opcjonalny prop `deriveShared` — ROZBIJA wartość pola cidr na osobne klucze
-      we wspólnym magazynie, które możesz potem wstawić gdziekolwiek na stronie
-      przez <SharedValue shared="..." />. Dostępne nazwy pochodnych:
-        - `ip`              → sam adres, bez prefiksu, np. "10.10.1.10"
-        - `prefix`          → sama liczba, np. "24"
-        - `network`         → adres sieci, np. "10.10.1.0"
-        - `wildcard`        → maska wildcard (do ACL), np. "0.0.0.255"
-        - `mask`            → zwykła maska dziesiętna, np. "255.255.255.0"
-        - `networkCidr`     → połączone "sieć/prefiks", np. "10.10.1.0/24"
-        - `networkMask`     → połączone "sieć maska", np. "10.10.1.0 255.255.255.0"
-                              (gotowe np. do polecenia `ip route`)
-        - `networkWildcard` → połączone "sieć wildcard", np. "10.10.1.0 0.0.0.255"
-                              (gotowe np. do `network ... area 0` w OSPF albo ACL)
-      Przykład:
-
-      { key: 'aclSource', type: 'cidr', showAclHelper: true,
-        deriveShared: { networkCidr: 'sieć_x', networkWildcard: 'siec_wild_x' } }
-
-      Po wpisaniu "10.10.1.10/24" w to pole, gdziekolwiek indziej na stronie:
-      <SharedValue shared="sieć_x" />        → pokaże "10.10.1.0/24"
-      <SharedValue shared="siec_wild_x" />   → pokaże "10.10.1.0 0.0.0.255"
 
 Jeśli pominiesz `type`, pole domyślnie zachowuje się jak `'port'` (bez walidacji) — żeby
 nie zepsuć topologii pisanych przed tą zmianą.
