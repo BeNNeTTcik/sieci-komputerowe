@@ -39,13 +39,16 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
     setWarning('');
   }
 
-  const REQUIRED = [
+  const STUDENTS = [
     {key: 'student1', label: 'Imię i nazwisko (osoba 1)'},
     {key: 'student2', label: 'Imię i nazwisko (osoba 2)'},
+  ];
+  const OTHER = [
     {key: 'semestr', label: 'Semestr'},
     {key: 'rok', label: 'Rok akademicki'},
     {key: 'grupa', label: 'Grupa'},
   ];
+  const REQUIRED = [...STUDENTS, ...OTHER];
 
   function handleGenerate() {
     const missing = REQUIRED.filter(f => !fields[f.key] || !fields[f.key].trim());
@@ -70,11 +73,12 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
   const titleStyle = {fontSize: '1.6rem', fontWeight: 700, color: '#111827', textAlign: 'center', margin: '0 0 4px 0'};
   const subtitleStyle = {fontSize: '1.05rem', color: '#6b7280', textAlign: 'center', margin: '0 0 24px 0'};
 
-  const table = {width: '100%', borderCollapse: 'collapse'};
-  const labelCell = {padding: '10px 12px', fontSize: '0.9rem', color: '#374151', fontWeight: 600, width: '220px', borderBottom: '1px solid #f3f4f6'};
-  const inputCell = {padding: '8px 12px', borderBottom: '1px solid #f3f4f6'};
+  const columnsWrap = {display: 'flex', gap: '40px', flexWrap: 'wrap'};
+  const column = {flex: '1 1 240px', minWidth: '240px'};
+  const fieldWrap = {marginBottom: '16px'};
+  const fieldLabel = {display: 'block', fontSize: '0.85rem', color: '#374151', fontWeight: 600, marginBottom: '5px'};
   const inputStyle = (filled) => ({
-    width: '100%', padding: '8px 10px', borderRadius: '6px', fontSize: '0.92rem', boxSizing: 'border-box',
+    width: '100%', padding: '9px 11px', borderRadius: '6px', fontSize: '0.92rem', boxSizing: 'border-box',
     border: filled ? '1px solid #16a34a' : '1px solid #e5e7eb',
     background: filled ? '#f0fdf4' : '#ffffff',
   });
@@ -89,24 +93,36 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
       <h1 style={titleStyle}>Sieci komputerowe</h1>
       {exerciseTitle && <p style={subtitleStyle}>{exerciseTitle}</p>}
 
-      <table style={table}>
-        <tbody>
-          {REQUIRED.map(f => (
-            <tr key={f.key}>
-              <td style={labelCell}>{f.label}</td>
-              <td style={inputCell}>
-                <input
-                  type="text"
-                  value={fields[f.key]}
-                  onChange={e => setField(f.key, e.target.value)}
-                  style={inputStyle(fields[f.key].trim() !== '')}
-                  placeholder={f.label}
-                />
-              </td>
-            </tr>
+      <div style={columnsWrap}>
+        <div style={column}>
+          {STUDENTS.map(f => (
+            <div key={f.key} style={fieldWrap}>
+              <label style={fieldLabel}>{f.label}</label>
+              <input
+                type="text"
+                value={fields[f.key]}
+                onChange={e => setField(f.key, e.target.value)}
+                style={inputStyle(fields[f.key].trim() !== '')}
+                placeholder={f.label}
+              />
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+        <div style={column}>
+          {OTHER.map(f => (
+            <div key={f.key} style={fieldWrap}>
+              <label style={fieldLabel}>{f.label}</label>
+              <input
+                type="text"
+                value={fields[f.key]}
+                onChange={e => setField(f.key, e.target.value)}
+                style={inputStyle(fields[f.key].trim() !== '')}
+                placeholder={f.label}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="no-print">
         {warning && (
@@ -120,7 +136,7 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
         <button style={darkBtn} onClick={handleGenerate}>Wygeneruj sprawozdanie (PDF)</button>
         <p style={{fontSize: '0.78rem', color: '#9ca3af', marginTop: '8px'}}>
           Sprawdza, czy powyższe dane są uzupełnione, a następnie otwiera okno drukowania —
-          wybierz w nim drukarkę „Zapisz jako PDF”, żeby uzyskać gotowy plik do oddania.
+          wybierz w nim drukarkę „Zapisz jako PDF”, żeby uzyskać gotowe sprawozdanie.
         </p>
       </div>
     </div>

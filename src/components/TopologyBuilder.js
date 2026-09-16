@@ -235,20 +235,32 @@ export const defaultTopology = {
   ],
 };
 
+// Zwraca płaską listę WSZYSTKICH pól w topologii — zarówno tych z pojedynczych
+// węzłów (`group.fields`), jak i tych przypisanych do poszczególnych urządzeń
+// wewnątrz stosu (`group.stacked[].fields`). Jedno miejsce, z którego korzystają
+// wszystkie poniższe funkcje zbierające — żeby nie powtarzać tej samej pętli
+// cztery razy i nie zapomnieć o stosie w którejś z nich.
+function getAllFields(topology) {
+  const fields = [];
+  topology.groups.forEach(g => {
+    (g.fields || []).forEach(f => fields.push(f));
+    (g.stacked || []).forEach(dev => {
+      (dev.fields || []).forEach(f => fields.push(f));
+    });
+  });
+  return fields;
+}
+
 function collectFieldKeys(topology) {
   const keys = [];
-  topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => { if (!keys.includes(f.key)) keys.push(f.key); });
-  });
+  getAllFields(topology).forEach(f => { if (!keys.includes(f.key)) keys.push(f.key); });
   return keys;
 }
 
 // Mapa: klucz pola w tej topologii -> współdzielony klucz (jeśli pole ma `shared`).
 function collectSharedMap(topology) {
   const map = {};
-  topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => { if (f.shared) map[f.key] = f.shared; });
-  });
+  getAllFields(topology).forEach(f => { if (f.shared) map[f.key] = f.shared; });
   return map;
 }
 
@@ -257,10 +269,8 @@ function collectSharedMap(topology) {
 // Dostępne nazwy pochodnych: ip, prefix, network, wildcard, mask.
 function collectDeriveSharedMap(topology) {
   const map = {};
-  topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => {
-      if (f.deriveShared) map[f.key] = {type: f.type, deriveShared: f.deriveShared};
-    });
+  getAllFields(topology).forEach(f => {
+    if (f.deriveShared) map[f.key] = {type: f.type, deriveShared: f.deriveShared};
   });
   return map;
 }
@@ -291,9 +301,7 @@ function deriveCidrValues(value) {
 // czy dwa różne urządzenia dostały przypadkiem ten sam adres IP.
 function collectAddressFieldKeys(topology) {
   const keys = [];
-  topology.groups.forEach(g => {
-    (g.fields || []).forEach(f => { if (f.type === 'address' || f.type === 'cidr') keys.push(f.key); });
-  });
+  getAllFields(topology).forEach(f => { if (f.type === 'address' || f.type === 'cidr') keys.push(f.key); });
   return keys;
 }
 
@@ -472,7 +480,29 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
                 <>
                   <div style={{display: 'flex', flexDirection: 'column', gap: '14px'}}>
                     {group.stacked.map((dev, j) => (
-                      <DeviceIcon key={j} icon={dev.icon} label={dev.label} sublabel={dev.sublabel} />
+                      <div key={j} style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px'}}>
+                        <DeviceIcon icon={dev.icon} label={dev.label} sublabel={dev.sublabel} />
+                        {(dev.fields || []).length > 0 && (
+                          <div style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', maxWidth: '190px'}}>
+                            {dev.fields.map(f => (
+                              <MiniField
+                                key={f.key}
+                                label={f.label}
+                                value={values[f.key] || ''}
+                                placeholder={f.placeholder(xVal)}
+                                onChange={v => setFieldValue(f.key, v)}
+                                width={f.width}
+                                type={f.type}
+                                xVal={xVal}
+                                checkGroupOctet={checkGroupOctet}
+                                isDuplicate={duplicateAddressKeys.has(f.key)}
+                                expectedPrefix={f.expectedPrefix}
+                                showAclHelper={f.showAclHelper}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                   {topology.vlan?.show && i === 0 && (

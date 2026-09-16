@@ -26,28 +26,33 @@ import CodeBlank from '@site/src/components/CodeBlank';
 ## I. Wprowadzenie
 
 <div className="justify">
-**Listy ACL (Access Control List)** filtrują ruch IP na podstawie zdefiniowanych reguł. Router sprawdza pakiet po kolei od góry listy i stosuje pierwszą pasującą regułę (`permit` lub `deny`) — reszta wpisów jest ignorowana. Na końcu każdej listy ACL znajduje się niewidoczne, domniemane `deny any` — jeśli żadna reguła nie pasuje, pakiet zostaje odrzucony [^cisco].
+**Listy ACL (Access Control List)** filtrują ruch IP na podstawie zdefiniowanych reguł. Router sprawdza pakiet po kolei od góry listy i stosuje pierwszą pasującą regułę (`permit` lub `deny`) — reszta wpisów jest ignorowana. Na końcu każdej listy ACL znajduje się niewidoczne, domniemane `deny any` — jeśli żadna reguła nie pasuje, pakiet zostaje odrzucony [^cisco]. Poniżej na Rysunku 1 przedstawiono sposob przetwarzania reguł na routerze.
 </div>
 
-Wyróżniamy dwa rodzaje ACL:
-- **standardowa ACL** - przyjmuje wartości numeryczne 1-99 i 1300-1999 lub jako nazwa `ip access-list standard <NAZWA>`. Standrdowa ACL filtruje tylko po adresach źródłowych pakietów.
-- **rozszerzone ACL** - przujmuje wartości numeryczne 100-199 i 2000-2699 lub jako nazwy `ip access-list extended <NAZWA>`. Filtruje po adresie źródłowym, docelowym, protokole (ip/tcp/udp/icmp) i porcie.
+![Rys1](/img/13/acl_przetwarzanie.png)
+<div className="text-center">
+Rys.1 Przetwarzanie reguł ACL [^claude]
+</div>
+
+Kolejność reguł ma znaczenie krytyczne. Umieszczenie ogólnej reguły `permit` zbyt wysoko na liście sprawi, że bardziej szczegółowa reguła `deny` poniżej nigdy nie zostanie sprawdzona — router zatrzyma się na pierwszym trafieniu.
+
+**Dwa rodzaje list ACL:** 
+| | Standardowa | Rozszerzona |
+|---|---|---|
+| Zakres numerów | 1-99 i 1300-1999 | 100-199 i 2000-2699 |
+| Wykorzystanie | `ip access-list standard <NAZWA>` | `ip access-list extended <NAZWA>` |
+| Filtruje po | wyłącznie adresie źródłowym | adresie źródłowym, docelowym, protokole (IP/TCP/UDP/ICMP) i porcie |
 
 :::warning
 Konfigurowanie Access Control List trzeba przejść świadomie i z wielką uwagą, ponieważ w bradzo prosty sposób można odciąć samego siebie od sieci i dostepu podając złe parametry fitrów.
 :::
 
-Wyjaśnienie składni komend:
-
-**permit/deny** - przepuszczenie lub zablokowanie ruchu.
-
-**Maska blankietowa (wildcard)** - odwrotność maski podsieci. Czyli z maski `255.255.255.0` odwrotność wynosi `0.0.0.255` co jest równoważne ze znaczeniem dla dowolonego hostem z sieci.
-
-**Host X** - dokladnie ten adres (przyklad permit ip 192.168.2.0 0.0.0.255 `host 192.168.1.1`).
-
-**any** - wszystko inne (inna sieć, inny host, niż te zadeklarowane itd.).
-
-**eq 80, eq 23, echo** - porty i typy komunikatów.
+Wyjaśnienie składni komend
+- `permit` / `deny` — przepuszczenie lub zablokowanie ruchu pasującego do reguły.
+- Maska wildcard (blankietowa) — odwrotność maski podsieci. Z maski `255.255.255.0` odwrotność wynosi `0.0.0.255`, co oznacza "dowolny host z tej sieci" (dokładnie ten mechanizm i tę samą matematykę omawialiśmy przy okazji konwersji adresu na zapis ACL — 0 w wildcard oznacza "ten bit musi się zgadzać", 1 oznacza "ten bit może być dowolny").
+- `host X` — dokładnie jeden, konkretny adres, skrót od `X 0.0.0.0` (maska wildcard samych zer — żaden bit nie może się różnić). Przykład: `permit ip 192.168.2.0 0.0.0.255 host 192.168.1.1` — dowolny host z sieci `192.168.2.0/24` może się połączyć wyłącznie z hostem `192.168.1.1`.
+- `any` — dosłownie wszystko inne: dowolna inna sieć, dowolny inny host, niż te jawnie zadeklarowane w regule.
+- `eq 80, eq 23, echo` — konkretny numer portu (80 = HTTP, 23 = Telnet) albo typ komunikatu (np. `echo` dla ICMP ping) — dostępne wyłącznie w listach rozszerzonych, bo standardowe nie mają dostępu do informacji o porcie/protokole.
 
 ## II. Zadania do wykonania
 
@@ -56,6 +61,8 @@ Wyjaśnienie składni komend:
 3. Rozszerzona ACL filtrująca po adresie i porcie/protokole.
 4. Zastosować ACL na właściwym interfejsie i kierunku.
 5. Testy weryfikacyjne i analiza show access-lists.
+
+### Konifugracja ACL dla przedstawionej topologi sieci
 
 <StepByStep>
 <Step title="Konifugracja sieci w następujący sposób">
@@ -104,10 +111,55 @@ W Windows wejdź w "Panel sterowania" → "Centrum sieci" → "Zmień ustawienia
 - PC-A: <SharedValue shared="pca_ip" fallback="—" />, maska <SharedValue shared="maska" fallback="—" />
 - PC-A: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
 
-Skonfiguruj routery R1 oraz R2 według bazując na wiedzy z poprzednik zadań. Poniżej znajduje się "Checklista", która pomoże w prawidłowej konfiguracji oraz dokumentacja z [ćwiczenia 5.5](http://localhost:3000/sieci-komputerowe/cwiczenie-05%20i%205)
+Skonfiguruj routery R1 oraz R2 bazując na wiedzy z poprzednik zadań. Poniżej znajduje się "Checklista", która pomoże w prawidłowej konfiguracji oraz dokumentacja z [ćwiczenia 5.5](http://localhost:3000/sieci-komputerowe/cwiczenie-05%20i%205)
 
-CheckLsita co trzeba skonfigurowac na obu routerach
+import Checklist from '@site/src/components/Checklist';
 
+<Checklist
+  title="Pełna konfiguracja - PC, R1 i R2"
+  storageKey="cwiczenie-13-checklist"
+  sections={[
+      {
+      title: 'Adresacja dla PC',
+      items: [
+        'Ustawienie adresów IP oraz maski'
+      ],
+    },
+    {
+      title: 'Podstawowa tożsamość urządzenia',
+      items: [
+        'Nadaj nazwę hosta (hostname R1-X / R2-X)',
+        'Ustaw hasło do trybu uprzywilejowanego (enable secret)',
+        'Włącz szyfrowanie haseł (service password-encryption)',
+      ],
+    },
+    {
+      title: 'Zabezpieczenie dostępu',
+      items: [
+        'Hasło na porcie konsolowym (line console 0 → password → login)',
+        'Hasło na liniach VTY (line vty 0 4 → password → login)',
+        'Baner ostrzegawczy (banner motd)',
+      ],
+    },
+    {
+      title: 'Konfiguracja interfejsów',
+      items: [
+        'Zidentyfikuj, który interfejs jest LAN, a który do R2',
+        'Adres IP + maska na interfejsie LAN',
+        'Adres IP + maska /30 na łączu R1↔R2',
+        'Opis (description) na każdym interfejsie',
+        'no shutdown na KAŻDYM skonfigurowanym interfejsie',
+      ],
+    },
+    {
+      title: 'Zapis i weryfikacja',
+      items: [
+        'show ip interface brief — status up/up',
+        'ping do drugiego routera po łączu R1↔R2',
+      ],
+    },
+  ]}
+/>
 </Step>
 
 <Step title="Projekt polityki">
@@ -206,4 +258,6 @@ Przypisanie konfiguracji do interfjsu.
 </Step>
 </StepByStep>
 
-[^cisco]: [Configure IP Access Lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html)
+[^cisco]: Cisco Systems, Inc., [Configure IP Access Lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html), Cisco IOS Documentation, cisco.com 
+
+[^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).

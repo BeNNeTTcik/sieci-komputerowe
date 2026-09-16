@@ -45,7 +45,36 @@ Rys.4 Żądanie - Odpowiedź [^claude]
 
 <StepByStep>
 <Step title="Podłączenie do przełącznika">
-XXXXXXXXXXXXXXXXXXXXXXX
+<TopologyBuilder
+  title="Topologia — PC1, PC2, SW"
+  topology={{
+    vlan: { show: false, defaultVlan: '10', addressPattern: (x) => `172.16.${x}.1–252` },
+    groups: [
+      {
+        stacked: [
+          {
+            icon: '🖥️', label: 'PC1', sublabel: 'PC-PT',
+            fields: [
+              { key: 'pc1_ip', label: 'adres IP', placeholder: (x) => `172.16.${x}.10`, type: 'address', shared: 'pc1_ip' },
+            ],
+          },
+          {
+            icon: '🖥️', label: 'PC2', sublabel: 'PC-PT',
+            fields: [
+              { key: 'pc2_ip', label: 'adres IP', placeholder: (x) => `172.16.${x}.11`, type: 'address', shared: 'pc2_ip' },
+            ],
+          },
+        ],
+      },
+      {
+        node: { icon: '🔀', label: 'SW-X' },
+        fields: [
+          { key: 'swMgmt', label: 'adr. zarządz.', placeholder: (x) => `172.16.${x}.253`, type: 'address' },
+        ],
+      },
+    ],
+  }}
+/>
 
 Ustawienie adresacji ta sama siec na wszystkich komputerach!
 </Step>
@@ -119,7 +148,36 @@ Dla przełączników **nie pracujących w wartswie 3** (tam gdzie ROUTER), jedyn
 </div>
 <StepByStep>
 <Step title="Podłączenie do przełącznika">
-XXXXXXXXXXXXXXXXXXXXXXX
+<TopologyBuilder
+  title="Topologia — PC1, PC2, SW"
+  topology={{
+    vlan: { show: false, defaultVlan: '10', addressPattern: (x) => `172.16.${x}.1–252` },
+    groups: [
+      {
+        stacked: [
+          {
+            icon: '🖥️', label: 'PC1', sublabel: 'PC-PT',
+            fields: [
+              { key: 'pc1_ip', label: 'adres IP', placeholder: (x) => `172.16.${x}.10`, type: 'address', shared: 'pc1_ip' },
+            ],
+          },
+          {
+            icon: '🖥️', label: 'PC2', sublabel: 'PC-PT',
+            fields: [
+              { key: 'pc2_ip', label: 'adres IP', placeholder: (x) => `172.16.${x}.11`, type: 'address', shared: 'pc2_ip' },
+            ],
+          },
+        ],
+      },
+      {
+        node: { icon: '🔀', label: 'SW-X' },
+        fields: [
+          { key: 'swMgmt', label: 'adr. zarządz.', placeholder: (x) => `172.16.${x}.253`, type: 'address' },
+        ],
+      },
+    ],
+  }}
+/>
 
 Ustawienie adresacji ta sama siec na wszystkich komputerach!
 </Step>
@@ -194,4 +252,4 @@ Sprawdzenie jak działa routing pomimo różncyh VLAN-ów. Wykonaj kolejno pingi
 
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
 
-[^SVI]: Cisco Networking Academy, materiały kursu CCNA: Switching, Routing, and Wireless Essentials, Cisco Systems, Inc., netacad.com.
+[^SVI]: Cisco Systems. (2023). Understanding Switched Virtual Interface (SVI) Autostate States on Catalyst Switches. Cisco Technical Support & Documentation. cisco.com
