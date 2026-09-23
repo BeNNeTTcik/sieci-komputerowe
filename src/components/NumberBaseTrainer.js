@@ -52,7 +52,7 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.sessionStorage.getItem(key);
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.problemIds) && saved.problemIds.length === total) {
@@ -67,7 +67,7 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
           }
         }
       }
-    } catch (e) { /* localStorage niedostępny */ }
+    } catch (e) { /* sessionStorage niedostępny */ }
     loadedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -75,7 +75,7 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
-      window.localStorage.setItem(key, JSON.stringify({
+      window.sessionStorage.setItem(key, JSON.stringify({
         problemIds: problems.map(p => p.id), answers, current, phase, studentName,
       }));
     } catch (e) { /* ignorujemy błędy zapisu */ }
@@ -95,7 +95,7 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
   }
 
   function clearSavedProgress() {
-    try { window.localStorage.removeItem(key); } catch (e) {}
+    try { window.sessionStorage.removeItem(key); } catch (e) {}
     drawBrandNewSet();
   }
 

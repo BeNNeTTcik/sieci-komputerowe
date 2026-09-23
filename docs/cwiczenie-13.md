@@ -4,6 +4,7 @@ title: "Ćwiczenie 13: Listy kontroli dostępu (ACL)"
 ---
 
 <!--- import bibliotek -->
+
 import TopologyBuilder from '@site/src/components/TopologyBuilder';
 import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
@@ -16,7 +17,7 @@ import CodeBlank from '@site/src/components/CodeBlank';
 
 # Ćwiczenie 13: Listy kontroli dostępu (ACL)
 
-*Część II — Zajęcia praktyczne*
+_Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 13: Listy kontroli dostępu (ACL)"
@@ -30,13 +31,14 @@ import CodeBlank from '@site/src/components/CodeBlank';
 </div>
 
 ![Rys1](/img/13/acl_przetwarzanie.png)
+
 <div className="text-center">
 Rys.1 Przetwarzanie reguł ACL [^claude]
 </div>
 
 Kolejność reguł ma znaczenie krytyczne. Umieszczenie ogólnej reguły `permit` zbyt wysoko na liście sprawi, że bardziej szczegółowa reguła `deny` poniżej nigdy nie zostanie sprawdzona — router zatrzyma się na pierwszym trafieniu.
 
-**Dwa rodzaje list ACL:** 
+**Dwa rodzaje list ACL:**
 | | Standardowa | Rozszerzona |
 |---|---|---|
 | Zakres numerów | 1-99 i 1300-1999 | 100-199 i 2000-2699 |
@@ -48,6 +50,7 @@ Konfigurowanie Access Control List trzeba przejść świadomie i z wielką uwag�
 :::
 
 Wyjaśnienie składni komend
+
 - `permit` / `deny` — przepuszczenie lub zablokowanie ruchu pasującego do reguły.
 - Maska wildcard (blankietowa) — odwrotność maski podsieci. Z maski `255.255.255.0` odwrotność wynosi `0.0.0.255`, co oznacza "dowolny host z tej sieci" (dokładnie ten mechanizm i tę samą matematykę omawialiśmy przy okazji konwersji adresu na zapis ACL — 0 w wildcard oznacza "ten bit musi się zgadzać", 1 oznacza "ten bit może być dowolny").
 - `host X` — dokładnie jeden, konkretny adres, skrót od `X 0.0.0.0` (maska wildcard samych zer — żaden bit nie może się różnić). Przykład: `permit ip 192.168.2.0 0.0.0.255 host 192.168.1.1` — dowolny host z sieci `192.168.2.0/24` może się połączyć wyłącznie z hostem `192.168.1.1`.
@@ -108,6 +111,7 @@ Adresacja nie jest z góry narzucona. Można wybrać sieć podaną w zadaniu lub
 Bazując na adresacji z wcześniejszego kroku trzeba przygotować stanowisko przed wdrożeniem ACL.
 
 W Windows wejdź w "Panel sterowania" → "Centrum sieci" → "Zmień ustawienia karty" → właściwości "IPv4":
+
 - PC-A: <SharedValue shared="pca_ip" fallback="—" />, maska <SharedValue shared="maska" fallback="—" />
 - PC-A: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
 
@@ -116,49 +120,49 @@ Skonfiguruj routery R1 oraz R2 bazując na wiedzy z poprzednik zadań. Poniżej 
 import Checklist from '@site/src/components/Checklist';
 
 <Checklist
-  title="Pełna konfiguracja - PC, R1 i R2"
-  storageKey="cwiczenie-13-checklist"
-  sections={[
-      {
-      title: 'Adresacja dla PC',
-      items: [
-        'Ustawienie adresów IP oraz maski'
-      ],
-    },
-    {
-      title: 'Podstawowa tożsamość urządzenia',
-      items: [
-        'Nadaj nazwę hosta (hostname R1-X / R2-X)',
-        'Ustaw hasło do trybu uprzywilejowanego (enable secret)',
-        'Włącz szyfrowanie haseł (service password-encryption)',
-      ],
-    },
-    {
-      title: 'Zabezpieczenie dostępu',
-      items: [
-        'Hasło na porcie konsolowym (line console 0 → password → login)',
-        'Hasło na liniach VTY (line vty 0 4 → password → login)',
-        'Baner ostrzegawczy (banner motd)',
-      ],
-    },
-    {
-      title: 'Konfiguracja interfejsów',
-      items: [
-        'Zidentyfikuj, który interfejs jest LAN, a który do R2',
-        'Adres IP + maska na interfejsie LAN',
-        'Adres IP + maska /30 na łączu R1↔R2',
-        'Opis (description) na każdym interfejsie',
-        'no shutdown na KAŻDYM skonfigurowanym interfejsie',
-      ],
-    },
-    {
-      title: 'Zapis i weryfikacja',
-      items: [
-        'show ip interface brief — status up/up',
-        'ping do drugiego routera po łączu R1↔R2',
-      ],
-    },
-  ]}
+title="Pełna konfiguracja - PC, R1 i R2"
+storageKey="cwiczenie-13-checklist"
+sections={[
+{
+title: 'Adresacja dla PC',
+items: [
+'Ustawienie adresów IP oraz maski'
+],
+},
+{
+title: 'Podstawowa tożsamość urządzenia',
+items: [
+'Nadaj nazwę hosta (hostname R1-X / R2-X)',
+'Ustaw hasło do trybu uprzywilejowanego (enable secret)',
+'Włącz szyfrowanie haseł (service password-encryption)',
+],
+},
+{
+title: 'Zabezpieczenie dostępu',
+items: [
+'Hasło na porcie konsolowym (line console 0 → password → login)',
+'Hasło na liniach VTY (line vty 0 4 → password → login)',
+'Baner ostrzegawczy (banner motd)',
+],
+},
+{
+title: 'Konfiguracja interfejsów',
+items: [
+'Zidentyfikuj, który interfejs jest LAN, a który do R2',
+'Adres IP + maska na interfejsie LAN',
+'Adres IP + maska /30 na łączu R1↔R2',
+'Opis (description) na każdym interfejsie',
+'no shutdown na KAŻDYM skonfigurowanym interfejsie',
+],
+},
+{
+title: 'Zapis i weryfikacja',
+items: [
+'show ip interface brief — status up/up',
+'ping do drugiego routera po łączu R1↔R2',
+],
+},
+]}
 />
 </Step>
 
@@ -204,9 +208,9 @@ Wejscie w tryb konfiguracyjny **R2(config)#** przy pomocy komend (`enable` i `co
 Przypisanie konfiguracji do interfjsu.
 
 <CodeBlock lines={[
-  'interface GigabitEthernet0/1',
-  'ip access-group BLOKADA_DO_PCA in',
-  'exit'
+'interface GigabitEthernet0/1',
+'ip access-group BLOKADA_DO_PCA in',
+'exit'
 ]} />
 
 :::warning KOLEJNOŚĆ!!!
@@ -230,9 +234,9 @@ Wejscie w tryb konfiguracyjny **R1(config)#** przy pomocy komend (`enable` i `co
 Przypisanie konfiguracji do interfjsu.
 
 <CodeBlock lines={[
-  'interface GigabitEthernet0/1',
-  'ip access-group BLOKADA_DO_PCB in',
-  'exit'
+'interface GigabitEthernet0/1',
+'ip access-group BLOKADA_DO_PCB in',
+'exit'
 ]} />
 </Step>
 
@@ -258,6 +262,6 @@ Przypisanie konfiguracji do interfjsu.
 </Step>
 </StepByStep>
 
-[^cisco]: Cisco Systems, Inc., [Configure IP Access Lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html), Cisco IOS Documentation, cisco.com 
+[^cisco]: Cisco Systems, Inc., [Configure IP Access Lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html), Cisco IOS Documentation, cisco.com
 
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).

@@ -181,17 +181,36 @@ function MiniField({label, value, placeholder, onChange, width, type = 'port', x
   );
 }
 
+// WAŻNE dla wyrównania linii łączących (`connectorLine` niżej): ta ikona
+// zawsze zajmuje tę samą wysokość (`iconRowHeight`), niezależnie od tego, czy
+// ma `sublabel`, czy węzeł ma 1 pole, czy 3. Dzięki temu pozioma linia
+// łącząca sąsiednie węzły — pozycjonowana stałym `marginTop` względem góry
+// całego wiersza grup — zawsze trafia dokładnie w środek ikony, a nie w
+// przypadkowe miejsce zależne od liczby pól konfiguracyjnych pod spodem
+// (który to błąd wcześniej powodował "unoszące się" w powietrzu, krzywo
+// wyrównane odcinki na schematach z węzłami o różnej liczbie pól).
+const iconRowHeight = 58; // mieści ikonę + label + opcjonalny sublabel (np. "ISR4331") bez obcinania
+
 function DeviceIcon({icon, label, sublabel}) {
   return (
-    <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px'}}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: '1px', minHeight: `${iconRowHeight}px`,
+    }}>
       <div style={{fontSize: '1.6rem', lineHeight: 1}}>{icon}</div>
-      <div style={{fontSize: '0.78rem', fontWeight: 600, color: '#111827'}}>{label}</div>
+      <div style={{fontSize: '0.78rem', fontWeight: 600, color: '#111827', textAlign: 'center'}}>{label}</div>
       {sublabel && <div style={{fontSize: '0.66rem', color: '#9ca3af'}}>{sublabel}</div>}
     </div>
   );
 }
 
-const connectorLine = {flex: '1 1 12px', minWidth: '12px', height: '2px', background: '#9ca3af', alignSelf: 'center', marginTop: '34px'};
+// `marginTop` = połowa `iconRowHeight` minus połowa grubości linii (2px) —
+// tak, żeby linia trafiała dokładnie w poziomy środek ikony każdego węzła,
+// niezależnie od tego, ile pól konfiguracyjnych jest wyrenderowanych pod nią.
+const connectorLine = {
+  flex: '1 1 12px', minWidth: '12px', height: '2px', background: '#9ca3af',
+  alignSelf: 'flex-start', marginTop: `${iconRowHeight / 2 - 1}px`,
+};
 
 // --- Domyślna topologia: PC1/PC2 -> SW -> R1 -> R2, z polami PORT + ADRES ---
 
@@ -324,7 +343,7 @@ function findDuplicateAddressKeys(addressFieldKeys, values) {
   return dup;
 }
 
-export default function TopologyBuilder({title, storageKey, topology = defaultTopology, checkGroupOctet = true}) {
+export default function TopologyBuilder({title, storageKey, topology = defaultTopology, checkGroupOctet = true, xShared}) {
   const key = `topology-builder:${storageKey || 'domyslna'}`;
   const loadedRef = useRef(false);
   const fieldKeys = collectFieldKeys(topology);
@@ -384,6 +403,18 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Jeśli podano `xShared`, publikuje bieżący numer grupy (X) do wspólnego
+  // magazynu przy każdej zmianie — dzięki temu inne komponenty na stronie
+  // (np. `RingNeighbor`, albo kolumna `readOnly` w `EditableTable` zawierająca
+  // <RingNeighbor xShared="..." />) mogą na żywo wyliczyć numery sąsiednich
+  // grup w pierścieniu (X-1 / X+1), bez ręcznego przepisywania numeru gdzie
+  // indziej. Świadomie NIE czytamy stąd z powrotem do `x` — to pole jest tu
+  // źródłem prawdy, nie odbiorcą.
+  useEffect(() => {
+    if (!xShared) return;
+    writeSharedField(xShared, x);
+  }, [x, xShared]);
+
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
@@ -432,6 +463,11 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
   const card = {
     border: '1px solid #e5e7eb', borderRadius: '16px', padding: '24px',
     background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', margin: '24px 0',
+    // Węzły topologii mają zawsze zmieścić się w JEDNEJ linii (nigdy nie
+    // "łamać się" na dwa rzędy — patrz `flexWrap: 'nowrap'` niżej). Na wąskich
+    // ekranach/kontenerach oznacza to poziomy scroll całej karty zamiast
+    // zawijania — dokładnie tak samo, jak już działa w `EditableTable`.
+    overflowX: 'auto',
   };
   const heading = {fontSize: '1.3rem', fontWeight: 600, color: '#111827', margin: '0 0 16px 0'};
   const xInputStyle = {
@@ -470,11 +506,11 @@ export default function TopologyBuilder({title, storageKey, topology = defaultTo
         </button>
       </div>
 
-      <div style={{display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center', gap: '6px', rowGap: '20px'}}>
+      <div style={{display: 'flex', alignItems: 'flex-start', flexWrap: 'nowrap', justifyContent: 'center', gap: '6px', minWidth: 'min-content'}}>
 
         {topology.groups.map((group, i) => (
           <React.Fragment key={i}>
-            <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px'}}>
+            <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', flexShrink: 0}}>
 
               {group.stacked ? (
                 <>

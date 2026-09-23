@@ -24,7 +24,7 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.sessionStorage.getItem(key);
       if (raw) setAnswer(raw);
     } catch (e) { /* ignorujemy */ }
     loadedRef.current = true;
@@ -34,7 +34,7 @@ export default function KeywordAnswer({title, question, keywords, explanation, s
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
-      window.localStorage.setItem(key, answer);
+      window.sessionStorage.setItem(key, answer);
     } catch (e) { /* ignorujemy */ }
   }, [answer, key]);
 

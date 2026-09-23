@@ -50,7 +50,7 @@ export default function TopologiaPacketTracer({title, storageKey}) {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.sessionStorage.getItem(key);
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved.x) setX(saved.x);
@@ -65,7 +65,7 @@ export default function TopologiaPacketTracer({title, storageKey}) {
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
-      window.localStorage.setItem(key, JSON.stringify({x, vlan, addr}));
+      window.sessionStorage.setItem(key, JSON.stringify({x, vlan, addr}));
     } catch (e) { /* ignorujemy */ }
   }, [x, vlan, addr, key]);
 

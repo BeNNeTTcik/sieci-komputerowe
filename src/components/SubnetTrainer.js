@@ -52,10 +52,10 @@ export default function SubnetTrainer({countIPv4 = 7, countIPv6 = 3, title, stor
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState(false);
 
-  // --- Auto-wczytanie z localStorage (wygoda na tym samym urządzeniu) ---
+  // --- Auto-wczytanie z sessionStorage (wygoda na tym samym urządzeniu) ---
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.sessionStorage.getItem(key);
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.problemIds) && saved.problemIds.length === total) {
@@ -70,16 +70,16 @@ export default function SubnetTrainer({countIPv4 = 7, countIPv6 = 3, title, stor
           }
         }
       }
-    } catch (e) { /* localStorage niedostępny — ignorujemy */ }
+    } catch (e) { /* sessionStorage niedostępny — ignorujemy */ }
     loadedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Auto-zapis do localStorage przy każdej zmianie (tylko id + odpowiedzi) ---
+  // --- Auto-zapis do sessionStorage przy każdej zmianie (tylko id + odpowiedzi) ---
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
-      window.localStorage.setItem(key, JSON.stringify({
+      window.sessionStorage.setItem(key, JSON.stringify({
         problemIds: problems.map(p => p.id), answers, current, phase, studentName,
       }));
     } catch (e) { /* ignorujemy błędy zapisu */ }
@@ -99,7 +99,7 @@ export default function SubnetTrainer({countIPv4 = 7, countIPv6 = 3, title, stor
   }
 
   function clearSavedProgress() {
-    try { window.localStorage.removeItem(key); } catch (e) {}
+    try { window.sessionStorage.removeItem(key); } catch (e) {}
     drawBrandNewSet();
   }
 
