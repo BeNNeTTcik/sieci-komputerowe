@@ -215,6 +215,10 @@ show mac address-table dynamic
 To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza, że na 2. warstwie modelu OSI obsługiwane są adresy IP. Adres IP przypisany przełącznikowi służy jedynie temu, aby móc dostać się na niego i go przekonfigurować; nie ma wpływu na sam proces przełączania ramek, który to następuje na podstawie adresów MAC.
 :::
 
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
+
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
 [^802.3]: [IEEE Std 802.3-2018](https://standards.ieee.org/standard/802_3-2018.html), IEEE Standard for Ethernet, Institute of Electrical and Electronics Engineers.

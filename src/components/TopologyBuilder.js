@@ -73,6 +73,20 @@ function computeAclNotation(ipPart, prefix) {
   return {network: networkOctets.join('.'), wildcard: wildcardOctets.join('.')};
 }
 
+// Klasa adresu (A/B/C/D/E) na podstawie WYŁĄCZNIE pierwszego oktetu — tak samo
+// jak w `EditableTable.js` (świadomie skopiowana funkcja, patrz komentarz przy
+// `deriveCidrValues` niżej). Dla klas A/B/C zwraca też jej klasowy prefiks
+// (/8, /16, /24) — granicę, do której IOS milcząco zaokrągla `network` w RIP,
+// niezależnie od maski faktycznie wpisanej przez studenta. Klasy D i E nie
+// mają sensownego klasowego prefiksu — `netclassPrefix` jest wtedy `null`.
+function classifyNetwork(firstOctet) {
+  if (firstOctet >= 0 && firstOctet <= 127) return {netclass: 'A', netclassPrefix: 8};
+  if (firstOctet >= 128 && firstOctet <= 191) return {netclass: 'B', netclassPrefix: 16};
+  if (firstOctet >= 192 && firstOctet <= 223) return {netclass: 'C', netclassPrefix: 24};
+  if (firstOctet >= 224 && firstOctet <= 239) return {netclass: 'D', netclassPrefix: null};
+  return {netclass: 'E', netclassPrefix: null};
+}
+
 // Filtruje wpisywany tekst dla pól typu "vlan" — dopuszcza wyłącznie cyfry.
 function filterVlanInput(value) {
   return value.replace(/[^0-9]/g, '');
@@ -302,6 +316,9 @@ function deriveCidrValues(value) {
   const acl = computeAclNotation(parsed.ipPart, parsed.prefix);
   const maskOctets = prefixToMaskOctets(parsed.prefix);
   const mask = maskOctets.join('.');
+  const firstOctet = Number(parsed.ipPart.split('.')[0]);
+  const {netclass, netclassPrefix} = classifyNetwork(firstOctet);
+  const netclassAcl = netclassPrefix !== null ? computeAclNotation(parsed.ipPart, netclassPrefix) : null;
   return {
     ip: parsed.ipPart,
     prefix: String(parsed.prefix),
@@ -313,6 +330,12 @@ function deriveCidrValues(value) {
     networkCidr: `${acl.network}/${parsed.prefix}`,        // "10.10.1.0/24"      — np. do opisu sieci
     networkMask: `${acl.network} ${mask}`,                  // "10.10.1.0 255.255.255.0" — np. do "ip route"
     networkWildcard: `${acl.network} ${acl.wildcard}`,      // "10.10.1.0 0.0.0.255"     — np. do ACL / "network" w OSPF
+    // Pochodne KLASOWE — liczone z pierwszego oktetu, NIEZALEŻNIE od prefiksu
+    // wpisanego przez studenta (patrz `classifyNetwork` wyżej):
+    netclass: netclass,                                     // "A" / "B" / "C" / "D" / "E"
+    netclassPrefix: netclassPrefix !== null ? String(netclassPrefix) : '', // "8"/"16"/"24", puste dla D/E
+    netclassMask: netclassPrefix !== null ? prefixToMaskOctets(netclassPrefix).join('.') : '', // np. "255.255.0.0"
+    netclassNetwork: netclassAcl ? netclassAcl.network : '', // adres zaokrąglony do granicy KLASOWEJ, np. "172.16.0.0"
   };
 }
 
@@ -656,6 +679,15 @@ Każde pole w `fields` ma teraz jawny `type`:
                               (gotowe np. do polecenia `ip route`)
         - `networkWildcard` → połączone "sieć wildcard", np. "10.10.1.0 0.0.0.255"
                               (gotowe np. do `network ... area 0` w OSPF albo ACL)
+        - `netclass`        → klasa adresu wg PIERWSZEGO OKTETU: "A" / "B" / "C" / "D" / "E"
+                              (niezależnie od wpisanego prefiksu — to realna klasa adresu)
+        - `netclassPrefix`  → klasowy prefiks tej klasy, np. "16" dla adresu klasy B
+                              (puste dla D/E, które nie mają klasowego prefiksu)
+        - `netclassMask`    → klasowa maska dziesiętna, np. "255.255.0.0" dla klasy B
+        - `netclassNetwork` → adres zaokrąglony do granicy KLASOWEJ (a nie do wpisanego
+                              prefiksu), np. dla "172.16.5.10/24" da "172.16.0.0" —
+                              dokładnie to, do czego IOS "ucina" adres w poleceniu
+                              `network` w RIP, niezależnie od realnej maski na interfejsie
       Przykład:
 
       { key: 'aclSource', type: 'cidr', showAclHelper: true,

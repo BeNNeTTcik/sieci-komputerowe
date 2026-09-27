@@ -21,6 +21,6 @@ Segmentacja sieci lokalnej pary na **VLAN-y** oraz konfiguracja routingu między
 4. Zweryfikować izolację VLAN i routing międzyVLAN-owy.
 5. Sprawdzić łączność z siecią pary Y.
 
-## III. Podsumowanie
-
-Segmentacja sieci przy pomocy VLAN i routing między segmentami.
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::

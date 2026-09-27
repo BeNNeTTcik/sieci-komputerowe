@@ -244,7 +244,9 @@ Sprawdzenie jak działa routing pomimo różncyh VLAN-ów. Wykonaj kolejno pingi
 </Step>
 </StepByStep>
 
-### Port security
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
 
 [^kurose]: J. F. Kurose, K. W. Ross, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Kurose+Ross+Helion+wydanie+3), wyd. 7, Helion, Gliwice 2006. 
 

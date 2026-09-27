@@ -93,12 +93,6 @@ Rys.1 Mechanizm wykorzystania bramy domyślnej [^comer][^claude]
 
 ## II. Zadania do wykonania
 
-0. Przypomnienie dotyczące zamiany systemów liczbowych.
-1. Ćwiczenia rachunkowe z podziału sieci na podsieci (VLSM).
-2. Odczytać konfigurację IP i tablicę routingu (ipconfig / route print).
-3. Przeanalizować działanie traceroute/tracert.
-4. Przeanalizować nagłówek pakietu IP w Wireshark.
-
 ### Systemy liczbowe
 
 <div className="justify">
@@ -204,8 +198,11 @@ Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **In
 <ScreenshotPaste label="Zrzut ekranu: pakiet IP z sekcją IPv4" />
 
 </Step>
-
 </StepByStep>
+
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
 
 [^RFC791]: IETF, [RFC 791](https://www.rfc-editor.org/info/rfc791/) — Internet Protocol.
 

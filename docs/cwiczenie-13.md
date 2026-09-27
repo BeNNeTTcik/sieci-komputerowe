@@ -59,12 +59,6 @@ Wyjaśnienie składni komend
 
 ## II. Zadania do wykonania
 
-1. Zaprojektować politykę filtrowania z sąsiednią parą.
-2. Standardowa ACL filtrująca po adresie źródłowym.
-3. Rozszerzona ACL filtrująca po adresie i porcie/protokole.
-4. Zastosować ACL na właściwym interfejsie i kierunku.
-5. Testy weryfikacyjne i analiza show access-lists.
-
 ### Konifugracja ACL dla przedstawionej topologi sieci
 
 <StepByStep>
@@ -261,6 +255,10 @@ Przypisanie konfiguracji do interfjsu.
 <ScreenshotPaste label="Zrzut ekranu: polecania ping z testów" />
 </Step>
 </StepByStep>
+
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
 
 [^cisco]: Cisco Systems, Inc., [Configure IP Access Lists](https://www.cisco.com/c/en/us/support/docs/security/ios-firewall/23602-confaccesslists.html), Cisco IOS Documentation, cisco.com
 

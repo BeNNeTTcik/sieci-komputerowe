@@ -37,18 +37,42 @@ function computeAclNotation(ipPart, prefix) {
   return {network: networkOctets.join('.'), wildcard: wildcardOctets.join('.')};
 }
 
+// Klasa adresu (A/B/C/D/E) na podstawie WYŁĄCZNIE pierwszego oktetu — dokładnie
+// tak, jak wyznacza ją klasowy routing (RIPv1/RIPv2 `network`, IGRP): nie ma to
+// nic wspólnego z prefiksem CIDR faktycznie wpisanym przez studenta. Dla klas
+// A/B/C zwraca też "swój" klasowy prefiks (/8, /16, /24) — to właśnie ta granica,
+// do której IOS milcząco zaokrągla polecenie `network` w RIP, niezależnie od
+// maski, jaką student poda. Klasy D (multicast) i E (zarezerwowana) nie mają
+// sensownego klasowego prefiksu — `netclassPrefix` jest wtedy `null`.
+function classifyNetwork(firstOctet) {
+  if (firstOctet >= 0 && firstOctet <= 127) return {netclass: 'A', netclassPrefix: 8};
+  if (firstOctet >= 128 && firstOctet <= 191) return {netclass: 'B', netclassPrefix: 16};
+  if (firstOctet >= 192 && firstOctet <= 223) return {netclass: 'C', netclassPrefix: 24};
+  if (firstOctet >= 224 && firstOctet <= 239) return {netclass: 'D', netclassPrefix: null};
+  return {netclass: 'E', netclassPrefix: null};
+}
+
 // Rozbija poprawną wartość CIDR ("10.10.1.10/24") na wszystkie możliwe
 // wartości pochodne naraz. Zwraca `null`, jeśli `value` nie jest poprawnym
 // zapisem CIDR (komórka jeszcze pusta albo student wpisał coś błędnego).
 // Dostępne nazwy pochodnych: ip, prefix, network, wildcard, mask,
 // networkCidr ("10.10.1.0/24"), networkMask ("10.10.1.0 255.255.255.0"),
-// networkWildcard ("10.10.1.0 0.0.0.255" — gotowe pod `network` w OSPF/ACL).
+// networkWildcard ("10.10.1.0 0.0.0.255" — gotowe pod `network` w OSPF/ACL),
+// netclass ("A"/"B"/"C"/"D"/"E" — klasa adresu, patrz `classifyNetwork`),
+// netclassPrefix (klasowy prefiks danej klasy, np. "16" dla B; puste dla D/E),
+// netclassMask (klasowa maska dziesiętna, np. "255.255.0.0"; puste dla D/E),
+// netclassNetwork (adres sieci PO ZAOKRĄGLENIU do granicy klasowej, a nie do
+// wpisanego przez studenta prefiksu — dokładnie to, na co IOS "ucina" adres w
+// poleceniu `network` w RIP, niezależnie od realnej maski na interfejsie).
 function deriveCidrValues(value) {
   const parsed = parseCidr(value);
   if (!parsed) return null;
   const acl = computeAclNotation(parsed.ipPart, parsed.prefix);
   const maskOctets = prefixToMaskOctets(parsed.prefix);
   const mask = maskOctets.join('.');
+  const firstOctet = Number(parsed.ipPart.split('.')[0]);
+  const {netclass, netclassPrefix} = classifyNetwork(firstOctet);
+  const netclassAcl = netclassPrefix !== null ? computeAclNotation(parsed.ipPart, netclassPrefix) : null;
   return {
     ip: parsed.ipPart,
     prefix: String(parsed.prefix),
@@ -58,6 +82,10 @@ function deriveCidrValues(value) {
     networkCidr: `${acl.network}/${parsed.prefix}`,
     networkMask: `${acl.network} ${mask}`,
     networkWildcard: `${acl.network} ${acl.wildcard}`,
+    netclass: netclass,
+    netclassPrefix: netclassPrefix !== null ? String(netclassPrefix) : '',
+    netclassMask: netclassPrefix !== null ? prefixToMaskOctets(netclassPrefix).join('.') : '',
+    netclassNetwork: netclassAcl ? netclassAcl.network : '',
   };
 }
 

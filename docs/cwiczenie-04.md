@@ -104,12 +104,6 @@ Analizując krok po kroku [^kurose]:
 
 ## II. Zadania do wykonania
 
-1. Przechwycić w Wireshark sesję TCP i zidentyfikować SYN/SYN-ACK/ACK/FIN.
-2. Przechwycić ruch UDP i porównać nagłówek z TCP.
-3. Przeanalizować aktywne połączenia (netstat -an / ss -tuln).
-4. Omówić, dlaczego DNS może używać UDP, a transfer pliku wymaga TCP.
-
-
 ### Przechwycić w Wireshark sesję TCP i zidentyfikować inicjacji oraz zakończenia połączenia.
 
 <StepByStep>
@@ -197,6 +191,10 @@ netstat -an
 <ScreenshotPaste label="Zrzut ekranu: lista aktywnych połączen" />
 </Step>
 </StepByStep>
+
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
 
 [^szarmach]: M. Szarmach, Instrukcja laboratoryjna z przedmiotu: Sieci komputerowe, Wydział Informatyki, 2024.
 

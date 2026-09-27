@@ -29,6 +29,22 @@ _Część II — Zajęcia praktyczne_
 
 ## I. Wprowadzenie
 
+<div className="justify">
+**OSPF (Open Shortest Path First)** to protokół stanu łącza (link-state), w przeciwieństwie do RIP, który jest protokołem wektora odległości. Router OSPF nie zna tylko "ile skoków i w którą stronę", ale buduje sobie pełną mapę topologii całej sieci (lub obszaru) i sam liczy na niej najkrótsze trasy, zamiast ufać wyliczeniom sąsiada [^RFC2328].
+
+**Obszary (areas) i Area 0**. W większych sieciach OSPF dzieli się na obszary, żeby ograniczyć rozmiar LSDB (wszystkie routery w danym obszarze mają identyczną bazę LSDB - Link State Database) i zasięg zalewania LSA (router rozsyła do sąsiadów ogłoszenia stanu łącza - Link State Advertisement). Wszystkie obszary muszą łączyć się (bezpośrednio lub przez wirtualne łącze) z obszarem szkieletowym Area 0 - w naszych ćwiczeniach pracujemy w jednym obszarze (single-area OSPF), więc ten mechanizm nie jest jeszcze potrzebny, ale warto znać go jako naturalny kolejny krok [^RFC2328].
+
+Etapy budowania połączeń i odwzorowywania topologii sieci (Rysunek 1) [^RFC2328]:
+- **Krok 1** - Sąsiedztwo. Routery co 10 s wysyłają pakiety Hello na adres multicast 224.0.0.5. Na ich podstawie ustalają sąsiedztwo. Stan można zaobserwować w `show ip ospf neighbor`.
+- **Krok 2** - Rozgłaszanie (LSA) i baza LSDB. Każdy router rozsyła do sąsiadów ogłoszenia stanu łącza (Link State Advertisement) opisujące jego własne sieci i koszty do nich. Ogłoszenia są zalewowo (flooding) przekazywane dalej, aż wszystkie routery w danym obszarze mają identyczną bazę LSDB (Link State Database).
+- **Krok 3** - Liczenie tras (SPF / algorytm Dijkstry). Mając identyczną mapę, każdy router niezależnie uruchamia algorytm Dijkstry, licząc najtańszą (nie: najkrótszą liczbowo) drogę do każdej sieci. Sumując po drodze koszt (ip ospf cost) każdego interfejsu. Dlatego różne routery w tej samej topologii mogą "widzieć" inne trasy jako optymalne dla różnych celów.
+</div>
+
+![Rys1](/img/10/ospf.svg)
+<div className="text-center">
+Rys.1 Mechanizm budowania topologii sieci [^claude]
+</div>
+
 ## II. Zadania do wykonania
 
 :::warning
@@ -287,4 +303,10 @@ Werifikacja całej topologii końcowej. Skorzystaj z poniższych komend, aby spr
 Zapisz posiadaną konfigurację urządzeń np. `R1-X# show run` i klej do np. notatnika i zapisz na komputerze. Konfiguracja ta będzie wykorzystywana w następnym ćwiczeniu nr 11.
 :::
 
-[^RFC2328]: RFC 2328.
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
+
+[^RFC2328]: Moy, J. — [RFC 2328](https://datatracker.ietf.org/doc/rfc2328/): OSPF Version 2.
+
+[^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).

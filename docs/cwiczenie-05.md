@@ -265,6 +265,10 @@ W głównym oknie programu Wireshark pojawia się kompletny sechmat połączenia
 </Step>
 </StepByStep>
 
+:::danger Przywracanie domyślnej konfiguracji
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+:::
+
 ### Test zamykający część teoretyczną
 
 <TestKoncowyCzesc1 />
