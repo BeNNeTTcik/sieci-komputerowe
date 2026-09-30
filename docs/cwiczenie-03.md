@@ -11,6 +11,7 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 3: Warstwa sieciowa
 
@@ -19,6 +20,14 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 3: Warstwa sieciowa"
   storageKey="cwiczenie-3"
+  solo
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-3"
+  storageKeys={['cwiczenie-3','systemy-liczbowe', 'adresacja-trener']}
+  sharedPrefix="cw3_"
 />
 
 ## I. Wprowadzenie
@@ -117,14 +126,24 @@ Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy ró
 0xA8 = 10 · 161 + 8 · 160 = 160 + 8 = 168
 </div>
 
-<NumberBaseTrainer title="Ćwiczenie — konwersja systemów liczbowych" count={10} />
+<NumberBaseTrainer
+  title="Ćwiczenie — konwersja systemów liczbowych"
+  count={10}
+  storageKey="systemy-liczbowe"
+/>
 
 ### Obliczanie parametrów sieci
 
 <div className="justify">
 **Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne — w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
 </div>
-<SubnetTrainer countIPv4={5} countIPv6={2} title="Adresacja IPv4/IPv6" />
+
+<SubnetTrainer
+  countIPv4={5}
+  countIPv6={2}
+  title="Adresacja IPv4/IPv6"
+  storageKey="adresacja-trener"
+/>
 
 ### IP, ping i tracert
 

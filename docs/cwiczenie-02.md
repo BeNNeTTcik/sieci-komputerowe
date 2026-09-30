@@ -15,6 +15,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 2: Warstwa łącza danych"
   storageKey="cwiczenie-2"
+  solo
 />
 
 ## I. Wprowadzenie
@@ -59,6 +60,31 @@ Aby wiedzieć, które urządzenie podłączone jest do którego portu, tj. do kt
 </div>
 
 ## II. Zadania do wykonania
+
+### Wgranie wstępnej konfiguracji na urządzenie
+
+<StepByStep>
+<Step title="Konfiguracja przełącznika do pobrania">
+Sprawdź opis na scianie do którego podłączony jest Twój komputer (gniazdo **LPD/Y**). Podłączenie konsoli SW w zależności od grupy -> patchpanelu pod gnizado LPD/Y i następnie kabel konsolowy podłączamy w gniazdo ścienne LPDF/Y i USB pod port **USB 3.0**.
+
+Pobierz niniejszą konfigurację ([konfiguracja SW](/files/SW.txt)).
+</Step>
+
+<Step title="Wgranie konfiguracji urządzenia">
+1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
+2. Uruchom **PuTTY** i skonfiguruj połączenie:
+
+<div className="text-center">
+![Rys1](/img/2/putty.png)
+
+Rys.1 Konfiguracja połączenia szeregowego [^putty]
+</div>
+
+3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
+
+Wpisz komendę `enable`, następnie `configure terminal` i wklej konfigurację w terminalu.
+</Step>
+</StepByStep>
 
 ### Analiza ramki Ethernet w programie Wireshark
 
@@ -219,6 +245,12 @@ To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza,
 **ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
 :::
 
+## III. Uwagi dla prowadzącego
+
+:::note
+Wszytskich studentów trzeba podłączyć do przełączników. Zaczynając od 1-2 portów na Patch-Panel do Przełącznika 1 na porty 1-2. Potrzeba do wykonania zadania z **"Wyświetlenie tablicy MAC adresów na przełączniku"**
+:::
+
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
 [^802.3]: [IEEE Std 802.3-2018](https://standards.ieee.org/standard/802_3-2018.html), IEEE Standard for Ethernet, Institute of Electrical and Electronics Engineers.
@@ -229,8 +261,4 @@ To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza,
 
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
 
-## III. Uwagi dla prowadzącego
-
-:::note
-Wszytskich studentów trzeba podłączyć do przełączników. Zaczynając od 1-2 portów na Patch-Panel do Przełącznika 1 na porty 1-2. Potrzeba do wykonania zadania z **"Wyświetlenie tablicy MAC adresów na przełączniku"**
-:::
+[^putty]: [PuTTY](https://the.earth.li/~sgtatham/putty/0.85/htmldoc/).

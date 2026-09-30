@@ -14,6 +14,7 @@ import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 1: Model OSI. Enkapsulacja danych oraz warstwa fizyaczna"
   storageKey="cwiczenie-1"
+  solo
 />
 
 ## I. Wprowadzenie

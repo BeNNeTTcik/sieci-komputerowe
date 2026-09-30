@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react';
 
-export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
+export default function SprawozdanieHeader({exerciseTitle, storageKey, solo = false}) {
   const key = `sprawozdanie-header:${storageKey || 'domyslna'}`;
   const loadedRef = useRef(false);
 
@@ -13,6 +13,11 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
   });
   const [warning, setWarning] = useState('');
 
+  // Tryb (para / samodzielnie) to teraz stały parametr wpisany w pliku .md
+  // przy osadzeniu komponentu (<SprawozdanieHeader solo />) — nie jest to już
+  // przełącznik widoczny dla studenta. Dzięki temu w jednym ćwiczeniu można z
+  // góry wymagać pracy w parach, a w innym dopuścić pracę samodzielną.
+  //
   // Tylko krótkie pola tekstowe trzymamy w sessionStorage — dane znikają po
   // zamknięciu karty, ale przetrwają przypadkowe odświeżenie (F5) w trakcie
   // wypełniania. Screenshoty (osobny komponent ScreenshotPaste) celowo NIE są
@@ -21,7 +26,16 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
   useEffect(() => {
     try {
       const raw = window.sessionStorage.getItem(key);
-      if (raw) setFields(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Kompatybilność wstecz: starsze zapisy to sam obiekt pól (ew. z soloMode ze
+        // starszej wersji komponentu, którą tu ignorujemy — tryb ustala teraz prop).
+        if (parsed && typeof parsed === 'object' && 'fields' in parsed) {
+          setFields(parsed.fields);
+        } else {
+          setFields(parsed);
+        }
+      }
     } catch (e) { /* ignorujemy */ }
     loadedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -30,7 +44,7 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
   useEffect(() => {
     if (!loadedRef.current) return;
     try {
-      window.sessionStorage.setItem(key, JSON.stringify(fields));
+      window.sessionStorage.setItem(key, JSON.stringify({fields}));
     } catch (e) { /* ignorujemy */ }
   }, [fields, key]);
 
@@ -39,10 +53,12 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey}) {
     setWarning('');
   }
 
-  const STUDENTS = [
-    {key: 'student1', label: 'Imię i nazwisko (osoba 1)'},
-    {key: 'student2', label: 'Imię i nazwisko (osoba 2)'},
-  ];
+  const STUDENTS = solo
+    ? [{key: 'student1', label: 'Imię i nazwisko'}]
+    : [
+        {key: 'student1', label: 'Imię i nazwisko (osoba 1)'},
+        {key: 'student2', label: 'Imię i nazwisko (osoba 2)'},
+      ];
   const OTHER = [
     {key: 'semestr', label: 'Semestr'},
     {key: 'rok', label: 'Rok akademicki'},
