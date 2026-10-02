@@ -16,6 +16,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji. Podsumowanie OSI"
   storageKey="cwiczenie-5"
+  solo
 />
 
 ## I. Wprowadzenie
@@ -87,7 +88,7 @@ Automatycznie przydziela adresy IP (wraz z innymi parametrami sieci jak np, mask
 <div className="justify">
 Automatycznie przydziela hostom w sieci lokalnej kompletny zestaw parametrów potrzebnych do komunikacji — nie tylko adres IP, ale też maskę podsieci, adres bramy domyślnej, adresy serwerów DNS i szereg innych opcji [^tanen]. Eliminuje to potrzebę ręcznej konfiguracji każdego urządzenia z osobna, co przy większych sieciach byłoby niepraktyczne i podatne na błędy (np. przypadkowe powielenie tego samego adresu IP na dwóch hostach) [^RFC2131].
 
-Proces DORA - proces przydzielania adresów
+**Proces DORA** - proces przydzielania adresów
 </div>
 
 ![Rys3](/img/5/dora.png)

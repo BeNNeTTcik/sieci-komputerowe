@@ -7,7 +7,7 @@ const ITEMS = [
   {id: 'swiatlowod', label: 'światłowód', y: 114, correct: 'fizyczna'},
   {id: 'router', label: 'router', y: 158, correct: 'sieciowa'},
   {id: '8021q', label: 'IEEE 802.1Q', y: 202, correct: 'lacza'},
-  {id: 'wifi', label: 'Wi-Fi', y: 246, correct: 'fizyczna'},
+  {id: 'udp', label: 'UDP', y: 246, correct: 'transportowa'},
   {id: 'switch', label: 'switch', y: 290, correct: 'lacza'},
   {id: 'dns', label: 'DNS', y: 334, correct: 'aplikacji'},
   {id: 'fale', label: 'fale radiowe', y: 378, correct: 'fizyczna'},

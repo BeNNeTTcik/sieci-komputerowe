@@ -61,31 +61,6 @@ Aby wiedzieć, które urządzenie podłączone jest do którego portu, tj. do kt
 
 ## II. Zadania do wykonania
 
-### Wgranie wstępnej konfiguracji na urządzenie
-
-<StepByStep>
-<Step title="Konfiguracja przełącznika do pobrania">
-Sprawdź opis na scianie do którego podłączony jest Twój komputer (gniazdo **LPD/Y**). Podłączenie konsoli SW w zależności od grupy -> patchpanelu pod gnizado LPD/Y i następnie kabel konsolowy podłączamy w gniazdo ścienne LPDF/Y i USB pod port **USB 3.0**.
-
-Pobierz niniejszą konfigurację ([konfiguracja SW](/files/SW.txt)).
-</Step>
-
-<Step title="Wgranie konfiguracji urządzenia">
-1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
-2. Uruchom **PuTTY** i skonfiguruj połączenie:
-
-<div className="text-center">
-![Rys1](/img/2/putty.png)
-
-Rys.1 Konfiguracja połączenia szeregowego [^putty]
-</div>
-
-3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
-
-Wpisz komendę `enable`, następnie `configure terminal` i wklej konfigurację w terminalu.
-</Step>
-</StepByStep>
-
 ### Analiza ramki Ethernet w programie Wireshark
 
 <StepByStep>
@@ -178,6 +153,40 @@ Jeśli zaobserwujesz pojedyncze wpisy oznacza to, że poprawnie wykonano ćwicze
 </Step>
 </StepByStep>
 
+### Wgranie wstępnej konfiguracji na urządzenie
+
+<StepByStep>
+<Step title="Konfiguracja przełącznika do pobrania">
+Sprawdź opis na scianie do którego podłączony jest Twój komputer (gniazdo **LPD/Y**). Podłączenie konsoli SW w zależności od grupy -> patchpanelu pod gnizado LPD/Y i następnie kabel konsolowy podłączamy w gniazdo ścienne LPDF/Y i USB pod port **USB 3.0**.
+
+Pobierz niniejszą konfigurację ([konfiguracja SW](/files/SW.txt)).
+</Step>
+
+<Step title="Wgranie konfiguracji urządzenia">
+1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
+2. Uruchom **PuTTY** i skonfiguruj połączenie:
+
+<div className="text-center">
+![Rys1](/img/2/putty.png)
+
+Rys.1 Konfiguracja połączenia szeregowego [^putty]
+</div>
+
+3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
+
+Wpisz komendę `enable`, następnie `configure terminal` i wklej konfigurację w terminalu.
+</Step>
+
+<Step title="Podłączenie">
+Na Rysunku 2 przedstawiono schemat połączenia komputerów (**PC1** i **PC2**) do **SW**.
+<div className="text-center">
+![Rys2](/img/2/siec.png)
+
+Rys.2 Schemat połączenie [^cisco]
+</div>
+</Step>
+</StepByStep>
+
 ### Wyświetlenie tablicy MAC adresów na przełączniku
 
 <StepByStep>
@@ -201,7 +210,6 @@ show mac address-table dynamic
 Zobacz, jak zbudowana jest tablica MAC adresów. Najbardziej interesują nas dwie kolumny: Mac Address, w której umieszczane są adresy MAC urządzeń widzianych przez przełącznik, oraz Ports, zawierająca informację o tym, na którym porcie widziany jest dany MAC.
 
 <ScreenshotPaste label="Zrzut ekranu: tablica MAC adresów" />
-
 </Step>
 
 <Step title="Wyszukaj swój MAC adres - komputer">
@@ -218,7 +226,7 @@ W porozumieniu z resztą grupy niech jedna osoba odłączy kabel sieciowy z prze
 clear mac address-table dynamic
 show mac address-table dynamic
 ```
-Zobaczysz pojedynczy wpis. 
+Zobaczysz pojedynczy wpis.
 </Step>
 
 <Step title="Proces uczenia sie adresów MAC - II">
@@ -245,12 +253,6 @@ To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza,
 **ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
 :::
 
-## III. Uwagi dla prowadzącego
-
-:::note
-Wszytskich studentów trzeba podłączyć do przełączników. Zaczynając od 1-2 portów na Patch-Panel do Przełącznika 1 na porty 1-2. Potrzeba do wykonania zadania z **"Wyświetlenie tablicy MAC adresów na przełączniku"**
-:::
-
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
 [^802.3]: [IEEE Std 802.3-2018](https://standards.ieee.org/standard/802_3-2018.html), IEEE Standard for Ethernet, Institute of Electrical and Electronics Engineers.
@@ -262,3 +264,5 @@ Wszytskich studentów trzeba podłączyć do przełączników. Zaczynając od 1-
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
 
 [^putty]: [PuTTY](https://the.earth.li/~sgtatham/putty/0.85/htmldoc/).
+
+[^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)

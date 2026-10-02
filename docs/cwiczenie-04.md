@@ -15,6 +15,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 4: Warstwa transportowa"
   storageKey="cwiczenie-4"
+  solo
 />
 
 ## I. Wprowadzenie
@@ -62,7 +63,7 @@ Pozostałe flagi:
 
 ![Rys3](/img/4/udp.png)
 <div className="text-center">
-Rys.2 Struktura nagłówka segmentu UDP [^claude]
+Rys.3 Struktura nagłówka segmentu UDP [^claude]
 </div>
 
 ---

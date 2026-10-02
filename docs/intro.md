@@ -13,9 +13,17 @@ Witaj w materiałach do przedmiotu **Sieci komputerowe**. Kurs podzielony jest n
 
 ## Zaliczenie przedmiotu
 
-XXXXXXXXXXXXXXXXXXXXXXXXXX
+"Pozytywna ocena z laboratorium otrzymywana jest po wykonaniu wszystkich zaplanowanych wiczeń laboratoryjnych oraz po uzyskaniu min. 50% punktów z zaliczenia praktycznego przeprowadzonego na koniec semestru." [^sylabus]
 
-### Budowa sieci laboratoryjnej
+## Konsultacje
+
+| Prowadzący | Dzień tyg. | Godziny |
+|---|---|---|
+| dr inż. Łukasz Apiecionek | | |
+| mgr Mateusz Miller | | |
+| mgr Mateusz Dampc | | |
+
+## Budowa sieci laboratoryjnej
 
 ![Siec](/img/0/siec.png)
 <div className="text-center">
@@ -53,3 +61,5 @@ Należy zwrócić uwagę na adresacje IP, a dokładnie 3 oktet gdzie wartość o
 </div>
 
 [^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)
+
+[^sylabus]: [Karty przedmiotów](https://wi.umg.edu.pl/sites/default/files/zalaczniki/karty_przedmiotow_informatyka_wi_umg_i_stop_st_2025-26.pdf) Wydział Informatyki, I stopnień, Stacjonarne, s. 27.
