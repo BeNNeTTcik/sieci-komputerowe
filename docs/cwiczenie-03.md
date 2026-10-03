@@ -12,6 +12,7 @@ import TabItem from '@theme/TabItem';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
+import EditableTable from '@site/src/components/EditableTable';
 
 # Ćwiczenie 3: Warstwa sieciowa
 
@@ -26,7 +27,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 <ProjectSaveLoad
   title="Zapisz / wczytaj postęp projektu"
   fileNamePrefix="cwiczenie-3"
-  storageKeys={['cwiczenie-3','systemy-liczbowe', 'adresacja-trener']}
+  storageKeys={['cwiczenie-3','systemy-liczbowe', 'adresacja-trener', 'tabela', 'tabela2']}
   sharedPrefix="cw3_"
 />
 
@@ -182,28 +183,51 @@ Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy ró
 <StepByStep>
 
 <Step title="Odczytanie konfiguracji IP">
-Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji. Wykorzystując polecenie w Wierszu poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
+Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji (adres 10.114.202.x - Ethernet0). Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i  wypełnij tabellę.
 
 ```bash
 ipconfig /all
 ```
 
-**Na co zwrócić uwagę:**
-- adres IP
-- maska podsieci
-- brama domyślna Twojego interfejsu
+![Rys3](/img/3/ipconfig.png)
+<div className="text-center">
+Rys.3 Komenda ipconfig
+</div>
+
+<EditableTable
+  title="Konfiguracja karty sieciowej"
+  storageKey="tabela"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'}
+  ]}
+  initialRows={[
+    {parametr: "adres IP", wartosc: ''},
+    {parametr: "maska", wartosc: ''},
+    {parametr: "brama domyślna", wartosc: ''},
+    {parametr: "serwer DNS", wartosc: ''},
+    {parametr: "MAC adres", wartosc: ''},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 </Step>
 
 <Step title="Odczytanie konfiguracji tablicy routingu">
-Sprawdź stan tablicy routingu. Wykorzystując polecenie w Wierszu poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
+Sprawdź stan tablicy routingu. Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
 
 ```bash
 route print
 ```
 
+![Rys4](/img/3/route.png)
+<div className="text-center">
+Rys.4 Komenda route print
+</div>
+
 **Na co zwrócić uwagę:**
 - wpis `0.0.0.0` (trasa domyślna) w tablicy routingu i wskazywany przez niego adres bramy,
-- czy w tablicy pojawiają się inne, bardziej szczegółowe trasy (np. do sieci lokalnej) — porównaj je z zasadą najdłuższego dopasowania prefiksu, o której mówiliśmy przy bramie domyślnej.
+- czy w tablicy pojawiają się inne, bardziej szczegółowe trasy (np. do sieci lokalnej) - porównaj je z zasadą najdłuższego dopasowania prefiksu, o której mówiliśmy przy bramie domyślnej.
 
 <ScreenshotPaste label="Zrzut ekranu: tablica routingu" />
 
@@ -211,41 +235,60 @@ route print
 
 <Step title="Analiza działania traceroute/tracert">
 
-Wykonaj polecenie do wybranego serwera (np. znanej strony internetowej) i przeanalizuj wynik. Wykorzystaj Wierszu poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
+Wykonaj polecenie do wybranego serwera (np. znanej strony internetowej) i przeanalizuj wynik. Wykorzystaj **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
 
 ```bash
 tracert 8.8.8.8
 ```
 
+![Rys5](/img/3/tracert.png)
+<div className="text-center">
+Rys.5 Komenda tracert
+</div>
+
 **Na co zwrócić uwagę:**
 - każda linia wyniku to kolejny router (hop) na trasie do celu,
 - mechanizm działania: pakiety wysyłane są z rosnącym o 1 polem TTL; każdy router, który odrzuci pakiet z TTL=0, odsyła komunikat **ICMP Time Exceeded**, ujawniając swój adres,
-- trzy czasy w każdej linii to trzy próby do tego samego routera — porównaj różnice między hopami, żeby zauważyć, gdzie występują największe opóźnienia,
-- czy pojawiają się linie z samymi gwiazdkami `* * *` — oznacza to router, który nie odpowiada na ten typ ruchu (niekoniecznie awarię).
+- trzy czasy w każdej linii to trzy próby do tego samego routera. Porównaj różnice między hopami, żeby zauważyć, gdzie występują największe opóźnienia,
+- czy pojawiają się linie z samymi gwiazdkami `* * *`. Oznacza to router, który nie odpowiada na ten typ ruchu (niekoniecznie awarię).
 
 <ScreenshotPaste label="Zrzut ekranu: wynik polecenia tracert" />
-
-
 </Step>
 
 <Step title="Analiza nagłówka pakietu IP w Wireshark">
 
-Uruchom przechwytywanie ruchu w programie Wireshark, wygeneruj ruchu przy pomocy polecenia ```ping <IP>```, zatrzymaj przechwytywanie i przeanalizuj pojedynczy pakiet.
+Uruchom przechwytywanie ruchu w programie **Wireshark** (Ethernet0), wygeneruj ruchu przy pomocy polecenia ```ping <IP>```, zatrzymaj przechwytywanie i przeanalizuj pojedynczy pakiet.
 
 ```
 Filtr wyświetlania: icmp
 ```
 
+![Rys6](/img/3/icmp.png)
+<div className="text-center">
+Rys.6 Filtrowanie pakietów w Wireshark
+</div>
+
 Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **Internet Protocol Version 4**.
-
-**Pola do zidentyfikowania:**
-- **Version** — powinno być 4,
-- **Header Length** — długość nagłówka (zwykle 20 bajtów bez opcji),
-- **Total Length** — całkowita długość pakietu,
-- **Time to Live (TTL)** — porównaj tę wartość z tym, co widziałeś/aś w traceroute w poprzednim kroku,
-- **Protocol** — numer protokołu wyższej warstwy (6 = TCP, 17 = UDP, 1 = ICMP),
-- **Source Address / Destination Address** — adresy IP nadawcy i odbiorcy.
-
+<EditableTable
+  title="Wpisz odpowiednie parametry z sekcji Internet Protocol Version 4"
+  storageKey="tabela2"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'opis', label: 'Opis', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'}
+  ]}
+  initialRows={[
+    {parametr: "Version", opis: "Wersja protokołu i powinna wynosi 4", wartosc: ''},
+    {parametr: "Header Length", opis: "Długość nagłówka (zwykle 20 bajtów)", wartosc: ''},
+    {parametr: "Total Length", opis: "Całkowita długość pakietu", wartosc: ''},
+    {parametr: "Time to Live (TTL)", opis: "Długość życia pakietu - ilość przejść przez router zanim zostanie usunięty", wartosc: ''},
+    {parametr: "Protocol", opis: "Numer protokołu wyższej warstwy jaki obsługuje", wartosc: ''},
+    {parametr: "Source Address", opis: "Adresy IP nadawcy", wartosc: ''},
+    {parametr: "Destination Address", opis: "Adresy IP odbiorcy", wartosc: ''},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 <ScreenshotPaste label="Zrzut ekranu: pakiet IP z sekcją IPv4" />
 
 </Step>

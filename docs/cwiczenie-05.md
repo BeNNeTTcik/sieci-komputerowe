@@ -8,6 +8,7 @@ import Step from '@site/src/components/Step';
 import TestKoncowyCzesc1 from '@site/src/components/TestKoncowyCzesc1';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import EditableTable from '@site/src/components/EditableTable';
 
 # Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji.
 
@@ -142,7 +143,7 @@ Tab.3 Kody statusu
 ### Przechwytywanie zapytań DNS
 
 <StepByStep>
-<Step title="Przechwycenie zapytania DNS - 1">
+<Step title="Przechwycenie zapytania DNS - I">
 Uruchom przechwytywanie ruchu w programie Wireshark. Uruchom przechwytywanie i zastosuj filtr:
 
 ```
@@ -150,38 +151,73 @@ Filtr Wyświetlania: dns
 ```
 
 ![Rys5](/img/5/dns1.png)
+<div className="text-center">
+Rys.5 Filtrowanie pakietów w Wireshark
+</div>
 </Step>
 
-<Step title="Przechwycenie zapytania DNS - 2">
-Wygeneruj świeże zapytanie DNS, są dwie możliwości. 
+<Step title="Przechwycenie zapytania DNS - II">
+Wygeneruj świeże zapytanie DNS, są dwie możliwości.
 
-Pierwsza przy pomocy Wiersza poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd): 
+Pierwsza przy pomocy Wiersza poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd):
 ```bash
 nslookup wp.pl
 ```
+
+<div className="text-center">
 ![Rys6](/img/5/dns2a.png)
+
+Rys.6 Komenda `nslookup`
+</div>
 
 Druga możliwość uruchomić przeglądarkę i w miejscu URL wpisać strone Internetową:
 ```bash
 foka.wi.local/pgadmin4
 ```
+<div className="text-center">
 ![Rys7](/img/5/dns2b.png)
 
+Rys.6 Link do strony internetowej
+</div>
 </Step>
 
-<Step title="Przechwycenie zapytania DNS - 3">
+<Step title="Przechwycenie zapytania DNS - III">
 W programie Wireshark kliknij w pojedynczy pakiet zapytania i przyporządkuj jego elementy do warstw modelu OSI:
 
 ![Rys8](/img/5/dns3.png)
+<div className="text-center">
+Rys.8 Zapytanie do serwera DNS
+</div>
+</Step>
 
-**Na co zwrócić uwagę:**
+<Step title="Przechwycenie zapytania DNS - IV">
+**Zwrócić uwagę na:** i następnie wypełnij luki w tabeli.
 - wyszukaj nazwę domenową w treści zapytania (np. ```foka.wi.local/pgadmin4```) (Wireshark -> Domain Name System)
 - port źródłowy oraz port docelowy (port 53 = DNS) (Wireshark -> User Datagram Protocol)
 - adres IP źródłowy/docelowy (Wireshark -> Internet Protocol Version 4)
-</Step>
 
-<Step title="Przechwycenie zapytania DNS - 4">
-Kliknij dwukrotnie w pakiet który analizowałeś. Powinno sie otworzyć nowe okno z danym pakietem.
+<EditableTable
+  title="Przyporządkuj jego elementy do warstw modelu OSI"
+  storageKey="dns-model"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'},
+    {key: 'model', label: 'warstwa modelu OSI'},
+  ]}
+  initialRows={[
+    {parametr: "Adres IP źródłowy", wartosc: '', model: ''},
+    {parametr: "MAC adres źródłowy", wartosc: '', model: ''},
+    {parametr: "Port docelowy", wartosc: '', model: ''},
+    {parametr: "Adres odpowiedzi", wartosc: '', model: ''},
+    {parametr: "Port źródłowy", wartosc: '', model: ''},
+    {parametr: "Adres IP docelowy", wartosc: '', model: ''},
+    {parametr: "Domain Name System", wartosc: '', model: ''},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
+
+<ScreenshotPaste label="Zrzut ekranu: pakiet odpowiedzi z serwera DNS" />
 </Step>
 </StepByStep>
 
@@ -196,6 +232,9 @@ Filtr Wyświetlania: http
 ```
 
 ![Rys9](/img/5/http1.png)
+<div className="text-center">
+Rys.6 Filtrowanie pakietów w Wireshark
+</div>
 </Step>
 
 <Step title="Przechwycenie zapytania HTTP - 2">
@@ -203,14 +242,17 @@ Wygeneruj świeże zapytanie HTTP wywołując strone ```foka.wi.local``` z pozio
 ```bash
 foka.wi.local/pgadmin4
 ```
-
+<div className="text-center">
 ![Rys10](/img/5/http2.png)
+
+Rys.6 Link do strony internetowej
+</div>
 </Step>
 
 <Step title="Przechwycenie zapytania HTTP - 3">
 W programie Wireshark kliknij pakiet z żądaniem `GET` i wykonaj analizę struktury pakietu:
 
-![Rys11](/img/5/http3.png)
+
 
 **Na co zwrócić uwagę:**
 - linia żądania (`GET /pgadmin4/login/... HTTP/1.1`).

@@ -7,6 +7,9 @@ import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
+import EditableTable from '@site/src/components/EditableTable';
+import SharedValue from '@site/src/components/SharedValue';
 
 # Ćwiczenie 4: Warstwa transportowa
 
@@ -16,6 +19,13 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
   exerciseTitle="Ćwiczenie 4: Warstwa transportowa"
   storageKey="cwiczenie-4"
   solo
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-4"
+  storageKeys={['cwiczenie-4','TCP-SYN', 'UDP', 'netstat']}
+  sharedPrefix="cw4_"
 />
 
 ## I. Wprowadzenie
@@ -110,22 +120,50 @@ Analizując krok po kroku [^kurose]:
 <StepByStep>
 
 <Step title="Przechwycenie sesji TCP">
-Uruchom przechwytywanie ruchu w programie Wireshark na interfejsie, przez który wychodzi ruch internetowy. Otwórz w przeglądarce dowolną stronę WWW ( zlecana strona ```foka.wi.local```), a następnie zatrzymaj przechwytywanie.
+Uruchom przechwytywanie ruchu w programie **Wireshark** na interfejsie (Ethernet0), przez który wychodzi ruch internetowy. Otwórz w przeglądarce stronę WWW jako HTTP (zlecana strona ```foka.wi.local```), a następnie zatrzymaj przechwytywanie.
 
-W pasku filtra wpisz:
 ```
-tcp.port == 80
+Filtr wyświetlania: tcp.port == 80
 ```
+
+![Rys5](/img/4/tcp80.png)
+<div className="text-center">
+Rys.5 Filtr w programie Wireshark
+</div>
 </Step>
 
-<Step title="Identyfikacja inicjacji połączenia SYN/SYN-ACK/ACK">
+<Step title="Identyfikacja inicjacji połączenia SYN/SYN-ACK/ACK - I">
 Odszukaj na liście pakietów **pierwsze cztery pakiety** wymienione z tym samym serwerem i zidentyfikuj w kolumnie *Info*:
 
-- **SYN** — pierwszy pakiet, flaga `[SYN]`, inicjuje połączenie,
-- **SYN-ACK** — odpowiedź serwera, flagi `[SYN, ACK]`,
-- **ACK** — potwierdzenie klienta, flaga `[ACK]` — od tego momentu połączenie jest nawiązane,
+- **SYN** - pierwszy pakiet, flaga `[SYN]`, inicjuje połączenie,
+- **SYN-ACK** - odpowiedź serwera, flagi `[SYN, ACK]`,
+- **ACK** - potwierdzenie klienta, flaga `[ACK]`. Od tego momentu połączenie jest nawiązane,
 
+![Rys6](/img/4/tcp80_syn.png)
+<div className="text-center">
+Rys.6 Pakiet SYN w komunikacji TCP
+</div>
+</Step>
+
+<Step title="Identyfikacja inicjacji połączenia SYN/SYN-ACK/ACK - II">
 Kliknij dwa razy w pojedynczy pakiet SYN i rozwiń w panelu szczegółów sekcję **Transmission Control Protocol**, żeby zobaczyć numer sekwencyjny oraz zaznaczone pole flag.
+<EditableTable
+  title="Wypisz parametry z sekcji Transmission Control Protocol dla pakietu SYN"
+  storageKey="TCP-SYN"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'}
+  ]}
+  initialRows={[
+    {parametr: "Source Port", wartosc: '',  shared: { wartosc: 'src_port_tcp' }},
+    {parametr: "Destination Port", wartosc: '', shared: { wartosc: 'dst_port_tcp' }},
+    {parametr: "Sequence Number", wartosc: '', shared: { wartosc: 'seq_port_tcp' }},
+    {parametr: "Flags", wartosc: '', shared: { wartosc: 'flag_port_tcp' }},
+    {parametr: "Rozmiar nagłówka", wartosc: '', shared: { wartosc: 'size_port_tcp' }},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 
 <ScreenshotPaste label="Zrzut ekranu: inicjalizacja połączenia SYN/SYN-ACK/ACK w Wireshark" />
 </Step>
@@ -133,9 +171,14 @@ Kliknij dwa razy w pojedynczy pakiet SYN i rozwiń w panelu szczegółów sekcj�
 <Step title="Identyfikacja zakończenia połączenia FIN-ACK/ACK">
 Odszukaj na liście pod koniec sesji pakiet z flagą ```[FIN, ACK]```:
 
-- **FIN** — odszukaj pod koniec sesji pakiet z flagą `[FIN, ACK]` kończący połączenie (może wystąpić kilka razy — TCP zamyka się osobno w każdą stronę).
+- **FIN** - odszukaj pod koniec sesji pakiet z flagą `[FIN, ACK]` kończący połączenie (może wystąpić kilka razy. TCP zamyka się osobno w każdą stronę).
 
 Kliknij pojedynczy pakiet FIN i rozwiń w panelu szczegółów sekcję **Transmission Control Protocol**, żeby zobaczyć numer sekwencyjny oraz zaznaczone pole flag.
+
+![Rys6](/img/4/tcp80_fin.png)
+<div className="text-center">
+Rys.6 Pakiet FIN & ACK w komunikacji TCP
+</div>
 
 <ScreenshotPaste label="Zrzut ekranu: zakończenie połączenia FIN-ACK/ACK w Wireshark" />
 </Step>
@@ -145,32 +188,83 @@ Kliknij pojedynczy pakiet FIN i rozwiń w panelu szczegółów sekcję **Transmi
 
 <StepByStep>
 
-<Step title="Przechwycenie sesji UDP">
-Uruchom przechwytywanie ruchu w programie Wireshark na interfejsie, przez który wychodzi ruch internetowy. 
+<Step title="Przechwycenie sesji UDP - I">
+Uruchom przechwytywanie ruchu w programie **Wireshark** na interfejsie (Ethernet0), przez który wychodzi ruch internetowy. 
 
-W pasku filtra wpisz:
 ```
-udp.port == 53
+Filtr wyświetlania: udp.port == 53
 ```
+
+![Rys7](/img/4/udp53.png)
+<div className="text-center">
+Rys.7 Filtr w programie Wireshark
+</div>
 </Step>
 
-<Step title="Przechwycenie ruchu UDP i porównanie nagłówka z TCP">
-Wygeneruj ruch UDP — najprościej poleceniem `nslookup` w Wierszu poleceń (Start ⇒ Wyszukaj programy i pliki ⇒ cmd):
+<Step title="Przechwycenie ruchu UDP - II">
+Wygeneruj ruch UDP najprościej poleceniem `nslookup` w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd):
 
 ```bash
 nslookup wp.pl
 ```
 
+<div className="text-center">
+![Rys8](/img/4/nslookup.png)
+
+Rys.8 Pakiet UDP dla nslookup
+</div>
+</Step>
+
+<Step title="Identyfikacja komunikacji UDP">
+Następnie wewnątrz Wireshark wybierz pakiet wychodzący z Twojego PC i wpisz występujące parametry do tabeli poniżej.
+
+![Rys9](/img/4/udp53_1.png)
+<div className="text-center">
+Rys.9 Pakiet UDP dla nslookup
+</div>
+<EditableTable
+  title="Wypisz parametry z sekcji Transmission Control Protocol"
+  storageKey="UDP"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'}
+  ]}
+  initialRows={[
+    {parametr: "Source Port", wartosc: '', shared: { wartosc: 'src_port_udp' }},
+    {parametr: "Destination Port", wartosc: '', shared: { wartosc: 'dst_port_udp' }},
+    {parametr: "Sequence Number", wartosc: '', shared: { wartosc: 'seq_port_udp' }},
+    {parametr: "Flags", wartosc: '', shared: { wartosc: 'flag_port_udp' }},
+    {parametr: "Rozmiar nagłówka", wartosc: '', shared: { wartosc: 'size_port_udp' }},
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
+<ScreenshotPaste label="Zrzut ekranu: ruch UDP dla komendy nslookup" />
+</Step>
+
+<Step title="Porównanie nagłówka UDP z TCP ">
+
 Kliknij dwa razy w przechwycony pakiet i rozwiń sekcję **User Datagram Protocol**, a następnie porównaj go z nagłówkiem TCP z kroku **"Identyfikacja inicjacji połączenia SYN/SYN-ACK/ACK"**:
 
-| Cecha | TCP | UDP |
-|---|---|---|
-| Liczba pól nagłówka | znacznie więcej (m.in. numer sekw., ACK, flagi, okno) | tylko 4 pola |
-| Rozmiar nagłówka | minimum 20 bajtów | zawsze 8 bajtów |
-| Widoczne flagi (SYN/ACK/FIN) | tak | nie występują — UDP nie ma pojęcia sesji |
-| Uzgadnianie połączenia | widoczne 3 pakiety przed danymi | brak — dane lecą od razu |
-
-<ScreenshotPaste label="Zrzut ekranu: ruch UDP dla komendy nslookup" />
+<EditableTable
+  title="Porównanie TCP z UDP"
+  storageKey="UDP"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'tcp', label: 'TCP', readOnly: true},
+    {key: 'udp', label: 'UDP', readOnly: true},
+    {key: 'opis', label: 'Opis', readOnly: true},
+  ]}
+  initialRows={[
+    {parametr: "Source Port", tcp: <SharedValue shared="src_port_tcp" fallback="—" />, udp: <SharedValue shared="src_port_udp" fallback="—" />, opis: 'Występuje dla obu protokołów'},
+    {parametr: "Destination Port", tcp: <SharedValue shared="dst_port_tcp" fallback="—" />, udp: <SharedValue shared="dst_port_udp" fallback="—" />, opis: 'Występuje dla obu protokołów'},
+    {parametr: "Sequence Number", tcp: <SharedValue shared="seq_port_tcp" fallback="—" />, udp: <SharedValue shared="seq_port_udp" fallback="—" />, opis: 'Występuje tylko dla TCP, reprezntuje kolejność przesyłanych pakietów'},
+    {parametr: "Flags", tcp: <SharedValue shared="flag_port_tcp" fallback="—" />, udp: <SharedValue shared="flag_port_udp" fallback="—" />, opis: 'Występuje tylko dla TCP i pozwala określić stan połączenia'},
+    {parametr: "Rozmiar nagłówka", tcp: <SharedValue shared="size_port_tcp" fallback="—" />, udp: <SharedValue shared="size_port_udp" fallback="—" />,  opis: 'UDP zawiera tylko 8 bajtów, a dla TCP minimalna wartość to 20 bajtów'}
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 </Step>
 </StepByStep>
 
@@ -184,10 +278,31 @@ Otwórz kilka kart z różnymi stronami, a następnie sprawdź aktywne połącze
 netstat -an
 ```
 
-**Na co zwrócić uwagę:**
-- kolumna adresu lokalnego (`Local Address`) — zawiera Twój adres IP i **port źródłowy** (zwykle wysoki numer z zakresu efemerycznego, dokładnie jak `51000` w schemacie gniazd, o którym mówiliśmy),
-- kolumna adresu zdalnego (`Foreign Address` / `Peer Address`) — adres IP serwera i **port docelowy** (np. `:443` dla HTTPS, `:80` dla HTTP),
-- kolumna stanu (`State`) — dla TCP: `ESTABLISHED` (połączenie aktywne), `TIME_WAIT` (niedawno zamknięte, oczekuje na ewentualne spóźnione pakiety), `LISTEN` (port nasłuchujący na przychodzące połączenia). 
+![Rys10](/img/4/netstat.png)
+<div className="text-center">
+Rys.10 Komenda `netstat -an`
+</div>
+</Step>
+
+<Step title="Aktywne połączenia z netstat">
+Wybierz jedną z aktywnych połączeń i wprowadz dane do tabeli poniżej.
+
+<EditableTable
+  title="Parametry połączenia"
+  storageKey="netstat"
+  columns={[
+    {key: 'parametr', label: 'Parametr', readOnly: true},
+    {key: 'wartosc', label: 'Wartość'},
+    {key: 'opis', label: 'Opis', readOnly: true},
+  ]}
+  initialRows={[
+    {parametr: "Local Address", wartosc: '', opis: 'Zawiera Twój adres IP i port źródłowy (zwykle wysoki numer z zakresu efemerycznego, dokładnie jak `51000`)'},
+    {parametr: "Foreign Address / Pear Address", wartosc: '', opis: 'adres IP serwera i port docelowy (np. `:443` dla HTTPS, `:80` dla HTTP)'},
+    {parametr: "State", wartosc: '', opis: 'Dla TCP: `ESTABLISHED` (połączenie aktywne), `TIME_WAIT` (niedawno zamknięte, oczekuje na ewentualne spóźnione pakiety), `LISTENING` (port nasłuchujący na przychodzące połączenia).'}
+  ]}
+  allowAddRows={false}
+  allowRemoveRows={false}
+/>
 
 <ScreenshotPaste label="Zrzut ekranu: lista aktywnych połączen" />
 </Step>
