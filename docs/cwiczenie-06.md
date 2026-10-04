@@ -13,6 +13,7 @@ import SharedValue from '@site/src/components/SharedValue';
 import CodeLine from '@site/src/components/CodeLine';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 6: Podstawowa konfiguracja urządzeń i topologii pary
 
@@ -21,6 +22,13 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 6: Podstawowa konfiguracja urządzeń i topologii pary"
   storageKey="cwiczenie-6"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-6"
+  storageKeys={['cwiczenie-6','cwiczenie-6-top', 'cwiczenie-6-zad1', 'cwiczenie-6-auto-mdix']}
+  sharedPrefix="cw6_"
 />
 
 ## I. Wprowadzenie
@@ -63,14 +71,14 @@ Połącz dwa komputery bezpośrednio kablem prostym. **Wykorzystaj dolną kartę
 </Step>
 
 <Step title="Konfiguracja adresacji">
-Adresacja IP nie jest z góry narzucona. Samemu trzeba określić adresację, która zostanie wykorzystana w ćwiczeniu.
+Adresacja IP nie jest z góry narzucona. Samemu trzeba określić adresację, która zostanie wykorzystana w ćwiczeniu (Tabela 1).
 
 :::warning Uwaga!!!
 Trzeci oktet adresu IP powinien być równy numerowi pary. Np. pierwsza para = 1.
 :::
 
 <PrivateAddressTable
-  title="Wprowadź adres IP i maskę, którą wykorzystasz w zadaniu"
+  title="Tab. 1 Wprowadź adres IP i maskę, którą wykorzystasz w zadaniu"
   checkGroupOctet={true}
   storageKey="cwiczenie-6-zad1"
   columns={['device', 'ip', 'mask']}
@@ -84,7 +92,7 @@ Ustaw statyczną adresację IP zgdnie z poniższym schematem:
 
 <TopologyBuilder
   title="Topologia"
-  storageKey="cwiczenie-6"
+  storageKey="cwiczenie-6-top"
   topology={{
     vlan: { show: false },
     groups: [
@@ -132,7 +140,7 @@ Urządzenie prosto "z pudełka" (albo po `erase startup-config` + `reload`) **ni
 Podłącz **kabel konsolowy** (typu rollover, RJ-45 na jednym końcu do portu `CONSOLE` routera/przełącznika, na drugim — RJ-45-na-USB albo RJ-45-na-DB9, w zależności od laptopa) między komputerem a urządzeniem Cisco.
 
 1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
-2. Uruchom **PuTTY** i skonfiguruj połączenie:
+2. Uruchom **PuTTY** i skonfiguruj połączenie (Rysunek 1):
 
 <div className="text-center">
 ![Rys1](/img/6/putty.png)
@@ -159,8 +167,9 @@ Ogranicznikiem tekstu banera jest dowolny znak niewystępujący w treści (tu: `
 </Step>
 
 <Step title="Hasła dostępu i pozostałe mechanizmy bezpieczeństwa">
-Poniższa tabela zbiera mechanizmy bezpieczeństwa konfigurowane w tym kroku — każdy chroni przed innym scenariuszem:
+Poniższa Tabela 2 zbiera mechanizmy bezpieczeństwa konfigurowane w tym kroku — każdy chroni przed innym scenariuszem:
 
+Tab.2 Mechanizmy bezpieczeństwa
 | Mechanizm | Polecenie | Przed czym chroni |
 |---|---|---|
 | Hasło do trybu uprzywilejowanego | `enable secret ...` | dostęp do `enable` (trybu z pełną kontrolą urządzenia) |

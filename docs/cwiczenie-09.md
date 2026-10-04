@@ -17,6 +17,7 @@ import EditableTable from '@site/src/components/EditableTable';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 import RingSharedValue from '@site/src/components/RingSharedValue';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 9: Routing dynamiczny — RIP
 
@@ -25,6 +26,13 @@ _Część II — Zajęcia praktyczne_
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 9: Routing dynamiczny — RIP"
   storageKey="cwiczenie-9"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-9"
+  storageKeys={['cwiczenie-9','rip-grupy-segment', 'rip-checklist-loopback', 'rip', 'rip-ping-testy-2', 'rip-ping-testy-1']}
+  sharedPrefix="cw9_"
 />
 
 ## I. Wprowadzenie
@@ -69,6 +77,10 @@ topology={{
 />
 
 <StepByStep>
+<Step title="Połączenie do urządzeń">
+Wykorzystaj kabel konsolowy wykonując połączenie: port konsolowy -> patchpanel w szafie Rack, z gniazda naściennego -> portu USB 3.0 przy pomocy kabla konsolowego. Następnie uruchom aplikacje **PuTTY** i połącz się z wybranym urządzeniem.
+</Step>
+
 <Step title="Konfiguracja adresacji interfejsów i Loopback">
 
 Zaadresuj interfejsy routerów zgodnie z topologią powyżej.
@@ -115,10 +127,10 @@ items: [
 
 Podłącz patchkordy zgodnie z topologią, ustaw adresację i bramę domyślną na K1/K2 (brama = najbliższy interfejs routera).
 
-Z komputera K1 i K2 wykonaj kolejno `ping` na poniższe interfejsy:
+Z komputera K1 i K2 wykonaj kolejno `ping` na poniższe interfejsy (Tabela 1):
 
 <EditableTable
-title="Test łączności"
+title="Tab. 1 Test łączności"
 storageKey="rip-ping-testy-1"
 columns={[
 { key: 'polecenie', label: 'Polecenie', readOnly: true },
@@ -169,10 +181,10 @@ Analogicznie na routerze R2.
 </Step>
 
 <Step title="Weryfikacja konfiguracji RIP">
-Zweryfikuj łącznośc pomiędzy elementami sieci:
+Zweryfikuj łącznośc pomiędzy elementami sieci (Tabela 2):
 
 <EditableTable
-title="Test łączności"
+title="Tab. 2 Test łączności"
 storageKey="rip-ping-testy-2"
 columns={[
 { key: 'polecenie', label: 'Polecenie', readOnly: true },
@@ -199,10 +211,10 @@ initialRows={[
 
 <StepByStep>
 <Step title="Rozszerzenie RIP na sąsiednie grupy">
+Ustal z sąsiednimi grupami numerację i wypełnij poniższą Tabelę 3:
 
-Ustal z sąsiednimi grupami numerację i wypełnij poniższą tabelę:
 <EditableTable
-title="Sieci między grupami — uzgodnij z sąsiadami"
+title="Tab. 3 Sieci między grupami — uzgodnij z sąsiadami"
 storageKey="rip"
 allowAddRows={false}
 allowRemoveRows={false}

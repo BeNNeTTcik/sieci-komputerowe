@@ -21,7 +21,7 @@ Witaj w materiałach do przedmiotu **Sieci komputerowe**. Kurs podzielony jest n
 |---|---|---|
 | dr inż. Łukasz Apiecionek | | |
 | mgr Mateusz Miller | | |
-| mgr Mateusz Dampc | | |
+| mgr Mateusz Dampc | Piątek | 13:00-15:00 |
 
 ## Budowa sieci laboratoryjnej
 

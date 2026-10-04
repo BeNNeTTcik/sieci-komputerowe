@@ -44,12 +44,12 @@ import EditableTable from '@site/src/components/EditableTable';
 
 Nagłówek protokołu IP zawiera m.in. takie informacje jak:
 - adres IP źródłowy i docelowy,
-- wersja protokołu IP — IPv4 lub IPv6,
--  flagi — informują o tym, czy dany pakiet może być/jest podzielony i wysłany w ramach kilku ramek ethernetowych (ramka ethernetowa może zawierać ładunek o wielkości maksymalnie 1500 bajtów, jeśli pakiet wyższej warstwy jest większy, musi zostać podzielony, o ile nie jest ustawiona flaga Don’t fragment),
-- TTL (ang. Time to Live) — czas życia, jaki pozostał pakietowi przed usunięciem go z sieci, innymi słowy maksymalna ilość przeskoków (routerów na trasie - ang. next hop), które może jeszcze dokonać dany pakiet,
+- wersja protokołu IP - IPv4 lub IPv6,
+-  flagi - informują o tym, czy dany pakiet może być/jest podzielony i wysłany w ramach kilku ramek ethernetowych (ramka ethernetowa może zawierać ładunek o wielkości maksymalnie 1500 bajtów, jeśli pakiet wyższej warstwy jest większy, musi zostać podzielony, o ile nie jest ustawiona flaga Don’t fragment),
+- TTL (ang. Time to Live) - czas życia, jaki pozostał pakietowi przed usunięciem go z sieci, innymi słowy maksymalna ilość przeskoków (routerów na trasie - ang. next hop), które może jeszcze dokonać dany pakiet,
 - informacja o zawartości pakietu (PDU jakiego protokołu enkapsulowany jest w ramach pakietu).
 
-**Klasy adresów** (adresacja klasowa). Historycznie, w pierwszej wersji protokołu IP, granica między częścią sieciową a hostową była sztywno przypisana do jednej z pięciu klas, rozpoznawanych po najstarszych bitach pierwszego oktetu [^RFC791][^tanen]:
+**Klasy adresów** (adresacja klasowa). Historycznie, w pierwszej wersji protokołu IP, granica między częścią sieciową a hostową była sztywno przypisana do jednej z pięciu klas, rozpoznawanych po najstarszych bitach pierwszego oktetu (Rysunek 1)[^RFC791][^tanen]:
 </div>
 
 ![Rys1](/img/3/ipv4.png)
@@ -57,7 +57,7 @@ Nagłówek protokołu IP zawiera m.in. takie informacje jak:
 Rys.1 Klasy adresów [^comer][^claude]
 </div>
 
-**Maska podsieci** to 32-bitowa wartość, w której jedynki oznaczają bity części sieciowej, a zera — bity części hosta (np. 255.255.255.0 = 24 jedynki, 8 zer). Adres i maska zestawione operacją logiczną AND wskazują adres sieci, do której należy dany host.
+**Maska podsieci** to 32-bitowa wartość, w której jedynki oznaczają bity części sieciowej, a zera bity części hosta (np. 255.255.255.0 = 24 jedynki, 8 zer). Adres i maska zestawione operacją logiczną AND wskazują adres sieci, do której należy dany host.
 
 :::note
 Podział na klasy ma dziś znaczenie głównie historyczne/edukacyjne, ponieważ od 1993 roku routing w Internecie opierają sie na bezklasowej notacji CIDR (Classless Inter-Domain Routing)[^RFC4632].
@@ -68,7 +68,7 @@ Podział na klasy ma dziś znaczenie głównie historyczne/edukacyjne, ponieważ
 <div className="justify">
 **Adres IPv6** to 128-bitowa liczba (czterokrotnie dłuższa niż w IPv4) zapisywana w notacji szesnastkowej, w ośmiu grupach po 16 bitów rozdzielonych dwukropkiem (np. `2001:0db8:0000:0000:0000:ff00:0042:8329`) [^RFC8200][^RFC4291]. Dla czytelności dopuszczone są dwa uproszczenia zapisu: **pominięcie zer początkowych** w każdej grupie (`0db8` -> `db8`) oraz **zastąpienie jednej, kolejnej sekwencji grup samych zer** podwójnym dwukropkiem `::`. Taką operację można wykonać tylko **raz** w całym adresie, bo inaczej nie byłoby wiadomo, ile grup zer reprezentuje [^RFC5952]. Powyższy adres można więc zapisać skrócenie jako `2001:db8::ff00:42:8329`.
 
-W IPv6 **nie występuje maska podsieci** w postaci znanej z IPv4 (np. `255.255.255.0`) — granicę między częścią sieciową a hostową zapisuje się wyłącznie jako **prefiks** po `/`, czyli liczbę bitów części sieciowej (np. `2001:db8:1::/64`) [^RFC4291]. Przyjętym standardem dla sieci użytkowników końcowych jest prefiks `/64`; pozostałe 64 bity (identyfikator interfejsu) mogą być generowane automatycznie, m.in. na podstawie adresu MAC (EUI-64) lub losowo (Privacy Extensions) [^RFC4862].
+W IPv6 **nie występuje maska podsieci** w postaci znanej z IPv4 (np. `255.255.255.0`) granicę między częścią sieciową a hostową zapisuje się wyłącznie jako **prefiks** po `/`, czyli liczbę bitów części sieciowej (np. `2001:db8:1::/64`) [^RFC4291]. Przyjętym standardem dla sieci użytkowników końcowych jest prefiks `/64`; pozostałe 64 bity (identyfikator interfejsu) mogą być generowane automatycznie, m.in. na podstawie adresu MAC (EUI-64) lub losowo (Privacy Extensions) [^RFC4862].
 </div>
 
 Nagłówek IPv6 jest **uproszczony** względem IPv4 ma stałą długość 40 bajtów i mniej pól, co ułatwia szybkie przetwarzanie przez routery [^RFC8200][^kurose]:
@@ -100,21 +100,21 @@ Głównym powodem powstania IPv6 było **wyczerpywanie się przestrzeni adresowe
 - **Sieć docelowa (destination)** - adres sieci, do której prowadzi ten wpis, np. ```10.1.0.0/24```
 - **Brama (next hop / gateway)** - adres IP kolejnego routera, do którego należy przesłać pakiet
 - **Interfejs wyjściowy** - fizyczny/logiczny port, którym pakiet opuści router
-- **Metryka	„koszt" trasy** - im niższy, tym trasa preferowana 
+- **Metryka	„koszt" trasy** - im niższy, tym trasa preferowana
 
 <div className="justify">
-Gdy do routera trafia pakiet, przegląda on tablicę routingu w poszukiwaniu wpisu, którego sieć docelowa najdokładniej pasuje do adresu IP odbiorcy — zasada ta nazywa się regułą najdłuższego dopasowania prefiksu (longest prefix match) [^kurose]: jeśli pasują jednocześnie wpisy ```10.0.0.0/8``` i ```10.1.0.0/24```, router wybierze ten drugi, bardziej precyzyjny.
+Gdy do routera trafia pakiet, przegląda on tablicę routingu w poszukiwaniu wpisu, którego sieć docelowa najdokładniej pasuje do adresu IP odbiorc. Zasada ta nazywa się regułą najdłuższego dopasowania prefiksu (longest prefix match) [^kurose]: jeśli pasują jednocześnie wpisy ```10.0.0.0/8``` i ```10.1.0.0/24```, router wybierze ten drugi, bardziej precyzyjny.
 
 **Routing statyczny a dynamiczny** - trasy statyczne są wpisywane ręcznie przez administratora i pozostają niezmienne, dopóki ktoś ich nie zmieni; trasy dynamiczne są automatycznie wymieniane i aktualizowane między routerami przez protokoły routingu (RIP [^RFC2453], OSPF [^RFC2328]) w reakcji na zmiany w topologii sieci.
 </div>
 
 ---
 
-**Brama domyślna** to adres IP routera, do którego host wysyła cały ruch skierowany poza własną sieć lokalną, gdy nie zna żadnej bardziej szczegółowej trasy. W praktyce każdy komputer w sieci ma skonfigurowaną dokładnie jedną (zwykle) bramę domyślną — jest to jego „drzwi wyjściowe" do reszty świata. Mechanizm przedstawiono na Rysunku 2. 
+**Brama domyślna** to adres IP routera, do którego host wysyła cały ruch skierowany poza własną sieć lokalną, gdy nie zna żadnej bardziej szczegółowej trasy. W praktyce każdy komputer w sieci ma skonfigurowaną dokładnie jedną (zwykle) bramę domyślną — jest to jego „drzwi wyjściowe" do reszty świata. Mechanizm przedstawiono na Rysunku 2.
 
 ![Rys2](/img/3/brama_domyslna.png)
 <div className="text-center">
-Rys.1 Mechanizm wykorzystania bramy domyślnej [^comer][^claude]
+Rys.2 Mechanizm wykorzystania bramy domyślnej [^comer][^claude]
 </div>
 
 :::note
@@ -124,14 +124,13 @@ Rys.1 Mechanizm wykorzystania bramy domyślnej [^comer][^claude]
 
 ---
 
-**ICMP (Internet Control Message Protocol)** to protokół towarzyszący IP, zdefiniowany w RFC 792 [^RFC792], służący do przesyłania komunikatów kontrolnych i błędów, a nie danych użytkownika. ICMP nie ma portów ani sesji — komunikaty ICMP są zwykle generowane automatycznie przez stos sieciowy w reakcji na problem z dostarczeniem pakietu IP.
-
+**ICMP (Internet Control Message Protocol)** to protokół towarzyszący IP, zdefiniowany w RFC 792 [^RFC792], służący do przesyłania komunikatów kontrolnych i błędów, a nie danych użytkownika. ICMP nie ma portów ani sesji, komunikaty ICMP są zwykle generowane automatycznie przez stos sieciowy w reakcji na problem z dostarczeniem pakietu IP.
 
 | Typ     | Nazwa     | Zastosowanie |
 |---------|---------|-----------------------|
-| 0/8       | Echo Reply/Echo Request    | polecenie **ping** — sprawdzenie osiągalności hosta             |
+| 0/8       | Echo Reply/Echo Request    | polecenie **ping** - sprawdzenie osiągalności hosta             |
 | 3       | Destination Unreachable | router/host nie może dostarczyć pakietu (np. brak trasy, zablokowany port)              |
-| 11       | Time Exceeded  | pole TTL pakietu spadło do zera — router odrzucił pakiet; wykorzystywane przez **traceroute**                   |
+| 11       | Time Exceeded  | pole TTL pakietu spadło do zera - router odrzucił pakiet; wykorzystywane przez **traceroute**                   |
 
 ## II. Zadania do wykonania
 
@@ -144,19 +143,19 @@ Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy ró
 - **System dziesiętny** - wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9. Klasycznie, poszczególne oktety adresu IP zapisywane są w systemie dzesiętnym. W systemie tym podstawę stanowi liczba 10:
 
 <div className="text-center">
-234 = 2 · 102 + 3 · 101 + 4 · 100
+234<sub>10</sub> = 2 · 10<sup>2</sup> + 3 · 10<sup>1</sup> + 4 · 10<sup>0</sup>
 </div>
 
 - **System binarny** - wykorzystywane cyfry: 0,1. dzięki zapisowi binarnemu maski sieciowej jesteśmy w stanie odróżnić w adresie IP część sieci od części hosta. Podstawę stanowi liczba 2:
 
 <div className="text-center">
-11002 = 1 · 23 + 1 · 22 + 0 · 21 + 0 · 20 = 8 + 4 = 12
+1100<sub>2</sub> = 1 · 2<sup>3</sup> + 1 · 2<sup>2</sup> + 0 · 2<sup>1</sup> + 0 · 2<sup>0</sup> = 8 + 4 = 12
 </div>
 
 - **System szesnastkowy** - Wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F, gdzie A=10,B=11, ... ,F=15. Adresy MAC zapisywane są w systemie szesnastkowym. Podstawę stanowi liczba 16:
 
 <div className="text-center">
-0xA8 = 10 · 161 + 8 · 160 = 160 + 8 = 168
+A8<sub>16</sub> = 10 · 16<sup>1</sup> + 8 · 16<sup>0</sup> = 160 + 8 = 168
 </div>
 
 <NumberBaseTrainer
@@ -168,7 +167,7 @@ Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy ró
 ### Obliczanie parametrów sieci
 
 <div className="justify">
-**Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne — w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
+**Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne: w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
 </div>
 
 <SubnetTrainer
@@ -183,7 +182,7 @@ Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy ró
 <StepByStep>
 
 <Step title="Odczytanie konfiguracji IP">
-Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji (adres 10.114.202.x - Ethernet0). Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i  wypełnij tabellę.
+Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji (adres 10.114.202.x - Ethernet0) (Rysunek 3). Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i  wypełnij tabellę.
 
 ```bash
 ipconfig /all
@@ -214,7 +213,7 @@ Rys.3 Komenda ipconfig
 </Step>
 
 <Step title="Odczytanie konfiguracji tablicy routingu">
-Sprawdź stan tablicy routingu. Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
+Sprawdź stan tablicy routingu. Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) (Rysunek 4):
 
 ```bash
 route print
@@ -227,7 +226,7 @@ Rys.4 Komenda route print
 
 **Na co zwrócić uwagę:**
 - wpis `0.0.0.0` (trasa domyślna) w tablicy routingu i wskazywany przez niego adres bramy,
-- czy w tablicy pojawiają się inne, bardziej szczegółowe trasy (np. do sieci lokalnej) - porównaj je z zasadą najdłuższego dopasowania prefiksu, o której mówiliśmy przy bramie domyślnej.
+- czy w tablicy pojawiają się inne, bardziej szczegółowe trasy (np. do sieci lokalnej) porównaj z zasadą najdłuższego dopasowania prefiksu, o której mówiliśmy przy bramie domyślnej.
 
 <ScreenshotPaste label="Zrzut ekranu: tablica routingu" />
 
@@ -235,7 +234,7 @@ Rys.4 Komenda route print
 
 <Step title="Analiza działania traceroute/tracert">
 
-Wykonaj polecenie do wybranego serwera (np. znanej strony internetowej) i przeanalizuj wynik. Wykorzystaj **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd)
+Wykonaj polecenie do wybranego serwera (np. znanej strony internetowej) i przeanalizuj wynik. Wykorzystaj **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) (Rysunek 5)
 
 ```bash
 tracert 8.8.8.8
@@ -257,7 +256,7 @@ Rys.5 Komenda tracert
 
 <Step title="Analiza nagłówka pakietu IP w Wireshark">
 
-Uruchom przechwytywanie ruchu w programie **Wireshark** (Ethernet0), wygeneruj ruchu przy pomocy polecenia ```ping <IP>```, zatrzymaj przechwytywanie i przeanalizuj pojedynczy pakiet.
+Uruchom przechwytywanie ruchu w programie **Wireshark** (Ethernet0), wygeneruj ruchu przy pomocy polecenia ```ping <IP>```, wyfitruj ruch ICMP (Rysunek 6), zatrzymaj przechwytywanie i przeanalizuj pojedynczy pakiet.
 
 ```
 Filtr wyświetlania: icmp
@@ -265,7 +264,7 @@ Filtr wyświetlania: icmp
 
 ![Rys6](/img/3/icmp.png)
 <div className="text-center">
-Rys.6 Filtrowanie pakietów w Wireshark
+Rys.6 Filtrowanie pakietów w Wireshark [^wireshark]
 </div>
 
 Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **Internet Protocol Version 4**.
@@ -325,3 +324,5 @@ Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **In
 [^RFC4862]: Thomson, S., Narten, T., Jinmei, T. — [RFC 4862: IPv6 Stateless Address Autoconfiguration (SLAAC)](https://www.rfc-editor.org/rfc/rfc4862).
 
 [^cisco-ipv6]: Cisco — [IPv6 Address Types](https://www.cisco.com/c/en/us/products/collateral/ios-nx-os-software/ios-ipv6/qa_c67-574995.html).
+
+[^wireshark]: [WIRESHARK TEAM](https://wireshark.org). Wireshark User’s Guide. Wireshark Foundation, 2026.

@@ -28,6 +28,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 14: Tworzenie sieci w Cisco Packet Tracer"
   storageKey="cwiczenie-14"
+  solo
 />
 
 <ProjectSaveLoad

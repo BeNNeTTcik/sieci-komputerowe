@@ -16,6 +16,7 @@ import Checklist from '@site/src/components/Checklist';
 import EditableTable from '@site/src/components/EditableTable';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 11: Site-to-site IPsec VPN
 
@@ -24,6 +25,13 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 11: VPN site-to-site IPsec"
   storageKey="cwiczenie-11"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-11"
+  storageKeys={['cwiczenie-11','ipsec-grupy-segment', 'vpn-psk', 'vpn-test-tunelu']}
+  sharedPrefix="cw11_"
 />
 
 ## I. Wprowadzenie
@@ -41,8 +49,9 @@ Instytucja działająca w wielu lokalizacjach (centrala, oddziały, pracownicy m
 ---
 
 <div className="justify">
-**IPsec** nie jest jednym protokołem, tylko zestawem protokołów współpracujących ze sobą. Zanim popłynie jakikolwiek zaszyfrowany ruch użytkownika, dwa routery muszą przejść dwuetapową negocjację nazywaną IKE (Internet Key Exchange) [^RFC2409]:
+**IPsec** nie jest jednym protokołem, tylko zestawem protokołów współpracujących ze sobą (Tabela 1). Zanim popłynie jakikolwiek zaszyfrowany ruch użytkownika, dwa routery muszą przejść dwuetapową negocjację nazywaną IKE (Internet Key Exchange) [^RFC2409]:
 </div>
+Tab. 1 Fazy zestawienia połączenia
 | | Faza 1 (ISAKMP) | Faza 2 (IPsec, "właściwy" tunel) |
 |---|---|---|
 | **Co ustala** | bezpieczny, uwierzytelniony kanał kontrolny między routerami | jak konkretnie szyfrować ruch użytkownika |
@@ -65,7 +74,7 @@ Przypomnienie adresacji z Twojej grupy (musi się zgadzać z tym, co masz już s
 
 <TopologyBuilder
 title="Segment Twojej grupy"
-storageKey="ospf-grupy-segment"
+storageKey="ipsec-grupy-segment"
 xShared="grupa_x"
 topology={{
     vlan: { show: false },
@@ -90,10 +99,10 @@ topology={{
   }}
 />
 
-Ustalcie w parze (R1 i R2) wspólny klucz **pre-shared key** - dowolny ciąg znaków, ale **musi być identyczny po obu stronach**:
+Ustalcie w parze (R1 i R2) wspólny klucz **pre-shared key** (Tabela 2) - dowolny ciąg znaków, ale **musi być identyczny po obu stronach**:
 
 <EditableTable
-title="Wspólny klucz PSK — uzgodnij z partnerem"
+title="Tab. 2 Wspólny klucz PSK — uzgodnij z partnerem"
 storageKey="vpn-psk"
 allowAddRows={false}
 allowRemoveRows={false}
@@ -191,10 +200,10 @@ items: [
 </Step>
 
 <Step title="Test tunelu i weryfikacja">
-Tunel IPsec nawiązuje się **dopiero gdy popłynie pierwszy pasujący pakiet** - samo wpisanie konfiguracji jeszcze niczego nie uruchamia. Wykonaj ping z `K1` do `K2` (musi to być ruch między sieciami z ACL z kroku 1):
+Tunel IPsec nawiązuje się **dopiero gdy popłynie pierwszy pasujący pakiet** (Tabela 3) - samo wpisanie konfiguracji jeszcze niczego nie uruchamia. Wykonaj ping z `K1` do `K2` (musi to być ruch między sieciami z ACL z kroku 1):
 
 <EditableTable
-title="Test tunelu VPN"
+title="Tab. 3 Test tunelu VPN"
 storageKey="vpn-test-tunelu"
 allowAddRows={false}
 allowRemoveRows={false}

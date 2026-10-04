@@ -14,6 +14,7 @@ import EditableTable from '@site/src/components/EditableTable';
 import SharedValue from '@site/src/components/SharedValue';
 import CodeBlock from '@site/src/components/CodeBlock';
 import CodeBlank from '@site/src/components/CodeBlank';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 13: Listy kontroli dostępu (ACL)
 
@@ -22,6 +23,13 @@ _Część II — Zajęcia praktyczne_
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 13: Listy kontroli dostępu (ACL)"
   storageKey="cwiczenie-13"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-13"
+  storageKeys={['cwiczenie-13','cwiczenie-13-top', 'cwiczenie-13-checklist', 'cwiczenie-13-acl', 'cwiczenie-13-res']}
+  sharedPrefix="cw13_"
 />
 
 ## I. Wprowadzenie
@@ -38,7 +46,9 @@ Rys.1 Przetwarzanie reguł ACL [^claude]
 
 Kolejność reguł ma znaczenie krytyczne. Umieszczenie ogólnej reguły `permit` zbyt wysoko na liście sprawi, że bardziej szczegółowa reguła `deny` poniżej nigdy nie zostanie sprawdzona — router zatrzyma się na pierwszym trafieniu.
 
-**Dwa rodzaje list ACL:**
+Występują dwa rodzaje list ACL i różnice zostały przedstawione w Tabeli 1.
+
+Tab. 1 Dwa rodzaje list ACL
 | | Standardowa | Rozszerzona |
 |---|---|---|
 | Zakres numerów | 1-99 i 1300-1999 | 100-199 i 2000-2699 |
@@ -66,7 +76,7 @@ Wyjaśnienie składni komend
 Adresacja nie jest z góry narzucona. Można wybrać sieć podaną w zadaniu lub rozpisać samemu.
 <TopologyBuilder
   title="Topologia"
-  storageKey="cwiczenie-13"
+  storageKey="cwiczenie-13-top"
   topology={{
     vlan: { show: false },
     groups: [
@@ -161,9 +171,11 @@ items: [
 </Step>
 
 <Step title="Projekt polityki">
+W poniższej Tabeli 2 zaprezentowano wymagane polityki do wdrożenia na routerach.
+
 <EditableTable
-  title="Polityki do wdrożenia"
-  storageKey="cwiczenie-13"
+  title="Tab. 2 Polityki do wdrożenia"
+  storageKey="cwiczenie-13-acl"
   columns={[
     {key: 'zrodlo', label: 'IP źródłowy', readOnly: true},
     {key: 'cel', label: 'IP docelowy', readOnly: true},
@@ -235,9 +247,11 @@ Przypisanie konfiguracji do interfjsu.
 </Step>
 
 <Step title="Wyniki testów - ping IP">
+Przeprowadź testy i wyniki przedstaw w poniższej Tabeli 3.
+
 <EditableTable
-  title="Wyniki"
-  storageKey="cwiczenie-13"
+  title="Tab. 3 Wyniki"
+  storageKey="cwiczenie-13-res"
   columns={[
     {key: 'zrodlo', label: 'IP źródłowy', readOnly: true},
     {key: 'cel', label: 'IP docelowy', readOnly: true},

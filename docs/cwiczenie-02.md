@@ -22,26 +22,25 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
 <div className="justify">
 **Warstwa łącza danych** odpowiada natomiast za przekazywanie ramek Ethernet w obrębie sieci lokalnej, adresację fizyczną (**MAC**) oraz przełączanie ruchu przez switch. Mapowanie adresów IP na adresy MAC realizuje protokół **ARP** [^tanen].
-- ramka Ethernet — podstawowa jednostka danych warstwy 2, zawierająca nagłówek, dane oraz sumę kontrolną FCS,
-- adres MAC — unikalny adres fizyczny karty sieciowej wykorzystywany do przełączania ramek,
-- protokół ARP — mechanizm mapowania adresu IP na adres MAC, będący pomostem do warstwy 3.
+- ramka Ethernet - podstawowa jednostka danych warstwy 2, zawierająca nagłówek, dane oraz sumę kontrolną FCS,
+- adres MAC - unikalny adres fizyczny karty sieciowej wykorzystywany do przełączania ramek,
+- protokół ARP - mechanizm mapowania adresu IP na adres MAC, będący pomostem do warstwy 3.
 
-**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części.
+**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części (Rysunek 1).
 </div>
 
 ![Rys1](/img/2/ramka.png)
 <div className="text-center">
-Rys. 2 Budowa ramki Ethernet [^claude]
+Rys. 1 Budowa ramki Ethernet [^claude]
 </div>
 
-- **Preambuła (7 B)** — ciąg naprzemiennych bitów ```1010...```, służy do synchronizacji zegara odbiornika z nadajnikiem; nie jest wliczana do długości ramki.
-- **SFD — Start Frame Delimiter (1 B)** — bajt ```10101011```, oznacza koniec preambuły i początek właściwej ramki.
-- **MAC docelowy (6 B)** — fizyczny adres karty sieciowej odbiorcy (może być unicast, multicast lub broadcast).
-- **MAC źródłowy (6 B)** — fizyczny adres karty sieciowej nadawcy.
-- **Typ/Długość (2 B)** — w wersji Ethernet II pole to wskazuje protokół wyższej warstwy (EtherType, np. 0x0800 dla IPv4, 0x0806 dla ARP), gdy wartość jest ≥ 1536; w klasycznej ramce 802.3 to samo pole może oznaczać długość danych, gdy wartość jest mniejsza — obie interpretacje współistnieją w praktyce.
-- **Dane (46–1500 B)** — dane przekazane z warstwy sieciowej (np. pakiet IP); jeśli dane są krótsze niż 46 B, ramka jest dopełniana (padding) do minimalnej długości.
-- **FCS — Frame Check Sequence (4 B)** — suma kontrolna CRC-32 liczona po stronie nadawcy i weryfikowana przez odbiorcę w celu wykrycia błędów transmisji.
-
+- **Preambuła (7 B)** - ciąg naprzemiennych bitów ```1010...```, służy do synchronizacji zegara odbiornika z nadajnikiem; nie jest wliczana do długości ramki.
+- **SFD — Start Frame Delimiter (1 B)** - bajt ```10101011```, oznacza koniec preambuły i początek właściwej ramki.
+- **MAC docelowy (6 B)** - fizyczny adres karty sieciowej odbiorcy (może być unicast, multicast lub broadcast).
+- **MAC źródłowy (6 B)** - fizyczny adres karty sieciowej nadawcy.
+- **Typ/Długość (2 B)** - w wersji Ethernet II pole to wskazuje protokół wyższej warstwy (EtherType, np. 0x0800 dla IPv4, 0x0806 dla ARP), gdy wartość jest ≥ 1536; w klasycznej ramce 802.3 to samo pole może oznaczać długość danych, gdy wartość jest mniejsza — obie interpretacje współistnieją w praktyce.
+- **Dane (46–1500 B)** - dane przekazane z warstwy sieciowej (np. pakiet IP); jeśli dane są krótsze niż 46 B, ramka jest dopełniana (padding) do minimalnej długości.
+- **FCS — Frame Check Sequence (4 B)** - suma kontrolna CRC-32 liczona po stronie nadawcy i weryfikowana przez odbiorcę w celu wykrycia błędów transmisji.
 
 <div className="justify">
 **Adres MAC (Media Access Control)** to unikatowy, 48-bitowy (6-bajtowy) adres fizyczny przypisany do interfejsu sieciowego, działający na warstwie 2 (łącza danych) modelu OSI. W odróżnieniu od adresu IP, który jest adresem logicznym i może się zmieniać w zależności od sieci, do której podłączone jest urządzenie, adres MAC jest w założeniu stały i przypisany na stałe do konkretnego sprzętu przez producenta — stąd bywa nazywany adresem fizycznym lub sprzętowym [^802].
@@ -69,46 +68,63 @@ Otwórz program Wireshark i rozpocznij przechwytywanie ruchu sieciowego na karci
 </Step>
 
 <Step title="Filtrowanie po ICMP">
-Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP.
+Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP (Rysunek 2).
+```
+Filtr wyświetlania: icmp
+```
 
-![ICMP](/img/2/zad1_2.png)
+<div className="text-center">
+![Rys2](/img/2/zad1_2.png)
+Rys.2 Fitrowanie w Wireshark [^wireshark]
+</div>
 </Step>
 
 <Step title="Wygeneruj ruch sieciowy">
-Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP).
+Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Rysunek 3).
 ```bash
 ping <IP>
 ```
-
-![ping](/img/2/zad1_3.png)
+<div className="text-center">
+![Rys3](/img/2/zad1_3.png)
+Rys.3 Komenda ping [^wireshark]
+</div>
 </Step>
 
 <Step title="Weryfikacja wyników">
-Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych.
+Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 4).
 
-![WS](/img/2/zad1_4.png)
+<div className="text-center">
+![Rys4](/img/2/zad1_4.png)
+Rys.4 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+</div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki" />
 
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet I">
-Zaznacz pierwszą przechwyconą ramkę (zawierającą wysłany od Ciebie Echo (ping) request) i rozwiń w środkowej części okna drugą sekcję — odpowiadającą nagłówkowi protokołu Ethernet.
+Zaznacz pierwszą przechwyconą ramkę (zawierającą wysłany od Ciebie Echo (ping) request) i rozwiń w środkowej części okna drugą sekcję, która odpowiada za nagłówkowi protokołu Ethernet (Rysunek 5).
 
 - Porównaj docelowy adres MAC z adresem MAC komputera sąsiada (można go wyświelić poleceniem ipconfig/all w Wierszu polecenia).
 - Porównaj źródłowy adres MAC z adresem MAC swojego komputera.
 - Wireshark nie wyświetla informacji o sumie kontrolnej.
 
-![Echo](/img/2/zad1_5.png)
+<div className="text-center">
+![Rys5](/img/2/zad1_5.png)
+Rys.5 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+</div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwycona ramka Echo Request" />
 
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet II">
-Zaznacz drugą przechwyconą ramkę (Echo (ping) reply, będącą odpowiedzią na Twojego requesta) i zaobserwuj, jak zmienił się adres źródłowy i docelowy.
+Zaznacz drugą przechwyconą ramkę (Echo (ping) reply, będącą odpowiedzią na Twojego requesta) i zaobserwuj, jak zmienił się adres źródłowy i docelowy (Rysunek 6).
 
-![SRC_DEST](/img/2/zad1_6.png)
+<div className="text-center">
+![Rys6](/img/2/zad1_6.png)
+Rys.6 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+</div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki Echo Reply" />
 
@@ -227,6 +243,7 @@ clear mac address-table dynamic
 show mac address-table dynamic
 ```
 Zobaczysz pojedynczy wpis.
+
 </Step>
 
 <Step title="Proces uczenia sie adresów MAC - II">
@@ -242,6 +259,7 @@ Osoba która się podłączyła wykonuje ```ping``` do sąsiada z grupy. Ponowni
 ```
 show mac address-table dynamic
 ```
+<ScreenshotPaste label="Zrzut ekranu: wpis z mac address-table" />
 </Step>
 </StepByStep>
 
@@ -266,3 +284,5 @@ To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza,
 [^putty]: [PuTTY](https://the.earth.li/~sgtatham/putty/0.85/htmldoc/).
 
 [^cisco]: Grafika wykonana w programie - [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads?courseLang=en-US)
+
+[^wireshark]: [WIRESHARK TEAM](https://wireshark.org). Wireshark User’s Guide. Wireshark Foundation, 2026.

@@ -14,6 +14,7 @@ import OpenQuestion from '@site/src/components/OpenQuestion';
 import EditableTable from '@site/src/components/EditableTable';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 8: Routing statyczny
 
@@ -21,7 +22,14 @@ _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 8: Routing statyczny"
-  storageKey="cwiczenie-08"
+  storageKey="cwiczenie-8"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-8"
+  storageKeys={['cwiczenie-8', 'static-ping-testy-3', 'static-ping-testy-2', 'static-ping-testy-1', 'static-routing']}
+  sharedPrefix="cw8_"
 />
 
 ## I. Wprowadzenie
@@ -31,9 +39,10 @@ _Część II — Zajęcia praktyczne_
 
 **Wpis `ip route`:**
 
-Pełna postać polecenia to `ip route <sieć_docelowa> <maska> <next-hop | interfejs_wyjściowy> [administrative-distance]`. Kluczowa jest różnica między dwoma sposobami wskazania "dokąd dalej":
+Pełna postać polecenia to `ip route <sieć_docelowa> <maska> <next-hop | interfejs_wyjściowy> [administrative-distance]`(Tabela 1). Kluczowa jest różnica między dwoma sposobami wskazania "dokąd dalej":
 </div>
 
+Tab. 1 Formy komend dla routingu statycznego
 | Forma | Przykład | Zachowanie |
 |---|---|---|
 | **Next-hop** (adres IP sąsiada) | `ip route 192.168.20.0 255.255.255.0 10.0.0.2` | router musi dodatkowo **rekurencyjnie** sprawdzić, przez który interfejs dotrzeć do tego adresu - dodatkowe wyszukiwanie w tablicy routingu |
@@ -42,8 +51,9 @@ Pełna postać polecenia to `ip route <sieć_docelowa> <maska> <next-hop | inter
 **Dystans administracyjny (Administrative Distance):**
 
 <div className="justify">
-Skąd router wie, której trasie zaufać, jeśli tę samą sieć "widzi" jednocześnie ze statycznego wpisu i z protokołu dynamicznego? Każdemu źródłu informacji o trasach Cisco IOS przypisuje domyślny dystans administracyjny (AD), który im niższa wartość, tym trasa bardziej zaufana:
+Skąd router wie, której trasie zaufać, jeśli tę samą sieć "widzi" jednocześnie ze statycznego wpisu i z protokołu dynamicznego? Każdemu źródłu informacji o trasach Cisco IOS przypisuje domyślny dystans administracyjny (AD), który im niższa wartość, tym trasa bardziej zaufana (Tabela 2):
 
+Tab. 2 Dystans administracyjny i jego wartości
 | Źródło trasy | Domyślny AD |
 |---|---|
 | Interfejs bezpośrednio podłączony (*connected*) | 0 |
@@ -85,8 +95,11 @@ topology={{
 />
 
 <StepByStep>
-<Step title="Konfiguracja interfejsów i Loopback">
+<Step title="Połączenie do urządzeń">
+Wykorzystaj kabel konsolowy wykonując połączenie: port konsolowy -> patchpanel w szafie Rack, z gniazda naściennego -> portu USB 3.0 przy pomocy kabla konsolowego. Następnie uruchom aplikacje **PuTTY** i połącz się z wybranym urządzeniem.
+</Step>
 
+<Step title="Konfiguracja interfejsów i Loopback">
 Zaadresuj interfejsy `R1` i `R2` zgodnie z topologią powyżej. Loopback 1 to dodatkowy, wirtualny interfejs routera — przydatny do testów, bo nie zależy od stanu żadnego kabla.
 
 <CodeBlock lines={[

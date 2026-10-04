@@ -10,6 +10,7 @@ import Step from '@site/src/components/Step';
 import EditableTable from '@site/src/components/EditableTable';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami
 
@@ -18,6 +19,13 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami"
   storageKey="cwiczenie-7"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-7"
+  storageKeys={['cwiczenie-7','cwiczenie-7-top', 'cwiczenie-7-top2', 'cwiczenie-7-izolacja', 'cwiczenie-7-izolacja2']}
+  sharedPrefix="cw7_"
 />
 
 ## I. Wprowadzenie
@@ -36,7 +44,7 @@ Każdy z portów może działać w jednym z dwóch trybów pracy (niektórzy pro
 
 ![Rys1](/img/7/802_1q.png)
 <div className="text-center">
-Rys.4 Żądanie - Odpowiedź [^claude]
+Rys.1 Żądanie - Odpowiedź [^claude]
 </div>
 
 ## II. Zadania do wykonania
@@ -46,7 +54,8 @@ Rys.4 Żądanie - Odpowiedź [^claude]
 <StepByStep>
 <Step title="Podłączenie do przełącznika">
 <TopologyBuilder
-  title="Topologia — PC1, PC2, SW"
+  title="Topologia"
+  storageKey="cwiczenie-7-top"
   topology={{
     vlan: { show: false, defaultVlan: '10', addressPattern: (x) => `172.16.${x}.1–252` },
     groups: [
@@ -112,12 +121,11 @@ Zweryfikuj przypisanie: `show vlan brief`.
 
 </Step>
 <Step title="Eksperyment: przepinanie kabli i sprawdzanie łączności pingiem">
-
-Sprawdźenie **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty są na tym samym przełączniku i w tej samej podsieci IP. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w tabeli:
+Sprawdźenie **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty są na tym samym przełączniku i w tej samej podsieci IP. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w Tabeli 1:
 
 <EditableTable
-  title="Wyniki testu izolacji VLAN"
-  storageKey="cwiczenie-12-izolacja"
+  title="Tab. 1 Wyniki testu izolacji VLAN"
+  storageKey="cwiczenie-7-izolacja"
   columns={[
     {key: 'zrodlo', label: 'Port źródłowy', readOnly: true},
     {key: 'cel', label: 'Port docelowy', readOnly: true},
@@ -135,7 +143,6 @@ Sprawdźenie **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty 
 />
 
 **Zanim przejdziesz dalej, możesz zaobserwować:** Mimo identycznej podsieci IP na wszystkich portach. To dochodzi do izolacji **na warstwie 2** dzięki wykorzystaniu VLAN, zanim adresacja IP w ogóle wejdzie do grę.
-
 </Step>
 </StepByStep>
 
@@ -150,6 +157,7 @@ Dla przełączników **nie pracujących w wartswie 3** (tam gdzie ROUTER), jedyn
 <Step title="Podłączenie do przełącznika">
 <TopologyBuilder
   title="Topologia — PC1, PC2, SW"
+  storageKey="cwiczenie-7-top2"
   topology={{
     vlan: { show: false, defaultVlan: '10', addressPattern: (x) => `172.16.${x}.1–252` },
     groups: [
@@ -220,11 +228,11 @@ W wyniku ```show ip route``` powinieneś zobaczyć obie sieci jako bezpośrednio
 </Step>
 
 <Step title="Weryfikacja izolacji i routingu między VLAN-owego - II">
-Sprawdzenie jak działa routing pomimo różncyh VLAN-ów. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w tabeli:
+Sprawdzenie jak działa routing pomimo różncyh VLAN-ów. Wykonaj kolejno pingi między parami portów, przepinając kabel/zmieniając, z którego hosta wysyłasz ping, i zapisz wynik w Tabeli 2:
 
 <EditableTable
-  title="Wyniki testu izolacji VLAN"
-  storageKey="cwiczenie-12-izolacja"
+  title="Tab. 2 Wyniki testu izolacji VLAN"
+  storageKey="cwiczenie-7-izolacja2"
   columns={[
     {key: 'zrodlo', label: 'Port źródłowy', readOnly: true},
     {key: 'cel', label: 'Port docelowy', readOnly: true},

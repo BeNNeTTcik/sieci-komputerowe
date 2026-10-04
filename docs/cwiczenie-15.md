@@ -23,6 +23,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 15: Projekt zaliczeniowy"
   storageKey="cwiczenie-15"
+  solo
 />
 
 <ProjectSaveLoad

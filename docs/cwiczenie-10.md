@@ -17,6 +17,7 @@ import EditableTable from '@site/src/components/EditableTable';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 import RingWeight from '@site/src/components/RingWeight';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 
 # Ćwiczenie 10: Routing dynamiczny — OSPF (single area)
 
@@ -25,6 +26,13 @@ _Część II — Zajęcia praktyczne_
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 10: Routing dynamiczny — OSPF (single area)"
   storageKey="cwiczenie-10"
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-10"
+  storageKeys={['cwiczenie-10','ospf-grupy-segment', 'ospf-checklist-loopback', 'ospf-ping-testy', 'ospf-ping-testy2', 'ospf', 'ospf-wnioski-koncowe']}
+  sharedPrefix="cw10_"
 />
 
 ## I. Wprowadzenie
@@ -80,6 +88,10 @@ topology={{
 />
 
 <StepByStep>
+<Step title="Połączenie do urządzeń">
+Wykorzystaj kabel konsolowy wykonując połączenie: port konsolowy -> patchpanel w szafie Rack, z gniazda naściennego -> portu USB 3.0 przy pomocy kabla konsolowego. Następnie uruchom aplikacje **PuTTY** i połącz się z wybranym urządzeniem.
+</Step>
+
 <Step title="Konfiguracja adresacji interfejsów i Loopback">
 
 Zaadresuj interfejsy routerów zgodnie z topologią powyżej.
@@ -126,10 +138,10 @@ items: [
 
 Podłącz patchkordy zgodnie z topologią, ustaw adresację i bramę domyślną na K1/K2 (brama = najbliższy interfejs routera).
 
-Z komputera K1 i K2 wykonaj kolejno `ping` na poniższe interfejsy:
+Z komputera K1 i K2 wykonaj kolejno `ping` na poniższe interfejsy (Tabela 1):
 
 <EditableTable
-title="Test łączności"
+title="Tab. 1 Test łączności"
 storageKey="ospf-ping-testy"
 columns={[
 { key: 'polecenie', label: 'Polecenie', readOnly: true },
@@ -185,11 +197,11 @@ Czy pojawiły się nowe sieci w tablicy routingu? Jeśli sąsiedztwo OSPF się n
 
 Powtórz na R2. Sprawdź ponownie `show ip route` — powinny pojawić się dodatkowe sieci oznaczone jako `O E2` (zewnętrzne OSPF), w tym sieci K1↔R1 i R2↔K2, które wcześniej nie były jawnie ogłoszone przez `network`.
 
-Powtórz komplet pingów K1 i K2. **Zanotuj, które wyniki się zmieniły.**
+Powtórz komplet pingów K1 i K2 (Tabela 2). **Zanotuj, które wyniki się zmieniły.**
 
 <EditableTable
-title="Test łączności"
-storageKey="ospf-ping-testy"
+title="Tab. 2 Test łączności"
+storageKey="ospf-ping-testy2"
 columns={[
 { key: 'polecenie', label: 'Polecenie', readOnly: true },
 { key: 'wynik', label: 'Wynik dla K1' },
@@ -209,10 +221,10 @@ initialRows={[
 
 <StepByStep>
 <Step title="Rozszerzenie OSPF na sąsiednie grupy">
+Ustal z sąsiednimi grupami numerację i wypełnij poniższą Tabele 3:
 
-Ustal z sąsiednimi grupami numerację i wypełnij poniższą tabele:
 <EditableTable
-title="Sieci między grupami — uzgodnij z sąsiadami"
+title="Tab. 3 Sieci między grupami — uzgodnij z sąsiadami"
 storageKey="ospf"
 allowAddRows={false}
 allowRemoveRows={false}
