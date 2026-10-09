@@ -1,4 +1,8 @@
-import React, {useState, Children} from 'react';
+import React, {useState, useRef, useEffect, useLayoutEffect, Children} from 'react';
+
+// useLayoutEffect ostrzega przy renderowaniu po stronie serwera (build Docusaurusa),
+// więc na serwerze używamy zwykłego useEffect.
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export default function StepByStep({children}) {
   const steps = Children.toArray(children);
@@ -6,7 +10,29 @@ export default function StepByStep({children}) {
   const [current, setCurrent] = useState(0);
   const [showAll, setShowAll] = useState(false);
 
+  // Zapobieganie "skakaniu" strony przy zmianie kroku: kroki mają różną
+  // wysokość, więc po kliknięciu "Dalej" karta się kurczy/rośnie i rząd
+  // przycisków ucieka spod kursora. Przed zmianą kroku zapamiętujemy pozycję
+  // rzędu przycisków względem okna, a zaraz po wyrenderowaniu nowego kroku
+  // (jeszcze przed malowaniem) dosuwamy scroll o różnicę — rząd przycisków
+  // zostaje dokładnie w tym samym miejscu na ekranie.
+  const navRef = useRef(null);
+  const anchorTopRef = useRef(null);
+
+  function goTo(next) {
+    if (navRef.current) anchorTopRef.current = navRef.current.getBoundingClientRect().top;
+    setCurrent(next);
+  }
+
+  useIsoLayoutEffect(() => {
+    if (anchorTopRef.current === null || !navRef.current) return;
+    const diff = navRef.current.getBoundingClientRect().top - anchorTopRef.current;
+    anchorTopRef.current = null;
+    if (diff !== 0) window.scrollBy(0, diff);
+  }, [current]);
+
   const card = {
+    overflowAnchor: 'none', // wyłącza wbudowane scroll anchoring przeglądarki — korekta robi to sama, inaczej scroll byłby poprawiany dwa razy
     border: '1px solid #e5e7eb',
     borderRadius: '16px',
     padding: '32px',
@@ -114,12 +140,12 @@ export default function StepByStep({children}) {
         </div>
       ))}
 
-      <div style={row} className="no-print">
+      <div style={row} className="no-print" ref={navRef}>
         {steps.map((_, i) => (
           <button
             key={i}
             style={pill(i === current)}
-            onClick={() => { setCurrent(i); setShowAll(false); }}
+            onClick={() => { goTo(i); setShowAll(false); }}
             aria-label={`Krok ${i + 1}`}
           >
             {i + 1}
@@ -133,14 +159,14 @@ export default function StepByStep({children}) {
         <div style={spacer} />
 
         {current > 0 && (
-          <button style={backBtn} onClick={() => setCurrent(c => c - 1)}>
+          <button style={backBtn} onClick={() => goTo(current - 1)}>
             Wstecz
           </button>
         )}
         <button
           style={nextBtn(current === total - 1)}
           disabled={current === total - 1}
-          onClick={() => setCurrent(c => Math.min(c + 1, total - 1))}
+          onClick={() => goTo(Math.min(current + 1, total - 1))}
         >
           Dalej
         </button>
@@ -152,7 +178,7 @@ export default function StepByStep({children}) {
             <div
               key={i}
               style={listItem(i === current)}
-              onClick={() => { setCurrent(i); setShowAll(false); }}
+              onClick={() => { goTo(i); setShowAll(false); }}
             >
               {i + 1}. {step.props.title}
             </div>
