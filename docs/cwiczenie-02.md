@@ -10,7 +10,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 
 # Ćwiczenie 2: Warstwa łącza danych
 
-*Część I — Model ISO/OSI*
+_Część I — Model ISO/OSI_
 
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 2: Warstwa łącza danych"
@@ -27,15 +27,17 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 - protokół ARP - mechanizm mapowania adresu IP na adres MAC, będący pomostem do warstwy 3.
 
 **Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części (Rysunek 1).
+
 </div>
 
 ![Rys1](/img/2/ramka.png)
+
 <div className="text-center">
 Rys. 1 Budowa ramki Ethernet [^claude]
 </div>
 
-- **Preambuła (7 B)** - ciąg naprzemiennych bitów ```1010...```, służy do synchronizacji zegara odbiornika z nadajnikiem; nie jest wliczana do długości ramki.
-- **SFD — Start Frame Delimiter (1 B)** - bajt ```10101011```, oznacza koniec preambuły i początek właściwej ramki.
+- **Preambuła (7 B)** - ciąg naprzemiennych bitów `1010...`, służy do synchronizacji zegara odbiornika z nadajnikiem; nie jest wliczana do długości ramki.
+- **SFD — Start Frame Delimiter (1 B)** - bajt `10101011`, oznacza koniec preambuły i początek właściwej ramki.
 - **MAC docelowy (6 B)** - fizyczny adres karty sieciowej odbiorcy (może być unicast, multicast lub broadcast).
 - **MAC źródłowy (6 B)** - fizyczny adres karty sieciowej nadawcy.
 - **Typ/Długość (2 B)** - w wersji Ethernet II pole to wskazuje protokół wyższej warstwy (EtherType, np. 0x0800 dla IPv4, 0x0806 dla ARP), gdy wartość jest ≥ 1536; w klasycznej ramce 802.3 to samo pole może oznaczać długość danych, gdy wartość jest mniejsza — obie interpretacje współistnieją w praktyce.
@@ -186,6 +188,7 @@ Pobierz niniejszą konfigurację ([konfiguracja SW](/files/SW.txt)).
 ![Rys1](/img/2/putty.png)
 
 Rys.1 Konfiguracja połączenia szeregowego [^putty]
+
 </div>
 
 3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
@@ -199,6 +202,7 @@ Na Rysunku 2 przedstawiono schemat połączenia komputerów (**PC1** i **PC2**) 
 ![Rys2](/img/2/siec.png)
 
 Rys.2 Schemat połączenie [^cisco]
+
 </div>
 </Step>
 </StepByStep>
@@ -207,15 +211,19 @@ Rys.2 Schemat połączenie [^cisco]
 
 <StepByStep>
 <Step title="Połączenie do przełącznika">
-W Wierszu polecenia wydaj polecenie ```telnet``` na adres IP przełącznika laboratoryjnego w zależnosci od stanowiska(Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ telnet IP_adres).
+Odłącz kabel konsolowy i wepnij ponownie biały kabel oraz odłącz kabel z portu konsolowego i podłącz do swojego (SW-X) przełącznika na jeden z pierwszych portów.
 
-Hasło do przełącznika to: ``` cisco ```.
+Nie zapomnij o zmianie adresu IP (Panel sterowania -> Sieć i Internet -> Centrum sieci i udostępniania -> karta sieciowa Ethernet2 lub Ethernet3 -> Właściwości -> IPv4) ustaw następujące parametry: **IP: 172.16.1.Y**, gdzye Y to numer stanowiska liczonego od komputera przy drzwiach oraz **Maska: 255.255.255.0** .
+
+W Wierszu polecenia wydaj polecenie `telnet` na adres IP przełącznika laboratoryjnego (172.16.1.253) w zależnosci od stanowiska(Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ telnet IP_adres).
+
+Hasło do przełącznika to: `cisco`.
 </Step>
 
 <Step title="Tryb uprzywilejowany">
 Przejście do trybu umożliwiającego wyświetlanie większej części konfiguracji przełącznika (tzw. trybu uprzywilejowanego), odbywa sie przy pomocy polecenia ```enable```.
 
-Ponowanie należy podać hasło: ```cisco```.
+Ponowanie należy podać hasło: `cisco`.
 </Step>
 
 <Step title="Wyświetl tablicę MAC adresów">
