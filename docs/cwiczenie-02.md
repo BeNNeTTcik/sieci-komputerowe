@@ -26,7 +26,7 @@ _Część I — Model ISO/OSI_
 - adres MAC - unikalny adres fizyczny karty sieciowej wykorzystywany do przełączania ramek,
 - protokół ARP - mechanizm mapowania adresu IP na adres MAC, będący pomostem do warstwy 3.
 
-**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rys1) wraz z opisem poszczególnych jej części (Rysunek 1).
+**Ramka Ethernet** jest zdefiniowana przez standard IEEE 802.3 (aktualnie IEEE Std 802.3-2018), który określa format ramki warstwy łącza danych stosowany w sieciach przewodowych Ethernet [^802.3]. Poniżej przedstawiono budowę ramki Ethernet (Rysunek 1) wraz z opisem poszczególnych jej części.
 
 </div>
 
@@ -66,38 +66,43 @@ Aby wiedzieć, które urządzenie podłączone jest do którego portu, tj. do kt
 
 <StepByStep>
 <Step title="Przechwyć ruch sieciowy pochodzący z prostej komunikacji sieciowej">
-Otwórz program Wireshark i rozpocznij przechwytywanie ruchu sieciowego na karcie sieciowej LAB (Ethernet1 lub Ethernet0).
+Weryfikacja karty sieciowej: (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i podajemy komendę ipconfig. Następnie wyszukujemy "Ethernet adapter Ethernet" - jest to interfejs z wyjsciem do internetu (IP: 10.X.X.X). Natomiast część laboratoryjna obłsugiwana jest przez "Ethernet adapter Ethernet 2" (Rysunek 2).
+<div className="text-center">
+![Rys2](/img/2/ipconfig.png)
+Rys.2 Komenda ipconfig
+</div>
+Otwórz program **Wireshark** i rozpocznij przechwytywanie ruchu sieciowego na karcie laboratoryjnej.
 </Step>
 
 <Step title="Filtrowanie po ICMP">
-Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP (Rysunek 2).
+Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP (Rysunek 3).
 ```
 Filtr wyświetlania: icmp
 ```
 
 <div className="text-center">
-![Rys2](/img/2/zad1_2.png)
-Rys.2 Fitrowanie w Wireshark [^wireshark]
+![Rys3](/img/2/zad1_2.png)
+Rys.3 Fitrowanie w Wireshark [^wireshark]
 </div>
 </Step>
 
 <Step title="Wygeneruj ruch sieciowy">
-Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Rysunek 3).
+Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Rysunek 4).
 ```bash
 ping <IP>
 ```
 <div className="text-center">
-![Rys3](/img/2/zad1_3.png)
-Rys.3 Komenda ping [^wireshark]
+![Rys4](/img/2/zad1_3.png)
+Rys.4 Komenda ping [^wireshark]
 </div>
 </Step>
 
 <Step title="Weryfikacja wyników">
-Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 4).
+Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 5).
 
 <div className="text-center">
-![Rys4](/img/2/zad1_4.png)
-Rys.4 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+![Rys5](/img/2/zad1_4.png)
+Rys.5 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki" />
@@ -105,15 +110,15 @@ Rys.4 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet I">
-Zaznacz pierwszą przechwyconą ramkę (zawierającą wysłany od Ciebie Echo (ping) request) i rozwiń w środkowej części okna drugą sekcję, która odpowiada za nagłówkowi protokołu Ethernet (Rysunek 5).
+Zaznacz pierwszą przechwyconą ramkę (zawierającą wysłany od Ciebie Echo (ping) request) i rozwiń w środkowej części okna drugą sekcję, która odpowiada za nagłówkowi protokołu Ethernet (Rysunek 6).
 
 - Porównaj docelowy adres MAC z adresem MAC komputera sąsiada (można go wyświelić poleceniem ipconfig/all w Wierszu polecenia).
 - Porównaj źródłowy adres MAC z adresem MAC swojego komputera.
 - Wireshark nie wyświetla informacji o sumie kontrolnej.
 
 <div className="text-center">
-![Rys5](/img/2/zad1_5.png)
-Rys.5 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+![Rys6](/img/2/zad1_5.png)
+Rys.6 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwycona ramka Echo Request" />
@@ -121,11 +126,11 @@ Rys.5 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </Step>
 
 <Step title="Przyjrzyj się strukturze ramki protokołu Ethernet II">
-Zaznacz drugą przechwyconą ramkę (Echo (ping) reply, będącą odpowiedzią na Twojego requesta) i zaobserwuj, jak zmienił się adres źródłowy i docelowy (Rysunek 6).
+Zaznacz drugą przechwyconą ramkę (Echo (ping) reply, będącą odpowiedzią na Twojego requesta) i zaobserwuj, jak zmienił się adres źródłowy i docelowy (Rysunek 7).
 
 <div className="text-center">
-![Rys6](/img/2/zad1_6.png)
-Rys.6 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+![Rys7](/img/2/zad1_6.png)
+Rys.7 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </div>
 
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki Echo Reply" />
@@ -137,7 +142,7 @@ Rys.6 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 
 <StepByStep>
 <Step title="Możliwości protokołu ARP">
-Uruchom Wiersz polecenia systemu Windows (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i wydaj polecenie ```arp /?```. Zobaczysz wszystkie dostępne opcje dla komendy **ARP** na Twoim komputerze.
+Uruchom Wiersz polecenia systemu Windows (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ **Uruchom jako administrator**) i wydaj polecenie ```arp /?```. Zobaczysz wszystkie dostępne opcje dla komendy **ARP** na Twoim komputerze.
 ```
 arp /?
 ```
@@ -174,36 +179,47 @@ Jeśli zaobserwujesz pojedyncze wpisy oznacza to, że poprawnie wykonano ćwicze
 ### Wgranie wstępnej konfiguracji na urządzenie
 
 <StepByStep>
-<Step title="Konfiguracja przełącznika do pobrania">
-Sprawdź opis na scianie do którego podłączony jest Twój komputer (gniazdo **LPD/Y**). Podłączenie konsoli SW w zależności od grupy -> patchpanelu pod gnizado LPD/Y i następnie kabel konsolowy podłączamy w gniazdo ścienne LPDF/Y i USB pod port **USB 3.0**.
+<Step title="Podłączenie - I">
+Kabel konsolowy (niebieski) podłączyć do gniazda **LPD/Y** w miejsce białego patchcorda (Rysunek 8).
 
-Pobierz niniejszą konfigurację ([konfiguracja SW](/files/SW.txt)).
+<div className="text-center">
+![Rys8](/img/2/podlaczenie1.png)
+Rys. 8 Podłączenie kabla konsolowego do gniazda 
+</div>
+</Step>
+
+<Step title="Podłączenie - II">
+Drugą część kabla konsolowego podłącz do portu **USB 3.0** na komputerze tak jak na Rysunku 9.
+
+<div className="text-center">
+![Rys9](/img/2/podlaczenie2.png)
+Rys. 9 Podłączenie kabla konsolowego do portu USB 3.0
+</div>
+</Step>
+
+<Step title="Podłączenie - III">
+Przy szafie RACK trzeba połączyć gniazdo scienne, gdzie opisy są zgodne z tymi przy komputerach jako **LPD/Y** na patchpanelu. Drugą kńcówke podłączamy do patchanelu z opsiem "Porty konsolowe", gdzie SW-X. "X" oznacza numer grupy. (Rysunek 10)
+
+<div className="text-center">
+![Rys10](/img/2/podlaczenie3.png)
+Rys. 10 Podłączenie gniazda z portem konsolowym switcha
+</div>
 </Step>
 
 <Step title="Wgranie konfiguracji urządzenia">
 1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
-2. Uruchom **PuTTY** i skonfiguruj połączenie:
+2. Uruchom **PuTTY** i skonfiguruj połączenie (Connection -> Serial) (Rysunek 11):
 
 <div className="text-center">
-![Rys1](/img/2/putty.png)
+![Rys11](/img/2/putty.png)
 
-Rys.1 Konfiguracja połączenia szeregowego [^putty]
-
-</div>
-
-3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
-
-Wpisz komendę `enable`, następnie `configure terminal` i wklej konfigurację w terminalu.
-</Step>
-
-<Step title="Podłączenie">
-Na Rysunku 2 przedstawiono schemat połączenia komputerów (**PC1** i **PC2**) do **SW**.
-<div className="text-center">
-![Rys2](/img/2/siec.png)
-
-Rys.2 Schemat połączenie [^cisco]
+Rys. 11 Konfiguracja połączenia szeregowego [^putty]
 
 </div>
+4. Przejdz do zakładki "Session" -> wybierz Serial -> wprowadz port COM zgodny z tym z **Menedżer urządzeń** i następnie kliknij "Open"
+3. Aby zaobserwaować komunikacje kilknij **Enter**.
+
+Po podłączeniu wpisz komendę `enable`, następnie `configure terminal` i wklej [konfiguracje SW](/files/SW.txt) w terminalu z nieniejszcego linku.
 </Step>
 </StepByStep>
 
@@ -211,16 +227,22 @@ Rys.2 Schemat połączenie [^cisco]
 
 <StepByStep>
 <Step title="Połączenie do przełącznika">
-Odłącz kabel konsolowy i wepnij ponownie biały kabel oraz odłącz kabel z portu konsolowego i podłącz do swojego (SW-X) przełącznika na jeden z pierwszych portów.
+Odłącz kabel konsolowy (niebieski) i wepnij ponownie biały kabel do gniazda na ścianie. Odłącz kabel z portu konsolowego i podłącz do swojego (SW-X) przełącznika na jeden z pierwszych portów (Rysunek 12).
 
-Nie zapomnij o zmianie adresu IP (Panel sterowania -> Sieć i Internet -> Centrum sieci i udostępniania -> karta sieciowa Ethernet2 lub Ethernet3 -> Właściwości -> IPv4) ustaw następujące parametry: **IP: 172.16.1.Y**, gdzye Y to numer stanowiska liczonego od komputera przy drzwiach oraz **Maska: 255.255.255.0** .
+<div className="text-center">
+![Rys12](/img/2/podlaczenie4.png)
 
-W Wierszu polecenia wydaj polecenie `telnet` na adres IP przełącznika laboratoryjnego (172.16.1.253) w zależnosci od stanowiska(Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ telnet IP_adres).
+Rys. 12 Podłączenie patchpanel z portem na SW 
+</div>
 
-Hasło do przełącznika to: `cisco`.
+Nie zapomnij o zmianie adresu IP (Panel sterowania -> Sieć i Internet -> Centrum sieci i udostępniania -> Zmień ustawienia karty sieciowej -> Ethernet2 -> PPM -> Właściwości -> Protokół internetowy w wersji 4 TCP/IPv4) ustaw następujące parametry: **IP: 172.16.1.Y**, gdzye Y to numer stanowiska liczonego od komputera przy drzwiach oraz **Maska: 255.255.255.0**.
 </Step>
 
 <Step title="Tryb uprzywilejowany">
+W Wierszu polecenia wydaj polecenie `telnet` na adres IP przełącznika laboratoryjnego (172.16.1.253) (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ telnet IP_adres).
+
+Hasło do przełącznika to: `cisco`.
+
 Przejście do trybu umożliwiającego wyświetlanie większej części konfiguracji przełącznika (tzw. trybu uprzywilejowanego), odbywa sie przy pomocy polecenia ```enable```.
 
 Ponowanie należy podać hasło: `cisco`.
@@ -276,7 +298,7 @@ To, że przełącznik posiada skonfigurowany adres IP (3. warstwy), nie oznacza,
 :::
 
 :::danger Przywracanie domyślnej konfiguracji
-**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
+**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami. Ustaw parametry karty sieciowej jako "Uzyskaj adres IP automatycznie"
 :::
 
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
