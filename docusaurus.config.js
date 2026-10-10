@@ -1,28 +1,21 @@
 // @ts-check
-// UWAGA: zmień poniższe trzy pola (url, organizationName, projectName)
-// tak, aby pasowały do Twojego konta i repozytorium na GitHub.
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Sieci komputerowe',
-  tagline: 'Instrukcje laboratoryjne — model ISO/OSI i konfiguracja sieci',
+  title: 'Moje kursy',
+  tagline: 'Instrukcje laboratoryjne i materiały dydaktyczne',
   favicon: 'img/favicon.ico',
 
-  // === USTAWIENIA GITHUB PAGES — DOSTOSUJ DO SIEBIE ===
-  // Jeśli repo nazywa się np. "sieci-komputerowe", a Twój login GitHub
-  // to "jan-kowalski", strona będzie dostępna pod:
-  // https://jan-kowalski.github.io/sieci-komputerowe/
   url: 'https://TWOJ-LOGIN.github.io',
-  baseUrl: '/sieci-komputerowe/',
-  organizationName: 'TWOJ-LOGIN',       // Twoja nazwa użytkownika/organizacji na GitHub
-  projectName: 'sieci-komputerowe',     // nazwa repozytorium
+  baseUrl: '/sieci-komputerowe/',       // musi = nazwa repozytorium
+  organizationName: 'TWOJ-LOGIN',
+  projectName: 'sieci-komputerowe',
   trailingSlash: false,
 
   onBrokenLinks: 'warn',
-  
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: 'warn',   // ← nowe miejsce
+      onBrokenMarkdownLinks: 'warn',
     },
   },
 
@@ -37,15 +30,26 @@ const config = {
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
-          routeBasePath: '/', // dokumentacja jako strona główna
-          sidebarPath: './sidebars.js',
-          editUrl: undefined,
+          id: 'sieci',
+          path: 'docs-sieci',
+          routeBasePath: 'sieci',                 
+          sidebarPath: './sidebars-sieci.js',
         },
         blog: false,
-        theme: {
-          customCss: './src/css/custom.css',
-        },
+        theme: { customCss: './src/css/custom.css' },
       }),
+    ],
+  ],
+
+  plugins: [
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'administrowanie-sieciami',
+        path: 'docs-po-adm-sieci',
+        routeBasePath: 'administrowanie-sieciami',
+        sidebarPath: './sidebars-po-adm-sieci.js',
+      },
     ],
   ],
 
@@ -53,33 +57,22 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'Sieci komputerowe',
-        logo: {
-          alt: 'Logo kursu',
-          src: 'img/logo.svg',
-        },
+        title: 'Moje kursy',
         items: [
-          {
-            type: 'docSidebar',
-            sidebarId: 'cwiczeniaSidebar',
-            position: 'left',
-            label: 'Ćwiczenia',
-          },
-          {
-            href: 'https://github.com/BeNNeTTcik',
-            label: 'GitHub',
-            position: 'right',
-          },
+          { to: '/', label: 'Start', position: 'left' },
+          { type: 'docSidebar', docsPluginId: 'sieci', sidebarId: 'cwiczeniaSidebar', label: 'Sieci komputerowe', position: 'left' },
+          { type: 'docSidebar', docsPluginId: 'administrowanie-sieciami', sidebarId: 'administrowanie-sieciamiSidebar', label: 'Administrowanie sieciami', position: 'left' },
         ],
       },
       footer: {
         style: 'dark',
         links: [
           {
-            title: 'Kurs',
+            title: 'Kursy',
             items: [
               { label: 'Strona główna', to: '/' },
-              { label: 'Ćwiczenie 1', to: '/cwiczenie-01' },
+              { label: 'Sieci komputerowe', to: '/sieci/intro' },
+              { label: 'Administrowanie sieciami', to: '/administrowanie-sieciami/intro' },
             ],
           },
         ],
