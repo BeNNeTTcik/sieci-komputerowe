@@ -124,8 +124,9 @@ Rys.2 Mechanizm wykorzystania bramy domyślnej [^comer][^claude]
 
 ---
 
-**ICMP (Internet Control Message Protocol)** to protokół towarzyszący IP, zdefiniowany w RFC 792 [^RFC792], służący do przesyłania komunikatów kontrolnych i błędów, a nie danych użytkownika. ICMP nie ma portów ani sesji, komunikaty ICMP są zwykle generowane automatycznie przez stos sieciowy w reakcji na problem z dostarczeniem pakietu IP.
+**ICMP (Internet Control Message Protocol)** to protokół towarzyszący IP, zdefiniowany w RFC 792 [^RFC792], służący do przesyłania komunikatów kontrolnych i błędów, a nie danych użytkownika. ICMP nie ma portów ani sesji, komunikaty ICMP są zwykle generowane automatycznie przez stos sieciowy w reakcji na problem z dostarczeniem pakietu IP (Tabela 1).
 
+Tab. 1 Komunikaty ICMP
 | Typ     | Nazwa     | Zastosowanie |
 |---------|---------|-----------------------|
 | 0/8       | Echo Reply/Echo Request    | polecenie **ping** - sprawdzenie osiągalności hosta             |
@@ -182,7 +183,7 @@ A8<sub>16</sub> = 10 · 16<sup>1</sup> + 8 · 16<sup>0</sup> = 160 + 8 = 168
 <StepByStep>
 
 <Step title="Odczytanie konfiguracji IP">
-Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji (adres 10.114.202.x - Ethernet0) (Rysunek 3). Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i  wypełnij tabellę.
+Sprawdź aktualną konfigurację adresu IP, maski i bramy domyślnej swojej stacji (adres 10.x.x.x - Ethernet1) (Rysunek 3). Wykorzystując polecenie w **Wierszu poleceń** (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i wypełnij Tabelę 2.
 
 ```bash
 ipconfig /all
@@ -194,7 +195,7 @@ Rys.3 Komenda ipconfig
 </div>
 
 <EditableTable
-  title="Konfiguracja karty sieciowej"
+  title="Tab.2 Konfiguracja karty sieciowej"
   storageKey="tabela"
   columns={[
     {key: 'parametr', label: 'Parametr', readOnly: true},
@@ -267,9 +268,9 @@ Filtr wyświetlania: icmp
 Rys.6 Filtrowanie pakietów w Wireshark [^wireshark]
 </div>
 
-Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **Internet Protocol Version 4**.
+Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **Internet Protocol Version 4** i wypełnij poniższą Tabele 3.
 <EditableTable
-  title="Wpisz odpowiednie parametry z sekcji Internet Protocol Version 4"
+  title="Tab. 3 Parametry sekcji Internet Protocol Version 4"
   storageKey="tabela2"
   columns={[
     {key: 'parametr', label: 'Parametr', readOnly: true},
@@ -292,10 +293,6 @@ Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **In
 
 </Step>
 </StepByStep>
-
-:::danger Przywracanie domyślnej konfiguracji
-**ZAWSZE** po zakończonej pracy pozostaw stanowisko z domyślnymi ustawieniami.
-:::
 
 [^RFC791]: IETF, [RFC 791](https://www.rfc-editor.org/info/rfc791/) — Internet Protocol.
 
