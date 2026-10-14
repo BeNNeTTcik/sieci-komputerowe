@@ -327,6 +327,97 @@ export default function EditableTable({title, columns, initialRows, allowAddRows
     if (deriveCfg) deriveAndWriteShared(deriveCfg, value);
   }
 
+  // --- Wypełnianie wielu komórek naraz ----------------------------------------
+  // Dwie drogi, obie przez `applyCells`:
+  //  1) wklejenie (Ctrl+V) tekstu z tabulatorami/nowymi liniami do dowolnej
+  //     komórki — np. zaznaczona tabela ze strony, zakres z Excela/Arkuszy.
+  //     Kolejne kolumny wklejanego tekstu trafiają do kolejnych EDYTOWALNYCH
+  //     kolumn (od tej, w którą wklejono), kolejne linie — do kolejnych wierszy;
+  //  2) zdarzenie `editable-table-fill` wysłane przez inny komponent (np.
+  //     <DesignScenario copyToTable="..."/>) z `detail = {storageKey, rows}`,
+  //     gdzie `rows` to tablica obiektów {kluczKolumny: wartość}.
+  // Brakujące wiersze są dodawane tylko wtedy, gdy `allowAddRows` jest włączone.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  function applyCells(updates, {replace = false} = {}) {
+    // updates: [{rowIndex, colKey, value}]
+    const current = rowsRef.current;
+    let next = replace
+      ? current.map(r => {
+          const cleared = {...r};
+          editableKeys.forEach(k => { cleared[k] = ''; });
+          return cleared;
+        })
+      : current.map(r => ({...r}));
+    const maxRow = updates.reduce((m, u) => Math.max(m, u.rowIndex), -1);
+    if (allowAddRows) {
+      while (next.length <= maxRow) next.push(makeEmptyRow(columns));
+    }
+    const touched = [];
+    updates.forEach(({rowIndex, colKey, value}) => {
+      if (rowIndex >= next.length || !editableKeys.includes(colKey)) return;
+      next[rowIndex][colKey] = String(value ?? '');
+      touched.push({rowIndex, colKey});
+    });
+    if (replace) {
+      // Puste wiersze na końcu (po wymazaniu) usuwamy, jeśli wolno usuwać wiersze.
+      if (allowRemoveRows) {
+        while (next.length > Math.max(1, maxRow + 1) &&
+               editableKeys.every(k => String(next[next.length - 1][k] ?? '').trim() === '')) {
+          next.pop();
+        }
+      }
+    }
+    setRows(next);
+    setChecked(false);
+    touched.forEach(({rowIndex, colKey}) => {
+      const row = next[rowIndex];
+      const sharedKey = getSharedKey(row, colKey);
+      if (sharedKey) writeSharedField(sharedKey, row[colKey]);
+      const deriveCfg = getDeriveSharedConfig(row, colKey);
+      if (deriveCfg) deriveAndWriteShared(deriveCfg, row[colKey]);
+    });
+    return touched.length;
+  }
+
+  function handlePaste(e, rowIndex, colKey) {
+    const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+    if (!text || (!text.includes('\t') && !text.replace(/[\r\n]+$/, '').includes('\n'))) return; // zwykłe wklejenie do jednej komórki
+    e.preventDefault();
+    const lines = text.replace(/\r/g, '').replace(/\n+$/, '').split('\n');
+    const startCol = editableKeys.indexOf(colKey);
+    const updates = [];
+    lines.forEach((line, li) => {
+      line.split('\t').forEach((cell, ci) => {
+        const key = editableKeys[startCol + ci];
+        if (key) updates.push({rowIndex: rowIndex + li, colKey: key, value: cell.trim()});
+      });
+    });
+    applyCells(updates);
+  }
+
+  useEffect(() => {
+    if (!storageKey) return undefined;
+    function onFill(e) {
+      const d = e.detail || {};
+      if (d.storageKey !== storageKey || !Array.isArray(d.rows)) return;
+      const hasData = rowsRef.current.some(r => editableKeys.some(k => String(r[k] ?? '').trim() !== ''));
+      if (hasData && typeof window !== 'undefined' &&
+          !window.confirm('Tabela „' + (title || storageKey) + '” ma już wpisane dane. Zastąpić je?')) {
+        return;
+      }
+      const updates = [];
+      d.rows.forEach((obj, ri) => {
+        Object.entries(obj || {}).forEach(([colKey, value]) => updates.push({rowIndex: ri, colKey, value}));
+      });
+      applyCells(updates, {replace: true});
+    }
+    window.addEventListener('editable-table-fill', onFill);
+    return () => window.removeEventListener('editable-table-fill', onFill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
   function addRow() {
     setRows(prev => [...prev, makeEmptyRow(columns)]);
     setChecked(false);
@@ -481,6 +572,7 @@ export default function EditableTable({title, columns, initialRows, allowAddRows
                       type="text"
                       value={row[c.key] || ''}
                       onChange={e => setCell(rowIndex, c.key, e.target.value)}
+                      onPaste={e => handlePaste(e, rowIndex, c.key)}
                       placeholder={typeof c.placeholder === 'function' ? c.placeholder(row, rowIndex) : (c.placeholder || '')}
                       style={inputStyle(checked && expected !== undefined ? status : (filled ? (isDuplicate ? false : true) : null), false)}
                     />
