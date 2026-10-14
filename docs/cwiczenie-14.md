@@ -4,6 +4,7 @@ title: "Ćwiczenie 14: Projektowanie adresacji IP i podział na podsieci"
 ---
 
 <!--- import bibliotek -->
+
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 import DesignScenario from '@site/src/components/DesignScenario';
@@ -18,7 +19,7 @@ import Question from '@site/src/components/Question';
 
 # Ćwiczenie 14: Projektowanie adresacji IP i podział na podsieci
 
-*Część II — Zajęcia praktyczne*
+_Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
   exerciseTitle="Ćwiczenie 14: Projektowanie adresacji IP i podział na podsieci"
@@ -27,10 +28,10 @@ import Question from '@site/src/components/Question';
 />
 
 <ProjectSaveLoad
-  title="Zapisz / wczytaj postęp ćwiczenia"
-  fileNamePrefix="cwiczenie14"
-  storageKeys={['cwiczenie-14',]}
-  sharedPrefix="cw14_"
+title="Zapisz / wczytaj postęp ćwiczenia"
+fileNamePrefix="cwiczenie14"
+storageKeys={['cwiczenie-14',]}
+sharedPrefix="cw14\_"
 />
 
 ## I. Wprowadzenie
@@ -38,6 +39,7 @@ import Question from '@site/src/components/Question';
 Każda osoba dostaje inną organizację o innym kształcie sieci dla której trzeba przygotować podział na VLAN-y, adresację IP, połączenia między urządzeniami i zasady dostępu w Cisco Packet Tracer.
 
 ### Projektowanie
+
 <div className="justify">
 Sieci nie projektuje się od wyboru przełącznika, tylko od pytań o potrzeby: kto będzie z niej korzystał, ile jest urządzeń teraz i za kilka lat, które grupy muszą się ze sobą komunikować, a które powinny być od siebie odcięte. Z odpowiedzi wynika podział na segmenty, z segmentów otrzymujemy ilość podsieci, a dopiero na końcu dobór urządzeń i konfiguracja. Odwrócenie tej kolejności kończy się siecią, która „działa”, ale nie spełnia wymagań bezpieczeństwa albo nie mieści nowych użytkowników [^oppenheimer].
 </div>
@@ -47,16 +49,18 @@ Sieci nie projektuje się od wyboru przełącznika, tylko od pytań o potrzeby: 
 Tab. 1 Projektowanie sieci warstwowo [^cisco-enterprise]
 | Warstwa | Rola | Typowe urzadzenia w małej sieci |
 |---|---|---|
-| **Dostępu** (*access*) | podłączenie użytkowników, przydział portów do VLAN-ów | przełączniki na piętrach |
-| **Dystrybucji** (*distribution*) | routing między VLAN-ami, listy ACL, agregacja przełączników dostępowych | router (router-on-a-stick) albo przełącznik warstwy 3 |
-| **Rdzenia** (*core*) | szybki transport między częściami sieci | w małej organizacji łączony z dystrybucją |
+| **Dostępu** (_access_) | podłączenie użytkowników, przydział portów do VLAN-ów | przełączniki na piętrach |
+| **Dystrybucji** (_distribution_) | routing między VLAN-ami, listy ACL, agregacja przełączników dostępowych | router (router-on-a-stick) albo przełącznik warstwy 3 |
+| **Rdzenia** (_core_) | szybki transport między częściami sieci | w małej organizacji łączony z dystrybucją |
 
 ### Segmentacja
+
 <div className="justify">
 Urządzenia grupuje się w VLAN-y według **funkcji i zasad dostępu**, a nie według tego, gdzie się znajdują. Kamery, sieć gości, telefony i urządzenia zarządzające trafiają do osobnych VLAN-ów, bo obowiązują je inne reguły niż komputery pracowników. Ruch między VLAN-ami przechodzi przez router (lub zostaje na urządzeniu, które routuje między VLAN-ami), a tam można go filtrować listami ACL. Sam podział na VLAN-y niczego nie blokuje, dopóki na routerze nie ma ACL.
 </div>
 
 ### Adresacja jako decyzja projektowa
+
 <div className="justify">
 W sieci prywatnej adresów jest dużo, więc projektant nie oszczędza każdego adresu, tylko dąży do przewidywalności:
 </div>
@@ -66,6 +70,7 @@ W sieci prywatnej adresów jest dużo, więc projektant nie oszczędza każdego 
 - **Infrastruktura też ma adresy.** - łącza między routerami, interfejsy Loopback, adresy zarządzania przełączników, stałe adresy serwerów i drukarek oraz zakresy DHCP muszą być w planie, zanim zacznie się konfiguracja.
 
 ### Najczęstsze błędy w projektach studenckich
+
 - VLAN-y wydzielone według pomieszczeń zamiast według zasad dostępu.
 - Rozmiar podsieci dobrany do dzisiejszej liczby urządzeń.
 - Brak adresów dla łączy między routerami, Loopbacków i zarządzania przełącznikami.
@@ -87,17 +92,17 @@ Należy przenieść dane ze scenariusza do tabeli: kliknij **"Kopiuj tabele"** p
 Następnie policz, ile urządzeń będzie w każdej grupie po zakładanym wzroście (zaokrąglijcie w górę). W kolumnie „Uwagi” zapisz wszystko, co może wpłynąć na projekt: grupa jest w kilku miejscach, ma szczególne wymagania, będzie dużo większa od innych. Tabelę 2 można dowolnie poprawiać: dzielić grupy, łączyć je, dopisywać nowe.
 
 <EditableTable
-  title="Tab. 2 Wymagania docelowe"
-  storageKey="proj14-wymagania"
-  columns={[
-    { key: 'grupa', label: 'Grupa' },
-    { key: 'gdzie', label: 'Gdzie' },
-    { key: 'dzis', label: 'Dziś' },
-    { key: 'dostep', label: 'Wymagania dostępu' },
-    { key: 'docelowo', label: 'Docelowo (po wzroście)' },
-    { key: 'uwagi', label: 'Uwagi' },
-  ]}
-  initialRows={[{}, {}, {}]}
+title="Tab. 2 Wymagania docelowe"
+storageKey="proj14-wymagania"
+columns={[
+{ key: 'grupa', label: 'Grupa' },
+{ key: 'gdzie', label: 'Gdzie' },
+{ key: 'dzis', label: 'Dziś' },
+{ key: 'dostep', label: 'Wymagania dostępu' },
+{ key: 'docelowo', label: 'Docelowo (po wzroście)' },
+{ key: 'uwagi', label: 'Uwagi' },
+]}
+initialRows={[{}, {}, {}]}
 />
 </Step>
 
@@ -105,24 +110,24 @@ Następnie policz, ile urządzeń będzie w każdej grupie po zakładanym wzroś
 Trzeba określić, ile VLAN-ów potrzebujesz i które grupy do nich trafią. Dwie grupy mogą dzielić VLAN tylko wtedy, gdy obowiązują je **identyczne** zasady dostępu. W kolumnie „Przełączniki” wpisz, na których przełącznikach VLAN musi istnieć. Mówi to które trunki muszą go przepuszczać. Wypełnij danymi Tabele 3.
 
 <EditableTable
-  title="Tab. 3 Plan VLAN"
-  storageKey="proj14-vlan"
-  columns={[
-    { key: 'vlan', label: 'Numer VLAN', checkDuplicates: true },
-    { key: 'nazwa', label: 'Nazwa', checkDuplicates: true },
-    { key: 'grupy', label: 'Grupy w tym VLAN-ie' },
-    { key: 'przelaczniki', label: 'Przełączniki' },
-    { key: 'uzasadnienie', label: 'Dlaczego osobny VLAN' },
-  ]}
-  initialRows={[{}, {}, {}]}
+title="Tab. 3 Plan VLAN"
+storageKey="proj14-vlan"
+columns={[
+{ key: 'vlan', label: 'Numer VLAN', checkDuplicates: true },
+{ key: 'nazwa', label: 'Nazwa', checkDuplicates: true },
+{ key: 'grupy', label: 'Grupy w tym VLAN-ie' },
+{ key: 'przelaczniki', label: 'Przełączniki' },
+{ key: 'uzasadnienie', label: 'Dlaczego osobny VLAN' },
+]}
+initialRows={[{}, {}, {}]}
 />
 
 <KeywordAnswer
-  title="Dlaczego nie VLAN 1?"
-  question="Dlaczego nie należy używać VLAN 1 dla żadnej grupy użytkowników ani do zarządzania?"
-  keywords={['domyśln', 'domysln', 'default']}
-  explanation="VLAN 1 jest domyślnym VLAN-em każdego portu przełącznika Cisco i domyślnym VLAN-em natywnym na trunkach. Każde nowo podłączone lub nieskonfigurowane urządzenie trafia do niego automatycznie, więc ruch użytkowników albo zarządzanie w VLAN 1 byłyby dostępne dla każdego, kto wepnie się w wolny port."
-  storageKey="proj14-vlan1"
+title="Dlaczego nie VLAN 1?"
+question="Dlaczego nie należy używać VLAN 1 dla żadnej grupy użytkowników ani do zarządzania?"
+keywords={['domyśln', 'domysln', 'default']}
+explanation="VLAN 1 jest domyślnym VLAN-em każdego portu przełącznika Cisco i domyślnym VLAN-em natywnym na trunkach. Każde nowo podłączone lub nieskonfigurowane urządzenie trafia do niego automatycznie, więc ruch użytkowników albo zarządzanie w VLAN 1 byłyby dostępne dla każdego, kto wepnie się w wolny port."
+storageKey="proj14-vlan1"
 />
 </Step>
 
@@ -147,31 +152,31 @@ Zanim wpiszesz jakikolwiek adres, ustal **regułę**, z której adresy wynikają
 Zastosuj regułę do każdego VLAN-u w Tabeli 4.
 
 <EditableTable
-  title="Tab. 4 Plan adresacji podsieci użytkowników"
-  storageKey="proj14-adresacja"
-  columns={[
-    { key: 'vlan', label: 'VLAN' },
-    { key: 'v4', label: 'Podsieć (CIDR)', checkDuplicates: true },
-    { key: 'maska', label: 'Maska' },
-    { key: 'gw4', label: 'Brama', checkDuplicates: true },
-    { key: 'hosty', label: 'Hostów w podsieci / potrzeba' },
-    { key: 'dhcp', label: 'Zakres DHCP / adresy stałe' },
-  ]}
-  initialRows={[{}, {}, {}]}
+title="Tab. 4 Plan adresacji podsieci użytkowników"
+storageKey="proj14-adresacja"
+columns={[
+{ key: 'vlan', label: 'VLAN' },
+{ key: 'v4', label: 'Podsieć (CIDR)', checkDuplicates: true },
+{ key: 'maska', label: 'Maska' },
+{ key: 'gw4', label: 'Brama', checkDuplicates: true },
+{ key: 'hosty', label: 'Hostów w podsieci / potrzeba' },
+{ key: 'dhcp', label: 'Zakres DHCP / adresy stałe' },
+]}
+initialRows={[{}, {}, {}]}
 />
 
 Teraz infrastruktura. Wszystko, co nie jest siecią użytkowników należy wpisac do Tabeli 5: łącza między routerami (także do ISP), interfejsy Loopback, adresy zarządzania przełączników (interfejs SVI w VLAN-ie zarządzania), stałe adresy serwerów i urządzeń, do których odwołują się reguły dostępu.
 
 <EditableTable
-  title="Tab. 5 Adresy infrastruktury i urządzeń stałych"
-  storageKey="proj14-infrastruktura"
-  columns={[
-    { key: 'urzadzenie', label: 'Urządzenie' },
-    { key: 'interfejs', label: 'Interfejs' },
-    { key: 'v4', label: 'Adres / prefiks', checkDuplicates: true },
-    { key: 'opis', label: 'Opis' },
-  ]}
-  initialRows={[{}, {}, {}]}
+title="Tab. 5 Adresy infrastruktury i urządzeń stałych"
+storageKey="proj14-infrastruktura"
+columns={[
+{ key: 'urzadzenie', label: 'Urządzenie' },
+{ key: 'interfejs', label: 'Interfejs' },
+{ key: 'v4', label: 'Adres / prefiks', checkDuplicates: true },
+{ key: 'opis', label: 'Opis' },
+]}
+initialRows={[{}, {}, {}]}
 />
 </Step>
 
@@ -196,16 +201,16 @@ Narysuj topologię w Packet Tracerze albo w programie do diagramów (np. draw.io
 Przełóż wymagania dostępu ze scenariusza na reguły. Każdy wiersz to jedno „wolno” (allow) albo „nie wolno” (deny). Na tej podstawie zaplanuj listy ACL tak, jak w ćwiczeniu 12: jaka lista, na którym interfejsie (podinterfejsie) routera i w którym kierunku. W tym celu wypełnij Tabele 6.
 
 <EditableTable
-  title="Tab. 6 Zasady dostępu"
-  storageKey="proj14-acl"
-  columns={[
-    { key: 'zrodlo', label: 'Źródło (VLAN / host)' },
-    { key: 'cel', label: 'Cel (VLAN / host / internet)' },
-    { key: 'decyzja', label: 'Zezwól / zablokuj' },
-    { key: 'acl', label: 'Lista ACL (nazwa / numer)' },
-    { key: 'gdzie', label: 'Interfejs i kierunek (in/out)' },
-  ]}
-  initialRows={[{}, {}, {}]}
+title="Tab. 6 Zasady dostępu"
+storageKey="proj14-acl"
+columns={[
+{ key: 'zrodlo', label: 'Źródło (VLAN / host)' },
+{ key: 'cel', label: 'Cel (VLAN / host / internet)' },
+{ key: 'decyzja', label: 'Zezwól / zablokuj' },
+{ key: 'acl', label: 'Lista ACL (nazwa / numer)' },
+{ key: 'gdzie', label: 'Interfejs i kierunek (in/out)' },
+]}
+initialRows={[{}, {}, {}]}
 />
 
 <OpenQuestion
@@ -222,27 +227,27 @@ Zbuduj w Packet Tracerze sieć według Twojego projektu. Polecenia zapisz z pami
 
 Minimalny zakres wdrożenia:
 <Checklist
-  title="Wdrożenie"
-  storageKey="proj14-wdrozenie"
-  sections={[
-    { title: 'Przełączniki', items: [
-      'Wszystkie VLAN-y z planu utworzone i nazwane na każdym przełączniku, na którym są potrzebne',
-      'Porty dostępowe w odpowiednich VLAN-ach, trunki między przełącznikami i do routera',
-      'Adres zarządzania na każdym przełączniku (SVI w VLAN-ie zarządzania) i brama domyślna',
-    ]},
-    { title: 'Router(y)', items: [
-      'Podinterfejs (albo SVI na przełączniku L3) dla każdego VLAN-u z adresem zgodnym z planem',
-      'DHCP dla VLAN-ów użytkowników, adresy stałe dla serwerów i urządzeń z wymaganiami dostępu',
-      'Łącza między routerami i Loopbacki zaadresowane zgodnie z planem; routing między lokalizacjami albo tunel IPsec (jeśli scenariusz ich wymaga)',
-    ]},
-    { title: 'Zasady dostępu', items: [
-      'Co najmniej dwie listy ACL z kroku 6 wdrożone i sprawdzone (ruch dozwolony przechodzi, zablokowany — nie)',
-    ]},
-    { title: 'Testy', items: [
-      'Ping między co najmniej dwoma VLAN-ami, które według planu mogą się komunikować',
-      'Ping, który według planu ma NIE przejść, rzeczywiście nie przechodzi',
-    ]},
-  ]}
+title="Wdrożenie"
+storageKey="proj14-wdrozenie"
+sections={[
+{ title: 'Przełączniki', items: [
+'Wszystkie VLAN-y z planu utworzone i nazwane na każdym przełączniku, na którym są potrzebne',
+'Porty dostępowe w odpowiednich VLAN-ach, trunki między przełącznikami i do routera',
+'Adres zarządzania na każdym przełączniku (SVI w VLAN-ie zarządzania) i brama domyślna',
+]},
+{ title: 'Router(y)', items: [
+'Podinterfejs (albo SVI na przełączniku L3) dla każdego VLAN-u z adresem zgodnym z planem',
+'DHCP dla VLAN-ów użytkowników, adresy stałe dla serwerów i urządzeń z wymaganiami dostępu',
+'Łącza między routerami i Loopbacki zaadresowane zgodnie z planem; routing między lokalizacjami albo tunel IPsec (jeśli scenariusz ich wymaga)',
+]},
+{ title: 'Zasady dostępu', items: [
+'Co najmniej dwie listy ACL z kroku 6 wdrożone i sprawdzone (ruch dozwolony przechodzi, zablokowany — nie)',
+]},
+{ title: 'Testy', items: [
+'Ping między co najmniej dwoma VLAN-ami, które według planu mogą się komunikować',
+'Ping, który według planu ma NIE przejść, rzeczywiście nie przechodzi',
+]},
+]}
 />
 
 <ScreenshotPaste label="Zrzut ekranu: topologia w Packet Tracer" />
