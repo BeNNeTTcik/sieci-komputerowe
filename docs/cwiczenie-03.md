@@ -135,49 +135,6 @@ Tab. 1 Komunikaty ICMP
 
 ## II. Zadania do wykonania
 
-### Systemy liczbowe
-
-<div className="justify">
-Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy różnymi systemami liczbowymi, warto przypomnieć sobie 3 najważniejsze systemy z punktu widzenia sieci komputerowych:
-</div>
-
-- **System dziesiętny** - wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9. Klasycznie, poszczególne oktety adresu IP zapisywane są w systemie dzesiętnym. W systemie tym podstawę stanowi liczba 10:
-
-<div className="text-center">
-234<sub>10</sub> = 2 · 10<sup>2</sup> + 3 · 10<sup>1</sup> + 4 · 10<sup>0</sup>
-</div>
-
-- **System binarny** - wykorzystywane cyfry: 0,1. dzięki zapisowi binarnemu maski sieciowej jesteśmy w stanie odróżnić w adresie IP część sieci od części hosta. Podstawę stanowi liczba 2:
-
-<div className="text-center">
-1100<sub>2</sub> = 1 · 2<sup>3</sup> + 1 · 2<sup>2</sup> + 0 · 2<sup>1</sup> + 0 · 2<sup>0</sup> = 8 + 4 = 12
-</div>
-
-- **System szesnastkowy** - Wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F, gdzie A=10,B=11, ... ,F=15. Adresy MAC zapisywane są w systemie szesnastkowym. Podstawę stanowi liczba 16:
-
-<div className="text-center">
-A8<sub>16</sub> = 10 · 16<sup>1</sup> + 8 · 16<sup>0</sup> = 160 + 8 = 168
-</div>
-
-<NumberBaseTrainer
-  title="Ćwiczenie — konwersja systemów liczbowych"
-  count={10}
-  storageKey="systemy-liczbowe"
-/>
-
-### Obliczanie parametrów sieci
-
-<div className="justify">
-**Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne: w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
-</div>
-
-<SubnetTrainer
-  countIPv4={5}
-  countIPv6={2}
-  title="Adresacja IPv4/IPv6"
-  storageKey="adresacja-trener"
-/>
-
 ### IP, ping i tracert
 
 <StepByStep>
@@ -293,6 +250,49 @@ Kliknij dowolny pakiet, a następnie rozwiń w panelu szczegółów sekcję **In
 
 </Step>
 </StepByStep>
+
+### Systemy liczbowe
+
+<div className="justify">
+Jako że w zagadnieniach adresacji IP korzystamy z konwersji liczb pomiędzy różnymi systemami liczbowymi, warto przypomnieć sobie 3 najważniejsze systemy z punktu widzenia sieci komputerowych:
+</div>
+
+- **System dziesiętny** - wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9. Klasycznie, poszczególne oktety adresu IP zapisywane są w systemie dzesiętnym. W systemie tym podstawę stanowi liczba 10:
+
+<div className="text-center">
+234<sub>10</sub> = 2 · 10<sup>2</sup> + 3 · 10<sup>1</sup> + 4 · 10<sup>0</sup>
+</div>
+
+- **System binarny** - wykorzystywane cyfry: 0,1. dzięki zapisowi binarnemu maski sieciowej jesteśmy w stanie odróżnić w adresie IP część sieci od części hosta. Podstawę stanowi liczba 2:
+
+<div className="text-center">
+1100<sub>2</sub> = 1 · 2<sup>3</sup> + 1 · 2<sup>2</sup> + 0 · 2<sup>1</sup> + 0 · 2<sup>0</sup> = 8 + 4 = 12
+</div>
+
+- **System szesnastkowy** - Wykorzystywane cyfry: 0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F, gdzie A=10,B=11, ... ,F=15. Adresy MAC zapisywane są w systemie szesnastkowym. Podstawę stanowi liczba 16:
+
+<div className="text-center">
+A8<sub>16</sub> = 10 · 16<sup>1</sup> + 8 · 16<sup>0</sup> = 160 + 8 = 168
+</div>
+
+<NumberBaseTrainer
+  title="Ćwiczenie — konwersja systemów liczbowych"
+  count={10}
+  storageKey="systemy-liczbowe"
+/>
+
+### Obliczanie parametrów sieci
+
+<div className="justify">
+**Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne: w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
+</div>
+
+<SubnetTrainer
+  countIPv4={5}
+  countIPv6={2}
+  title="Adresacja IPv4/IPv6"
+  storageKey="adresacja-trener"
+/>
 
 [^RFC791]: IETF, [RFC 791](https://www.rfc-editor.org/info/rfc791/) — Internet Protocol.
 
