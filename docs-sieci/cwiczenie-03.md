@@ -45,7 +45,7 @@ import EditableTable from '@site/src/components/EditableTable';
 Nagłówek protokołu IP zawiera m.in. takie informacje jak:
 - adres IP źródłowy i docelowy,
 - wersja protokołu IP - IPv4 lub IPv6,
--  flagi - informują o tym, czy dany pakiet może być/jest podzielony i wysłany w ramach kilku ramek ethernetowych (ramka ethernetowa może zawierać ładunek o wielkości maksymalnie 1500 bajtów, jeśli pakiet wyższej warstwy jest większy, musi zostać podzielony, o ile nie jest ustawiona flaga Don’t fragment),
+- flagi - informują o tym, czy dany pakiet może być/jest podzielony i wysłany w ramach kilku ramek ethernetowych (ramka ethernetowa może zawierać ładunek o wielkości maksymalnie 1500 bajtów, jeśli pakiet wyższej warstwy jest większy, musi zostać podzielony, o ile nie jest ustawiona flaga Don’t fragment),
 - TTL (ang. Time to Live) - czas życia, jaki pozostał pakietowi przed usunięciem go z sieci, innymi słowy maksymalna ilość przeskoków (routerów na trasie - ang. next hop), które może jeszcze dokonać dany pakiet,
 - informacja o zawartości pakietu (PDU jakiego protokołu enkapsulowany jest w ramach pakietu).
 

@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react';
 
-export default function SprawozdanieHeader({exerciseTitle, storageKey, solo = false}) {
+export default function SprawozdanieHeader({thema, exerciseTitle, storageKey, solo = false}) {
   const key = `sprawozdanie-header:${storageKey || 'domyslna'}`;
   const loadedRef = useRef(false);
 
@@ -106,7 +106,7 @@ export default function SprawozdanieHeader({exerciseTitle, storageKey, solo = fa
 
   return (
     <div style={card} className="sprawozdanie-header">
-      <h1 style={titleStyle}>Sieci komputerowe</h1>
+      {thema && <h1 style={titleStyle}>{thema}</h1>}
       {exerciseTitle && <p style={subtitleStyle}>{exerciseTitle}</p>}
 
       <div style={columnsWrap}>
