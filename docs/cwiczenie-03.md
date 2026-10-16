@@ -288,8 +288,8 @@ A8<sub>16</sub> = 10 · 16<sup>1</sup> + 8 · 16<sup>0</sup> = 160 + 8 = 168
 </div>
 
 <SubnetTrainer
-  countIPv4={5}
-  countIPv6={2}
+  countIPv4={7}
+  countIPv6={0}
   title="Adresacja IPv4/IPv6"
   storageKey="adresacja-trener"
 />
