@@ -12,6 +12,7 @@ import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 *Część I — Model ISO/OSI oraz warstwa fizyczna*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 1: Model OSI. Enkapsulacja danych oraz warstwa fizyaczna"
   storageKey="cwiczenie-1"
   solo

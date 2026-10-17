@@ -24,6 +24,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 9: Routing dynamiczny — RIP"
   storageKey="cwiczenie-9"
 />

@@ -21,11 +21,13 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 12: Listy kontroli dostępu (ACL)"
   storageKey="cwiczenie-12"
 />
 
 <ProjectSaveLoad
+  thema="Sieci komputerowe"
   title="Zapisz / wczytaj postęp projektu"
   fileNamePrefix="cwiczenie-12"
   storageKeys={['cwiczenie-12','cwiczenie-12-top', 'cwiczenie-12-checklist', 'cwiczenie-12-acl', 'cwiczenie-12-res']}

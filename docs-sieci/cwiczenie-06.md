@@ -20,6 +20,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część II — Zajęcia praktyczne*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 6: Podstawowa konfiguracja urządzeń i topologii pary"
   storageKey="cwiczenie-6"
 />

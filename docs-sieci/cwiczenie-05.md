@@ -16,6 +16,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część I — Model ISO/OSI*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 5: Warstwy sesji, prezentacji i aplikacji. Podsumowanie OSI"
   storageKey="cwiczenie-5"
   solo

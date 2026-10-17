@@ -13,6 +13,7 @@ import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
 _Część I — Model ISO/OSI_
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 2: Warstwa łącza danych"
   storageKey="cwiczenie-2"
   solo

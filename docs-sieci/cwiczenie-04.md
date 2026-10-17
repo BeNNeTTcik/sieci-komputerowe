@@ -16,6 +16,7 @@ import SharedValue from '@site/src/components/SharedValue';
 *Część I — Model ISO/OSI*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 4: Warstwa transportowa"
   storageKey="cwiczenie-4"
   solo

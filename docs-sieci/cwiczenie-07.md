@@ -17,6 +17,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część II — Zajęcia praktyczne*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 7: VLAN, trunking i routing między VLAN-ami"
   storageKey="cwiczenie-7"
 />

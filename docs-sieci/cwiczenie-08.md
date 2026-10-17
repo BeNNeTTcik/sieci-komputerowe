@@ -21,6 +21,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 8: Routing statyczny"
   storageKey="cwiczenie-8"
 />

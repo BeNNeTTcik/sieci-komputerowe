@@ -19,6 +19,7 @@ import EditableTable from '@site/src/components/EditableTable';
 *Część I — Model ISO/OSI*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 3: Warstwa sieciowa"
   storageKey="cwiczenie-3"
   solo

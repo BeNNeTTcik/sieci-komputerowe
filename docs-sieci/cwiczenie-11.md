@@ -23,6 +23,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część II — Zajęcia praktyczne*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 11: VPN site-to-site IPsec"
   storageKey="cwiczenie-11"
 />

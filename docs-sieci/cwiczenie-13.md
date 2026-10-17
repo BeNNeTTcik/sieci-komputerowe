@@ -26,6 +26,7 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część II — Zajęcia praktyczne*
 
 <SprawozdanieHeader
+  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 13: Tworzenie sieci w Cisco Packet Tracer"
   storageKey="cwiczenie-13"
   solo
