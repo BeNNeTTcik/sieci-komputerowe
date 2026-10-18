@@ -67,6 +67,9 @@ Rys.2 Klasy adresów [^comer][^claude]
 **Fragmentacja i MTU**:
 Gdy datagram jest większy niż MTU łącza wyjściowego, router IPv4 może go podzielić, o ile DF = 0 [^RFC791]. Routery pośrednie nie łączą fragmentów w całość dzieje się to dopiero u odbiorcy. Przy DF = 1 router odrzuca datagram i odsyła ICMP Destination Unreachable. **Przykład**: datagram 4000 B (20 B nagłówka + 3980 B danych) przechodzi przez łącze z MTU 1500 B. Powstają trzy fragmenty z danymi 1480, 1480 i 1020 B, z przesunięciami 0, 185 i 370 (×8 B) oraz flagą MF = 1, 1, 0 [^kurose].
 
+**Adresy publiczne i prywatne**
+Adresy publiczne są globalnie unikalne i przydzielane hierarchicznie, a strutkura zaczyna się od IANA [^iana], która pełni role globalnego zarządcy. Dla Europy i części Azji regionalnym zarządcą jest RIPE NCC, która przydziela adresy dla ISP (Internet Service Provider) oraz dużych firm regionalnych. Pula IANA wyczerpała się 3 lutego 2011 r., a RIPE NCC przydzielił ostatni blok /22 25 listopada 2019 r. Adresy prywatne można stosować dowolnie wewnątrz organizacji, ale nie są routowane w Internecie, więc wymagany jest NAT [^RFC1918]. Adresy prywatne to: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`. Występują również adresy specjalnego przeznaczenia jak: adres pętli zwrotnej `127.0.0.0/8`, czy adres nieogreślony 0.0.0.0/8.
+
 Protokoły wspierające lub pracujące na adresacji IPv4:
 - **ICMP** [^RFC792] - przesyła komunikaty o błedach i służy do diagnostyki. Na ICMP działa: `ping`, `traceroute`, Path MTU Discovery [^RFC1191].
 - **ARP** [^RFC826] - odwzorowanie adresu IPv4 na MAC: zapytanie rozgłoszeniowe, odpowiedź unicast, pamięć podręczna z czasem życia. ARP nie ma uwierzytelniania, co umożliwia ARP spoofing.
@@ -122,12 +125,6 @@ Protokoły wspierające lub pracujące na adresacji IPv6:
 :::note
 Głównym powodem powstania IPv6 było **wyczerpywanie się przestrzeni adresowej IPv4** (ok. 4,3 mld adresów, co przy liczbie urządzeń podłączonych do Internetu okazało się niewystarczające) — IPv6 oferuje przestrzeń adresową rzędu 2^128, praktycznie nieograniczoną na obecne potrzeby [^RFC8200][^tanen].
 :::
-
-:::note warning
-- **IPv6 działa w sieci IPv4** - IPv6 włączony domyślnie, więc fałszywy router wysyłający RA może przejąć ruch nawet tam, gdzie administrator „nie wdrażał IPv6”.
-- **NDP, podobnie jak ARP, nie ma uwierzytelniania** - możliwe jest podszywanie się pod sąsiada i ataki na DAD.
-- **zapora musi objąć IPv6** - osobne reguły, z przepuszczeniem niezbędnych komunikatów ICMPv6.
-:::
 </Step>
 </StepByStep>
 
@@ -137,18 +134,34 @@ Głównym powodem powstania IPv6 było **wyczerpywanie się przestrzeni adresowe
 Zastąpiła klasy: długość części sieciowej podaje się jako prefiks /n (od 0 do 32) [^RFC4632]. Umożliwia to podział na podsieci o dowolnej wielkości oraz agregację (sumaryzację, supernetting): np. 192.168.4.0/24–192.168.7.0/24 da się zapisać jako 192.168.4.0/22, co zmniejsza tablice routingu [^RFC4632][^tanen].
 </div>
 
-### Migracje i koegzystancja
+### Koegzystancja
 
 <div className="justify">
 Oba te protokoły będą jeszcze wspołistnieć w sieciach. Przez co opracowano mechanizmy przejściowe, które możemy podzielić na trzy grupy:
 - **podwójny stos (dual stack)** - urządzenia mają oba protokoły. Kolejność prób połączeń określa tablica polityk adresów, a Happy Eyeballs łączy się po IPv6, gdy nie ma odpoweidzi przechodzi na adres IPv4. To dziś rozwiązanie domyślne w sieciach firmowych i szkolnych.
-- **tunelowanie** - pakiety IPv6 w IPv4 (6in4) albo odwrotnie. Pozostałe mechanizmy zostały wycofane lub nie są stosowane
+- **tunelowanie** - pakiety IPv6 w IPv4 (6in4) albo odwrotnie. Pozostałe mechanizmy zostały wycofane lub nie są stosowane (np. 6to4 czy Teredo).
 - **translacja** - NAT64 z DNS64 pozwala hostom tylko z IPv6 łączyć się z serwerami tylko z IPv4.
 </div>
 
----
+### Bezpieczeństwo
 
-subnetting
+:::warning
+**Ogółne**
+- **IPv6 działa w sieci IPv4** - IPv6 włączony domyślnie, więc fałszywy router wysyłający RA (skrót od jednego ze stanów NDP) może przejąć ruch nawet tam, gdzie administrator „nie wdrażał IPv6”.
+- **NDP, podobnie jak ARP, nie ma uwierzytelniania** - możliwe jest podszywanie się pod sąsiada i ataki na DAD.
+- **zapora musi objąć IPv6** - osobne reguły, z przepuszczeniem niezbędnych komunikatów ICMPv6.
+
+**IPv4**
+- **Fałszywy serwer DHCP i wyczerpanie puli** - nieautoryzowany serwer DHCP (na PC atakującego; DHCP działa na zasadzie kto pierwszy ten lepszy) może rozdawać hostom własną bramę i DNS. Zalew żądań może natomiast wyczerpać pulę adresów.
+- **Logi NAT i synchronizacja czasu** - za PAT wiele hostów korzysta z jednego adresu publicznego. Bez zapisów translacji i dokładnego czasu (NTP) nie da się po incydencie ustalić, który komputer wysłał podejrzany ruch.
+- **Fałszowanie adresu źródłowego (spoofing)** - pakiet może mieć wpisany dowolny adres nadawcy, przez co atakujący może podmieniać adres IP na swoj i przechwytywać cały ruch początkowego nadawacy (man-in-the-middle).
+
+**IPv6**
+- **ICMPv6 jest częścią działającej sieci** - w przeciwieństwie do ICMPv4, który można częściowo blokować, ICMPv6 jest niezbędny do poprawnego funkcjonowania sieci (PMTUD - Path MTU Discovery, NDP - Neighbor Discovery Protocol)
+- **NDP/RA** - fałszywy Router Advertisement i "shadow IPv6" w LAN - Atakujący może wysłać fałszywe komunikaty Router Advertisement (RA), podszywając się pod legalny router. To pozwala na przekierowanie ruchu IPv6 przez komputer atakującego (man-in-the-middle), stworzenie "cichej" sieci IPv6 równolegle do oficjalnej infrastruktury, lub całkowite zablokowanie komunikacji IPv6 w segmencie sieci.
+- **Mechanizmy tunelowe obchodzą punkty egzekucji polityk** - tunele takie jak Teredo, 6to4 czy ISATAP enkapsulują ruch IPv6 w pakietach IPv4/UDP, co sprawia, że tradycyjne firewalle i systemy IDS/IPS mogą nie widzieć faktycznej zawartości komunikacji. Atakujący może wykorzystać te mechanizmy do exfiltracji danych lub uzyskania dostępu do zasobów wewnętrznych, omijając polityki bezpieczeństwa zaprojektowane tylko dla IPv4.
+- **Rozszerzone nagłówki a co za tym idzie różna obsługa przez urządzenia** - IPv6 wykorzystuje rozszerzone nagłówki (Extension Headers), które różne urządzenia bezpieczeństwa obsługują w odmienny sposób lub wcale. Atakujący może tworzyć długie łańcuchy nagłówków rozszerzeń, fragmentować pakiety lub używać nieoczekiwanych kombinacji, które omijają mechanizmy inspekcji niektórych urządzeń.
+:::
 
 ## II. Zadania do wykonania
 
@@ -216,204 +229,10 @@ Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym z
 </Step>
 </StepByStep>
 
-### Obliczanie parametrów sieci
-
-<div className="justify">
-**Adres IP** składa się z dwóch części. Jedna z nich określa, do której sieci należy host o danym adresie (tzw. **część sieci**), druga jednoznacznie identyfikuje hosta w ramach tejże sieci (tzw. **część hosta**). Do oddzielenia części sieci od części hosta służy maska sieciowa. Ma ona taką samą długość, co adres IP. Tam, gdzie w masce sieciowej występuje wartość 1, odpowiadające jej bity w adresie IP należą do części sieci. Analogicznie, te bity, które w masce mają wartość 0, należą do części hosta. Ważne: w masce sieciowej bity o wartości 1 nie mogą być przerywane zerami.
-</div>
-
-<SubnetTrainer
-  countIPv4={2}
-  countIPv6={2}
-  title="Adresacja IPv4/IPv6"
-  storageKey="adresacja-trener"
-/>
 
 ### IPv4 i IPv6 w szkolnej pracowni
 
 Cisco Packet tracer 2 sieci do zrobienia + testy działania
-
-### Budowanie sieci od podstaw
-
-W tym zadaniu krok po kroku można przejsc przez projektowanie sieci dla IPv4. Pierwszy etap polega na wylosowaniu przykładowej sieci. Następnie przechodząc po kolejnych etapach uzyskujemy sieć możliwą do wdrożenia w realnym scenariuszu.
-<DesignScenario />
-
-<StepByStep>
-<Step title="Krok I:  Analiza wymagań">
-Należy przenieść dane ze scenariusza do tabeli: kliknij **"Kopiuj tabele"** pod tabelą scenariusza, a potem kliknąć pierwszą komórkę (np. Krok 1) poniżej i wkleić (Ctrl+V).
-
-Następnie policz, ile urządzeń będzie w każdej grupie po zakładanym wzroście (zaokrąglijcie w górę). W kolumnie „Uwagi” zapisz wszystko, co może wpłynąć na projekt: grupa jest w kilku miejscach, ma szczególne wymagania, będzie dużo większa od innych. Tabelę 2 można dowolnie poprawiać: dzielić grupy, łączyć je, dopisywać nowe.
-
-<EditableTable
-title="Tab. 2 Wymagania docelowe"
-storageKey="proj14-wymagania"
-columns={[
-{ key: 'grupa', label: 'Grupa' },
-{ key: 'gdzie', label: 'Gdzie' },
-{ key: 'dzis', label: 'Dziś' },
-{ key: 'dostep', label: 'Wymagania dostępu' },
-{ key: 'docelowo', label: 'Docelowo (po wzroście)' },
-{ key: 'uwagi', label: 'Uwagi' },
-]}
-initialRows={[{}, {}, {}]}
-/>
-</Step>
-
-<Step title="Krok II: Podział na VLAN-y">
-Trzeba określić, ile VLAN-ów potrzebujesz i które grupy do nich trafią. Dwie grupy mogą dzielić VLAN tylko wtedy, gdy obowiązują je **identyczne** zasady dostępu. W kolumnie „Przełączniki” wpisz, na których przełącznikach VLAN musi istnieć. Mówi to które trunki muszą go przepuszczać. Wypełnij danymi Tabele 3.
-
-<EditableTable
-title="Tab. 3 Plan VLAN"
-storageKey="proj14-vlan"
-columns={[
-{ key: 'vlan', label: 'Numer VLAN', checkDuplicates: true },
-{ key: 'nazwa', label: 'Nazwa', checkDuplicates: true },
-{ key: 'grupy', label: 'Grupy w tym VLAN-ie' },
-{ key: 'przelaczniki', label: 'Przełączniki' },
-{ key: 'uzasadnienie', label: 'Dlaczego osobny VLAN' },
-]}
-initialRows={[{}, {}, {}]}
-/>
-
-<KeywordAnswer
-title="Dlaczego nie VLAN 1?"
-question="Dlaczego nie należy używać VLAN 1 dla żadnej grupy użytkowników ani do zarządzania?"
-keywords={['domyśln', 'domysln', 'default']}
-explanation="VLAN 1 jest domyślnym VLAN-em każdego portu przełącznika Cisco i domyślnym VLAN-em natywnym na trunkach. Każde nowo podłączone lub nieskonfigurowane urządzenie trafia do niego automatycznie, więc ruch użytkowników albo zarządzanie w VLAN 1 byłyby dostępne dla każdego, kto wepnie się w wolny port."
-storageKey="proj14-vlan1"
-/>
-</Step>
-
-<Step title="Krok III: Reguła adresacji">
-Zanim wpiszesz jakikolwiek adres, ustal **regułę**, z której adresy wynikają. Do dyspozycji masz pulę 10.X.0.0/16. Dobra reguła odpowiada na pytania:
-- jak z numeru VLAN-u (albo lokalizacji) powstaje adres podsieci,
-- jaki rozmiar ma podsieć i co zrobić z grupą, która się w nim nie mieści,
-- który adres w podsieci ma brama, które adresy są stałe (serwery, drukarki), a które rozdaje DHCP,
-- skąd biorą się adresy łączy między routerami, Loopbacków i zarządzania,
-- (scenariusze z kilkoma lokalizacjami) jak podzielić pulę, żeby każdą lokalizację opisywał jeden blok adresów,
-- (scenariusze z tunelem IPsec) jakie adresy mają łącza do ISP. W Packet Tracerze użyjcie adresów dokumentacyjnych 203.0.113.0/24 lub 198.51.100.0/24 jako „publicznych”.
-
-<OpenQuestion
-  title="Nasza reguła adresacji"
-  question="Opiszcie Waszą regułę adresacji tak, żeby inna osoba, znając tylko numer VLAN-u (i lokalizację), umiała bez pytania wyznaczyć adres podsieci, bramy, serwera i zakres DHCP. Podajcie jeden przykład wyliczenia."
-  minLength={120}
-  storageKey="proj14-regula"
-/>
-</Step>
-
-<Step title="Krok IV: Plan adresacji">
-Zastosuj regułę do każdego VLAN-u w Tabeli 4.
-
-<EditableTable
-title="Tab. 4 Plan adresacji podsieci użytkowników"
-storageKey="proj14-adresacja"
-columns={[
-{ key: 'vlan', label: 'VLAN' },
-{ key: 'v4', label: 'Podsieć (CIDR)', checkDuplicates: true },
-{ key: 'maska', label: 'Maska' },
-{ key: 'gw4', label: 'Brama', checkDuplicates: true },
-{ key: 'hosty', label: 'Hostów w podsieci / potrzeba' },
-{ key: 'dhcp', label: 'Zakres DHCP / adresy stałe' },
-]}
-initialRows={[{}, {}, {}]}
-/>
-
-Teraz infrastruktura. Wszystko, co nie jest siecią użytkowników należy wpisac do Tabeli 5: łącza między routerami (także do ISP), interfejsy Loopback, adresy zarządzania przełączników (interfejs SVI w VLAN-ie zarządzania), stałe adresy serwerów i urządzeń, do których odwołują się reguły dostępu.
-
-<EditableTable
-title="Tab. 5 Adresy infrastruktury i urządzeń stałych"
-storageKey="proj14-infrastruktura"
-columns={[
-{ key: 'urzadzenie', label: 'Urządzenie' },
-{ key: 'interfejs', label: 'Interfejs' },
-{ key: 'v4', label: 'Adres / prefiks', checkDuplicates: true },
-{ key: 'opis', label: 'Opis' },
-]}
-initialRows={[{}, {}, {}]}
-/>
-</Step>
-
-<Step title="Krok V: Topologia">
-Narysuj topologię w Packet Tracerze albo w programie do diagramów (np. draw.io). Diagram musi pokazywać:
-- wszystkie routery i przełączniki ze scenariusza oraz nazwy i numery ich portów,
-- które łącza są trunkami (i jakie VLAN-y przepuszczają), a które portami dostępowymi,
-- gdzie odbywa się routing między VLAN-ami i gdzie jest wyjście do internetu,
-- adresy łączy między routerami i podsieci VLAN-ów.
-
-<ScreenshotPaste label="Diagram topologii z adresacją" />
-<OpenQuestion
-  title="Słabe punkty"
-  question="Awaria którego pojedynczego urządzenia lub łącza w Waszej topologii odetnie najwięcej użytkowników? Jak można by to poprawić, gdyby klient miał większy budżet?"
-  modelAnswer="Zwykle jest to router (bez niego nie działa routing między VLAN-ami ani internet) albo pojedyncze łącze między budynkami lub lokalizacjami. Poprawa: drugi router lub przełącznik L3 z protokołem redundancji bramy (HSRP/VRRP), drugie łącze prowadzone inną trasą, agregacja łączy (EtherChannel), zapasowe łącze WAN (np. VPN przez internet jak w ćwiczeniu 11)."
-  minLength={60}
-  storageKey="proj14-slabe-punkty"
-/>
-</Step>
-
-<Step title="Krok VI: Zasady dostępu i szkic ACL">
-Przełóż wymagania dostępu ze scenariusza na reguły. Każdy wiersz to jedno „wolno” (allow) albo „nie wolno” (deny). Na tej podstawie zaplanuj listy ACL tak, jak w ćwiczeniu 12: jaka lista, na którym interfejsie (podinterfejsie) routera i w którym kierunku. W tym celu wypełnij Tabele 6.
-
-<EditableTable
-title="Tab. 6 Zasady dostępu"
-storageKey="proj14-acl"
-columns={[
-{ key: 'zrodlo', label: 'Źródło (VLAN / host)' },
-{ key: 'cel', label: 'Cel (VLAN / host / internet)' },
-{ key: 'decyzja', label: 'Zezwól / zablokuj' },
-{ key: 'acl', label: 'Lista ACL (nazwa / numer)' },
-{ key: 'gdzie', label: 'Interfejs i kierunek (in/out)' },
-]}
-initialRows={[{}, {}, {}]}
-/>
-
-<OpenQuestion
-  title="Kolejność reguł"
-  question="Napiszcie (bez wpisywania do routera) jedną kompletną listę ACL z Twojego planu, łącznie z wierszem kończącym."
-  minLength={80}
-  storageKey="proj14-acl-szkic"
-/>
-
-</Step>
-
-<Step title="Krok VII: Wdrożenie w Packet Tracer">
-Zbuduj w Packet Tracerze sieć według Twojego projektu. Polecenia zapisz z pamieci lub skorzystaj ze ściągawki Cisco.
-
-Minimalny zakres wdrożenia:
-<Checklist
-title="Wdrożenie"
-storageKey="proj14-wdrozenie"
-sections={[
-{ title: 'Przełączniki', items: [
-'Wszystkie VLAN-y z planu utworzone i nazwane na każdym przełączniku, na którym są potrzebne',
-'Porty dostępowe w odpowiednich VLAN-ach, trunki między przełącznikami i do routera',
-'Adres zarządzania na każdym przełączniku (SVI w VLAN-ie zarządzania) i brama domyślna',
-]},
-{ title: 'Router(y)', items: [
-'Podinterfejs (albo SVI na przełączniku L3) dla każdego VLAN-u z adresem zgodnym z planem',
-'DHCP dla VLAN-ów użytkowników, adresy stałe dla serwerów i urządzeń z wymaganiami dostępu',
-'Łącza między routerami i Loopbacki zaadresowane zgodnie z planem; routing między lokalizacjami albo tunel IPsec (jeśli scenariusz ich wymaga)',
-]},
-{ title: 'Zasady dostępu', items: [
-'Co najmniej dwie listy ACL z kroku 6 wdrożone i sprawdzone (ruch dozwolony przechodzi, zablokowany — nie)',
-]},
-{ title: 'Testy', items: [
-'Ping między co najmniej dwoma VLAN-ami, które według planu mogą się komunikować',
-'Ping, który według planu ma NIE przejść, rzeczywiście nie przechodzi',
-]},
-]}
-/>
-
-<ScreenshotPaste label="Zrzut ekranu: topologia w Packet Tracer" />
-<ScreenshotPaste label="Zrzut ekranu: show ip interface brief i show ip route na routerze" />
-<ScreenshotPaste label="Zrzut ekranu: test ACL — ping dozwolony i ping zablokowany" />
-<OpenQuestion
-  title="Co poszło inaczej niż w planie?"
-  question="Co musieliście zmienić w projekcie podczas wdrażania (adres, VLAN, port, reguła ACL) i dlaczego plan tego nie przewidział?"
-  minLength={50}
-  storageKey="proj14-zmiany-wdrozenie"
-/>
-</Step>
-</StepByStep>
 
 [^RFC791]: IETF, [RFC 791](https://www.rfc-editor.org/info/rfc791/) — Internet Protocol.
 
@@ -452,3 +271,7 @@ sections={[
 [^RFC8200]: RFC 8200 – [Internet Protocol, Version 6 (IPv6) Specification](https://www.rfc-editor.org/rfc/rfc8200), 2017.
 
 [^wireshark]: [WIRESHARK TEAM](https://wireshark.org). Wireshark User’s Guide. Wireshark Foundation, 2026.
+
+[^iana]: [IANA](https://www.iana.org) - IPv4 Special-Purpose Address Registry oraz IPv6 Special-Purpose Address Registry.
+
+[^RFC1918]: RFC 1918 – [Address Allocation for Private Internets](https://www.rfc-editor.org/rfc/rfc1918), 1996.
