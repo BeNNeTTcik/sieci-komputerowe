@@ -1,9 +1,10 @@
 // Pula ćwiczeń — WYŁĄCZNIE adresacja prywatna:
 // IPv4: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918)
 // IPv6: fc00::/7 - Unique Local Address (RFC 4193), generowane jako fd00::/8
-// Każdy problem ma stabilne pole `id` — eksport/import postępu zapisuje TYLKO id + odpowiedzi
-// studenta, a poprawne odpowiedzi zawsze są pobierane na nowo z tego pliku (nie z importowanego
-// pliku postępu), więc edycja wyeksportowanego pliku nie pozwala 'poprawić' odpowiedzi.
+// Każdy problem ma stabilne pole `id` — zapis postępu w sessionStorage przechowuje TYLKO id + odpowiedzi
+// studenta, a poprawne odpowiedzi zawsze są pobierane na nowo z tego pliku.
+// „Maska oryginalnej sieci” to maska KLASOWA adresu (A → /8, B → /16, C → /24); od niej liczona
+// jest „Ilość możliwych podsieci” = 2^(prefiks − prefiks klasowy). Dla 192.168.x.x to /24.
 
 export const ipv4Pool = [
   {
@@ -31,7 +32,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.47.253' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -69,7 +70,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.100.231' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -88,7 +89,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.86.100' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -126,7 +127,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.211.33' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -183,7 +184,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.220.125' },
       { label: 'Maska sieciowa', value: '255.255.255.192' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '26' },
@@ -221,7 +222,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.230.172' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -259,7 +260,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.216.44' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -335,7 +336,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.174.81' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -373,7 +374,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.135.75' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -430,7 +431,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.240.29' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -449,7 +450,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.102.186' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -487,7 +488,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.40.125' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -525,7 +526,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.150.242' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -563,7 +564,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.47.78' },
       { label: 'Maska sieciowa', value: '255.255.255.192' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '26' },
@@ -601,7 +602,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.159.233' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -639,7 +640,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.82.110' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -658,7 +659,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.20.162' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -677,7 +678,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.82.200' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -753,7 +754,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.195.15' },
       { label: 'Maska sieciowa', value: '255.255.255.0' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '24' },
@@ -829,7 +830,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.106.122' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -848,7 +849,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.137.152' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -886,7 +887,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.78.33' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -981,7 +982,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.250.29' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -1000,7 +1001,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.0.201' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -1114,7 +1115,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.105.54' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -1133,7 +1134,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.65.60' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1171,7 +1172,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.189.212' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -1209,7 +1210,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.49.65' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -1228,7 +1229,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.190.58' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -1285,7 +1286,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.53.206' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1304,7 +1305,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.8.94' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1342,7 +1343,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.171.201' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -1361,7 +1362,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.65.141' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1380,7 +1381,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.205.91' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1532,7 +1533,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.26.211' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -1551,7 +1552,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.59.17' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },
@@ -1589,7 +1590,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.233.108' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1608,7 +1609,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.144.17' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -1646,7 +1647,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.185.227' },
       { label: 'Maska sieciowa', value: '255.255.255.192' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '26' },
@@ -1665,7 +1666,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.98.29' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -1684,7 +1685,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.99.48' },
       { label: 'Maska sieciowa', value: '255.255.255.224' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '27' },
@@ -1779,7 +1780,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.150.98' },
       { label: 'Maska sieciowa', value: '255.255.255.240' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '28' },
@@ -1817,7 +1818,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.108.37' },
       { label: 'Maska sieciowa', value: '255.255.255.252' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '30' },
@@ -1836,7 +1837,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.190.189' },
       { label: 'Maska sieciowa', value: '255.255.255.0' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '24' },
@@ -1855,7 +1856,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.210.164' },
       { label: 'Maska sieciowa', value: '255.255.255.248' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '29' },
@@ -1893,7 +1894,7 @@ export const ipv4Pool = [
     given: [
       { label: 'Adres IP', value: '192.168.126.89' },
       { label: 'Maska sieciowa', value: '255.255.255.128' },
-      { label: 'Maska oryginalnej sieci', value: '255.255.0.0' },
+      { label: 'Maska oryginalnej sieci', value: '255.255.255.0' },
     ],
     blanks: [
       { key: 'bity_siec', label: 'Ilość bitów w części sieci', answer: '25' },

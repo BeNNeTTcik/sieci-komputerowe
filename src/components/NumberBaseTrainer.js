@@ -24,7 +24,6 @@ function slugify(text) {
 export default function NumberBaseTrainer({count = 10, title, storageKey}) {
   const key = `number-base-trainer:${storageKey || slugify(title)}`;
   const loadedRef = useRef(false);
-  const fileInputRef = useRef(null);
 
   function drawNewSet() {
     return sample(numberBasePool, count);
@@ -43,12 +42,9 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
   const [answers, setAnswers] = useState(() => problems.map(() => ({})));
   const [current, setCurrent] = useState(0);
   const [phase, setPhase] = useState('working');
-  const [studentName, setStudentName] = useState('');
   const [warning, setWarning] = useState('');
   const [showMissing, setShowMissing] = useState(false);
   const [resumed, setResumed] = useState(false);
-  const [importError, setImportError] = useState('');
-  const [importSuccess, setImportSuccess] = useState(false);
 
   useEffect(() => {
     try {
@@ -62,7 +58,6 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
             setAnswers(saved.answers || resolved.map(() => ({})));
             setCurrent(saved.current || 0);
             setPhase(saved.phase || 'working');
-            setStudentName(saved.studentName || '');
             setResumed(true);
           }
         }
@@ -76,10 +71,10 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
     if (!loadedRef.current) return;
     try {
       window.sessionStorage.setItem(key, JSON.stringify({
-        problemIds: problems.map(p => p.id), answers, current, phase, studentName,
+        problemIds: problems.map(p => p.id), answers, current, phase,
       }));
     } catch (e) { /* ignorujemy błędy zapisu */ }
-  }, [problems, answers, current, phase, studentName, key]);
+  }, [problems, answers, current, phase, key]);
 
   function drawBrandNewSet() {
     const fresh = drawNewSet();
@@ -90,8 +85,6 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
     setShowMissing(false);
     setPhase('working');
     setResumed(false);
-    setImportError('');
-    setImportSuccess(false);
   }
 
   function clearSavedProgress() {
@@ -99,69 +92,6 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
     drawBrandNewSet();
   }
 
-  function exportProgress() {
-    const data = {
-      _typ: 'number-base-trainer-progress',
-      _wersja: 1,
-      title: title || null,
-      problemIds: problems.map(p => p.id),
-      answers, current, phase, studentName,
-      zapisano: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const dateStr = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `postep-${slugify(title)}-${dateStr}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  function triggerImport() {
-    setImportError('');
-    setImportSuccess(false);
-    fileInputRef.current?.click();
-  }
-
-  function handleFileSelected(e) {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target.result);
-        if (data._typ !== 'number-base-trainer-progress') {
-          setImportError('To nie jest plik postępu z tego ćwiczenia.');
-          return;
-        }
-        if (!Array.isArray(data.problemIds) || data.problemIds.length !== total) {
-          setImportError(`Plik pochodzi z innego zestawu (inna liczba zadań: ${data.problemIds?.length ?? '?'} zamiast ${total}).`);
-          return;
-        }
-        const resolved = resolveProblemsByIds(data.problemIds);
-        if (!resolved) {
-          setImportError('Plik odwołuje się do nieznanych zadań — mógł zostać uszkodzony lub zmodyfikowany.');
-          return;
-        }
-        setProblems(resolved);
-        setAnswers(data.answers || resolved.map(() => ({})));
-        setCurrent(data.current || 0);
-        setPhase(data.phase || 'working');
-        setStudentName(data.studentName || '');
-        setImportError('');
-        setImportSuccess(true);
-        setResumed(false);
-      } catch (err) {
-        setImportError('Nie udało się odczytać pliku — upewnij się, że to poprawny plik postępu (.json).');
-      }
-    };
-    reader.onerror = () => setImportError('Błąd podczas odczytu pliku.');
-    reader.readAsText(file);
-  }
 
   const card = {
     border: '1px solid #e5e7eb', borderRadius: '16px', padding: '32px',
@@ -201,8 +131,7 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
     padding: '10px 22px', borderRadius: '8px', border: '1px solid #e5e7eb',
     fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', background: '#ffffff', color: '#111827',
   };
-  const smallLightBtn = {...lightBtn, padding: '7px 14px', fontSize: '0.82rem'};
-
+  
   function setField(problemIdx, k, value) {
     const next = [...answers];
     next[problemIdx] = {...next[problemIdx], [k]: value};
@@ -245,47 +174,12 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
   const fullyCorrectCount = problems.filter((_, i) => isProblemFullyCorrect(i)).length;
   const pct = Math.round((fullyCorrectCount / total) * 100);
 
-  const transferBar = (
-    <div style={{
-      display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
-      marginBottom: '18px', paddingBottom: '18px', borderBottom: '1px solid #f3f4f6',
-    }} className="no-print">
-      <button style={smallLightBtn} onClick={exportProgress}>💾 Eksportuj postęp (plik)</button>
-      <button style={smallLightBtn} onClick={triggerImport}>📂 Importuj postęp (plik)</button>
-      <input
-        type="file" accept="application/json,.json" ref={fileInputRef}
-        style={{display: 'none'}} onChange={handleFileSelected}
-      />
-      <span style={{fontSize: '0.78rem', color: '#9ca3af'}}>
-        pobierz plik na tym urządzeniu, wczytaj na innym, żeby kontynuować
-      </span>
-    </div>
-  );
 
   if (phase === 'results') {
     return (
       <div style={card} className="printable-results">
         <h3 style={heading}>{title || 'Wynik — konwersja systemów liczbowych'}</h3>
 
-        {transferBar}
-        {importError && <div style={{color: '#dc2626', fontSize: '0.85rem', marginBottom: '14px'}}>⚠️ {importError}</div>}
-        {importSuccess && <div style={{color: '#16a34a', fontSize: '0.85rem', marginBottom: '14px'}}>✅ Postęp wczytany z pliku.</div>}
-
-        <div className="no-print" style={{marginBottom: '20px'}}>
-          <label style={{display: 'block', fontSize: '0.85rem', color: '#6b7280', marginBottom: '6px'}}>
-            Imię i nazwisko (pojawi się na wydruku)
-          </label>
-          <input
-            type="text" value={studentName} onChange={e => setStudentName(e.target.value)}
-            placeholder="np. Jan Kowalski"
-            style={{width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '0.95rem'}}
-          />
-        </div>
-        {studentName && (
-          <p style={{color: '#6b7280', marginTop: '-12px', marginBottom: '20px'}}>
-            Student(ka): <strong style={{color: '#111827'}}>{studentName}</strong>
-          </p>
-        )}
 
         <div style={{
           textAlign: 'center', padding: '20px', borderRadius: '12px',
@@ -323,7 +217,6 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
         <div className="no-print" style={{display: 'flex', gap: '12px', marginTop: '24px', flexWrap: 'wrap'}}>
           <button style={lightBtn} onClick={() => setPhase('working')}>Wróć do zadań</button>
           <button style={lightBtn} onClick={clearSavedProgress}>Wylosuj nowy zestaw</button>
-          <button style={darkBtn} onClick={() => window.print()}>Pobierz wynik (PDF)</button>
         </div>
       </div>
     );
@@ -335,10 +228,6 @@ export default function NumberBaseTrainer({count = 10, title, storageKey}) {
     <div style={card}>
       <h3 style={heading}>{title || 'Ćwiczenie — konwersja systemów liczbowych'}</h3>
       <p style={subheading}>Zadanie {current + 1} z {total}</p>
-
-      {transferBar}
-      {importError && <div style={{color: '#dc2626', fontSize: '0.85rem', marginBottom: '14px'}}>⚠️ {importError}</div>}
-      {importSuccess && <div style={{color: '#16a34a', fontSize: '0.85rem', marginBottom: '14px'}}>✅ Postęp wczytany z pliku.</div>}
 
       {resumed && (
         <div style={{
