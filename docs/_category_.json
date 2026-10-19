@@ -1,0 +1,7 @@
+{
+  "label": "Symulator sieci",
+  "position": 9999,
+  "collapsible": true,
+  "collapsed": false,
+  "link": { "type": "doc", "id": "sieci/symulator" }
+}

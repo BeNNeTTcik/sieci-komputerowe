@@ -1,0 +1,25 @@
+---
+id: symulator
+title: Symulator sieci
+sidebar_label: Symulator Sieci
+sidebar_position: 21
+hide_table_of_contents: true
+---
+
+import NetworkSimulator from '@site/src/components/NetworkSimulator';
+
+Interaktywny symulator sieci: komputery, serwery, routery, przełączniki i drukarki. Urządzenia konfigurujesz w oknach albo
+w terminalu, a ruch oglądasz krok po kroku – ramka po ramce, warstwa po warstwie. Wersja na całe okno:
+[/symulator](/symulator).
+
+<NetworkSimulator scenario="lan" height={900} />
+
+## Jak korzystać
+
+- **Scenariusze** u góry to gotowe topologie startowe (LAN, router, DHCP, VLAN, usługi, IPv6…). „Pusty projekt” zaczyna od zera.
+- **Pakiety** włączają tylko potrzebne protokoły: IPv4, IPv6, VLAN, DHCP, DNS, WWW, FTP, poczta, NTP, drukowanie.
+- Urządzenia **przeciągasz** z paska na obszar roboczy, łączysz narzędziem **Kabel** (z wyborem portów) i konfigurujesz po kliknięciu.
+- Obszar roboczy przewijasz paskami albo przeciągając tło; **Ctrl + kółko** powiększa, przycisk **Dopasuj** pokazuje całą sieć.
+- W trybie **Symulacja** ruch jest odtwarzany powoli. Kliknij ramkę na schemacie, na liście zdarzeń albo na diagramie sekwencji, aby zobaczyć jej zawartość i decyzje urządzeń.
+
+Składnia wszystkich poleceń: [Polecenia CLI](./cli).

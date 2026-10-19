@@ -1,0 +1,15 @@
+---
+title: IPv6 – SLAAC i Neighbor Discovery
+sidebar_position: 4
+hide_table_of_contents: true
+---
+
+import NetworkSimulator from '@site/src/components/NetworkSimulator';
+
+W tej lekcji **pakiet IPv4 jest wyłączony** – urządzenia mają tylko stos IPv6.
+
+- Adres **link-local** (`fe80::/64`) każdy interfejs tworzy sam z adresu MAC (EUI-64, [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291)).
+- **SLAAC** ([RFC 4862](https://www.rfc-editor.org/rfc/rfc4862)): host wysyła *Router Solicitation*, router odpowiada *Router Advertisement* z prefiksem, a host dokleja do niego swój identyfikator.
+- Zamiast ARP działa **Neighbor Discovery** ([RFC 4861](https://www.rfc-editor.org/rfc/rfc4861)). Zapytanie trafia na adres multicast *węzła żądanego*, więc inne komputery odrzucają je już na karcie sieciowej.
+
+<NetworkSimulator scenario="ipv6" lockScenario height={860} />

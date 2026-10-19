@@ -1,0 +1,885 @@
+// SPDX-License-Identifier: MIT
+// Własny, niezależny od producentów język poleceń symulatora.
+// Ta sama składnia działa na każdym urządzeniu; dostępne są tylko polecenia
+// pasujące do typu urządzenia i do włączonych pakietów protokołów.
+
+import {
+  Device,
+  Network,
+  RecordType,
+  SERVICES,
+  SERVICE_LABEL,
+  STATUS_LABEL,
+  ServiceName,
+  TYPE_LABEL,
+  broadcastOf,
+  cidr,
+  fam,
+  getDev,
+  getIface,
+  globals6,
+  hasIp,
+  ifaceStatus,
+  inPrefix,
+  inSubnet,
+  ipToInt,
+  isIp,
+  isLinkLocal6,
+  maskToPrefix,
+  netOf,
+  networkOf,
+  norm6,
+  parseAddr,
+  peerOf,
+  prefixToMask,
+  routingTable,
+  sameIp,
+} from './model';
+import { ALL_PACKS, PackId, PackSet, serviceEnabled } from './packs';
+import { fmtClock, EPOCH } from './engine';
+
+export interface CliActions {
+  ping(d: Device, host: string, count: number, v: 4 | 6): void;
+  trace(d: Device, host: string, v: 4 | 6): void;
+  dhcp(d: Device): void;
+  autoconf(d: Device): void;
+  lookup(d: Device, name: string, type: RecordType): void;
+  http(d: Device, host: string, path: string, secure: boolean, v: 4 | 6): void;
+  ftp(d: Device, host: string, op: { cmd: 'get' | 'list'; file?: string; user: string; pass: string }, v: 4 | 6): void;
+  mailSend(d: Device, to: string, subject: string): void;
+  mailCheck(d: Device): void;
+  ntp(d: Device, host: string): void;
+  print(d: Device, host: string, doc: string, v: 4 | 6): void;
+}
+
+export interface CliLine {
+  text: string;
+  kind: 'out' | 'err' | 'hint';
+}
+
+export interface CliResult {
+  lines: CliLine[];
+  clear?: boolean;
+  error?: boolean;
+}
+
+const out = (...t: string[]): CliLine[] => t.map((text) => ({ text, kind: 'out' as const }));
+const fail = (text: string, hint?: string): CliResult => ({
+  error: true,
+  lines: [{ text: `błąd: ${text}`, kind: 'err' }, ...(hint ? [{ text: hint, kind: 'hint' as const }] : [])],
+});
+const ok = (...t: string[]): CliResult => ({ lines: out(...t) });
+
+export function prompt(d: Device): string {
+  return `${d.name}>`;
+}
+
+// ---------- opis poleceń (z niego powstaje też pomoc) ----------
+
+type DT = Device['type'];
+interface CmdDoc {
+  verb: string;
+  for: DT[];
+  pack?: PackId | PackId[];
+  syntax: string[];
+  text: string;
+  examples: string[];
+}
+
+const ALL: DT[] = ['pc', 'server', 'router', 'switch', 'printer'];
+const L3: DT[] = ['pc', 'server', 'router', 'printer'];
+const HOSTS: DT[] = ['pc', 'server', 'printer'];
+
+export const COMMANDS: CmdDoc[] = [
+  { verb: 'help', for: ALL, syntax: ['help [polecenie]'], text: 'Lista poleceń albo szczegóły jednego polecenia.', examples: ['help', 'help route'] },
+  {
+    verb: 'show',
+    for: ALL,
+    syntax: ['show interfaces | ip | routes | arp | neighbors | mac | vlans | dhcp | dns | services | clock | mail | files | jobs | config'],
+    text: 'Wyświetla stan urządzenia. „show config” wypisuje polecenia odtwarzające bieżącą konfigurację.',
+    examples: ['show interfaces', 'show routes', 'show config'],
+  },
+  { verb: 'set', for: ALL, syntax: ['set hostname <nazwa>', 'set certificate <nazwa>   (serwer)', 'set mail-domain <domena>   (serwer)'], text: 'Zmienia nazwę urządzenia albo ustawienia serwera.', examples: ['set hostname R-BIURO'] },
+  {
+    verb: 'interface',
+    for: ALL,
+    syntax: ['interface <if> up | down', 'interface <port> vlan <id>   (przełącznik, pakiet VLAN)'],
+    text: 'Włącza/wyłącza interfejs lub przypisuje port przełącznika do VLAN-u.',
+    examples: ['interface eth0 up', 'interface port3 vlan 10'],
+  },
+  {
+    verb: 'ip',
+    for: L3,
+    pack: ['ipv4', 'ipv6'],
+    syntax: ['ip add <adres>/<prefiks> dev <if>', 'ip del <adres>[/<prefiks>]', 'ip del dev <if>'],
+    text: 'Nadaje lub usuwa adres IPv4 (np. 192.168.1.1/24) albo IPv6 (np. 2001:db8:1::1/64). Adres link-local fe80:: powstaje sam.',
+    examples: ['ip add 192.168.1.1/24 dev eth0', 'ip add 2001:db8:1::1/64 dev eth0', 'ip del dev eth1'],
+  },
+  {
+    verb: 'ipv6',
+    for: ['pc', 'server', 'printer'],
+    pack: 'ipv6',
+    syntax: ['ipv6 autoconf', 'ipv6 autoconf off'],
+    text: 'SLAAC (RFC 4862): host wysyła Router Solicitation, a z prefiksu w Router Advertisement i swojego MAC buduje adres.',
+    examples: ['ipv6 autoconf'],
+  },
+  {
+    verb: 'route',
+    for: L3,
+    pack: ['ipv4', 'ipv6'],
+    syntax: ['route add <sieć>/<prefiks> via <next-hop>', 'route add default via <brama>', 'route del <sieć>/<prefiks>', 'route del default [-6]'],
+    text: 'Trasy statyczne IPv4 i IPv6 (rodzina wynika z adresu). Na hostach – tylko trasa domyślna (brama). Wygrywa najdłuższy pasujący prefiks.',
+    examples: ['route add default via 192.168.1.1', 'route add 10.0.2.0/24 via 10.0.0.2', 'route add 2001:db8:2::/64 via 2001:db8:ff::2'],
+  },
+  {
+    verb: 'dhcp-server',
+    for: ['router', 'server'],
+    pack: 'dhcp',
+    syntax: ['dhcp-server add <nazwa> net <sieć>/<prefiks> gw <brama> range <od>-<do> [dns <serwer>]', 'dhcp-server del <nazwa>'],
+    text: 'Pula serwera DHCP (RFC 2131). Opcja dns przekazuje klientom adres serwera DNS.',
+    examples: ['dhcp-server add LAN net 192.168.1.0/24 gw 192.168.1.1 range 192.168.1.100-192.168.1.150 dns 192.168.1.10'],
+  },
+  {
+    verb: 'dhcp-relay',
+    for: ['router'],
+    pack: 'dhcp',
+    syntax: ['dhcp-relay set dev <if> server <ip>', 'dhcp-relay del dev <if>'],
+    text: 'Przekaźnik DHCP: broadcasty klientów z danej sieci router przesyła unicastem do serwera w innej sieci.',
+    examples: ['dhcp-relay set dev eth0 server 10.0.10.10'],
+  },
+  { verb: 'dhcp-client', for: ['pc', 'printer'], pack: 'dhcp', syntax: ['dhcp-client start', 'dhcp-client release'], text: 'Pobiera konfigurację z serwera DHCP albo ją zwalnia.', examples: ['dhcp-client start'] },
+  { verb: 'dns', for: HOSTS, pack: 'dns', syntax: ['dns set <adres serwera>', 'dns flush'], text: 'Ustawia serwer DNS albo czyści pamięć podręczną nazw.', examples: ['dns set 192.168.1.10'] },
+  { verb: 'nslookup', for: L3, pack: 'dns', syntax: ['nslookup <nazwa> [A | AAAA | MX]'], text: 'Zapytanie do serwera DNS (RFC 1035).', examples: ['nslookup www.szkola.lab', 'nslookup szkola.lab MX'] },
+  { verb: 'vlan', for: ['switch'], pack: 'vlan', syntax: ['vlan add <id> [name <nazwa>]', 'vlan del <id>'], text: 'Tworzy lub usuwa VLAN (1–4094).', examples: ['vlan add 10 name BIURO'] },
+  { verb: 'arp', for: L3, pack: 'ipv4', syntax: ['arp flush'], text: 'Czyści tablicę ARP – przy następnym połączeniu zobaczysz znowu zapytania ARP.', examples: ['arp flush'] },
+  { verb: 'neighbors', for: L3, pack: 'ipv6', syntax: ['neighbors flush'], text: 'Czyści tablicę sąsiadów IPv6 (NDP).', examples: ['neighbors flush'] },
+  { verb: 'mac', for: ['switch'], syntax: ['mac flush'], text: 'Czyści tablicę adresów MAC przełącznika.', examples: ['mac flush'] },
+  { verb: 'ping', for: L3, pack: ['ipv4', 'ipv6'], syntax: ['ping <adres | nazwa> [count <n>] [-6]'], text: 'Echo Request / Echo Reply (RFC 792, RFC 4443). -6 wymusza IPv6 przy nazwie.', examples: ['ping 192.168.1.1', 'ping www.szkola.lab -6'] },
+  { verb: 'trace', for: L3, pack: ['ipv4', 'ipv6'], syntax: ['trace <adres | nazwa> [-6]'], text: 'Śledzi trasę: sondy z rosnącym TTL/Hop Limit zbierają Time Exceeded od routerów.', examples: ['trace 192.168.2.10'] },
+  { verb: 'http', for: ['pc'], pack: 'web', syntax: ['http <host> [ścieżka] [-6]'], text: 'Pobiera stronę protokołem HTTP (TCP 80) – jawny tekst.', examples: ['http www.szkola.lab', 'http www.szkola.lab /plan'] },
+  { verb: 'https', for: ['pc'], pack: 'web', syntax: ['https <host> [ścieżka] [-6]'], text: 'Pobiera stronę przez TLS 1.3 (TCP 443) – dane zaszyfrowane.', examples: ['https www.szkola.lab'] },
+  {
+    verb: 'ftp',
+    for: ['pc'],
+    pack: 'ftp',
+    syntax: ['ftp <host> get <plik> user <login> pass <hasło>', 'ftp <host> list user <login> pass <hasło>'],
+    text: 'Klient FTP: logowanie, tryb EPSV, osobne połączenie danych (RFC 959, RFC 2428).',
+    examples: ['ftp ftp.szkola.lab get zadanie.txt user uczen pass haslo123'],
+  },
+  {
+    verb: 'mail',
+    for: ['pc'],
+    pack: 'mail',
+    syntax: ['mail account <adres> pass <hasło>', 'mail send <adres> <temat…>', 'mail check'],
+    text: 'Klient poczty: wysyłanie przez SMTP (RFC 5321), odbiór przez POP3 (RFC 1939). Serwer domeny wskazuje rekord MX.',
+    examples: ['mail account uczen@szkola.lab pass haslo123', 'mail send nauczyciel@szkola.lab Praca domowa', 'mail check'],
+  },
+  { verb: 'ntp', for: L3, pack: 'ntp', syntax: ['ntp sync <host>'], text: 'Synchronizuje zegar z serwerem czasu (RFC 5905).', examples: ['ntp sync ntp.szkola.lab'] },
+  { verb: 'print', for: ['pc'], pack: 'print', syntax: ['print <adres drukarki> [doc <nazwa>]'], text: 'Zadanie drukowania przez IPP (TCP 631, RFC 8011).', examples: ['print 192.168.1.50 doc referat.pdf'] },
+  { verb: 'service', for: ['server'], syntax: ['service list', 'service <dhcp|dns|http|https|ftp|mail|ntp> on | off'], text: 'Włącza lub wyłącza usługi serwera.', examples: ['service list', 'service ftp off'] },
+  { verb: 'dns-record', for: ['server'], pack: 'dns', syntax: ['dns-record add <nazwa> A | AAAA | MX <wartość>', 'dns-record del <nazwa> [typ]'], text: 'Rekordy strefy DNS.', examples: ['dns-record add www.szkola.lab A 192.168.1.10', 'dns-record add szkola.lab MX mail.szkola.lab'] },
+  { verb: 'web', for: ['server'], pack: 'web', syntax: ['web set <ścieżka> <treść…>', 'web del <ścieżka>'], text: 'Strony serwera WWW.', examples: ['web set /kontakt Sekretariat: pokój 12'] },
+  { verb: 'ftp-file', for: ['server'], pack: 'ftp', syntax: ['ftp-file add <nazwa> <treść…>', 'ftp-file del <nazwa>'], text: 'Pliki udostępniane przez FTP.', examples: ['ftp-file add notatki.txt Adresacja IPv6 – powtórka'] },
+  { verb: 'user', for: ['server'], pack: ['ftp', 'mail'], syntax: ['user add <login> <hasło>', 'user del <login>'], text: 'Konta użytkowników (logowanie FTP i skrzynki pocztowe).', examples: ['user add nauczyciel tajne1'] },
+  { verb: 'clear', for: ALL, syntax: ['clear'], text: 'Czyści ekran terminala.', examples: ['clear'] },
+];
+
+function packOk(c: CmdDoc, packs: PackSet) {
+  if (!c.pack) return true;
+  const list = Array.isArray(c.pack) ? c.pack : [c.pack];
+  return list.some((p) => packs[p]);
+}
+
+export function commandsFor(d: Device, packs: PackSet) {
+  return COMMANDS.filter((c) => c.for.includes(d.type) && packOk(c, packs));
+}
+
+function helpFor(d: Device, packs: PackSet, topic?: string): CliResult {
+  const cmds = commandsFor(d, packs);
+  if (topic) {
+    const c = cmds.find((x) => x.verb.startsWith(topic.toLowerCase()));
+    if (!c) return fail(`brak polecenia „${topic}” na tym urządzeniu przy włączonych pakietach`);
+    return ok(...c.syntax.map((s) => `  ${s}`), '', c.text, '', 'Przykłady:', ...c.examples.map((e) => `  ${d.name}> ${e}`));
+  }
+  const w = Math.max(...cmds.map((c) => c.verb.length)) + 2;
+  return {
+    lines: [
+      ...out(`Polecenia dostępne na: ${TYPE_LABEL[d.type].toLowerCase()} ${d.name}`, ''),
+      ...cmds.map((c) => ({ text: `  ${c.verb.padEnd(w)}${c.text.split(/\.\s(?=[A-ZĄĆĘŁŃÓŚŹŻ])/)[0].replace(/\.$/, '')}.`, kind: 'out' as const })),
+      { text: 'Wpisz „help <polecenie>”, aby zobaczyć składnię. Słowa można skracać, np. „sh int”.', kind: 'hint' },
+    ],
+  };
+}
+
+// ---------- pomocnicze ----------
+
+function pick(tok: string | undefined, words: string[]): string | null | 'ambiguous' {
+  if (!tok) return null;
+  const t = tok.toLowerCase();
+  if (words.includes(t)) return t;
+  const m = words.filter((w) => w.startsWith(t));
+  if (m.length === 1) return m[0];
+  return m.length > 1 ? 'ambiguous' : null;
+}
+
+function findIface(d: Device, name: string | undefined) {
+  if (!name) return undefined;
+  const n = name.toLowerCase();
+  return d.ifaces.find((i) => i.name.toLowerCase() === n) ?? (/^\d+$/.test(n) ? getIface(d, `port${n}`) : undefined);
+}
+
+function table(head: string[], rows: string[][]): string[] {
+  const w = head.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)) + 2);
+  const line = (r: string[]) => r.map((c, i) => (c ?? '').padEnd(w[i])).join('').trimEnd();
+  return [line(head), line(head.map((_, i) => '-'.repeat(w[i] - 2))), ...rows.map(line)];
+}
+
+function kv(tokens: string[], keys: string[]): Record<string, string> {
+  const r: Record<string, string> = {};
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const k = pick(tokens[i], keys);
+    if (k && k !== 'ambiguous') {
+      r[k] = tokens[i + 1];
+      i++;
+    }
+  }
+  return r;
+}
+
+function famPref(packs: PackSet, args: string[]): 4 | 6 {
+  if (args.includes('-6')) return 6;
+  if (args.includes('-4')) return 4;
+  return packs.ipv4 ? 4 : 6;
+}
+
+const famOff = (packs: PackSet, f: 4 | 6) => (f === 4 ? !packs.ipv4 : !packs.ipv6);
+
+// ---------- show ----------
+
+function showInterfaces(net: Network, d: Device, packs: PackSet): string[] {
+  const sw = d.type === 'switch';
+  const rows: string[][] = [];
+  for (const i of d.ifaces) {
+    const p = peerOf(net, d.id, i.name);
+    const pd = p && getDev(net, p.dev);
+    const addrs = sw ? ['-'] : [...(packs.ipv4 && hasIp(i) ? [cidr(i.ip, i.mask)] : []), ...(packs.ipv6 ? i.ip6.map((a) => `${a.addr}/${a.prefix}`) : [])];
+    rows.push([i.name, STATUS_LABEL[ifaceStatus(net, d, i)], addrs[0] ?? '-', i.mac, ...(sw && packs.vlan ? [String(i.vlan)] : []), pd ? `${pd.name} ${p!.iface}` : '-']);
+    for (const a of addrs.slice(1)) rows.push(['', '', a, '', ...(sw && packs.vlan ? [''] : []), '']);
+  }
+  return table(['Interfejs', 'Stan', 'Adres', 'MAC', ...(sw && packs.vlan ? ['VLAN'] : []), 'Połączony z'], rows);
+}
+
+function showRoutes(net: Network, d: Device, packs: PackSet): string[] {
+  const rt = routingTable(net, d).filter((e) => (e.fam === 4 ? packs.ipv4 : packs.ipv6));
+  if (!rt.length) return ['(tablica routingu jest pusta)'];
+  const kind = { connected: 'C', static: 'S', default: 'S*' } as const;
+  return [
+    ...table(
+      ['Typ', 'Sieć docelowa', 'Następny skok', 'Interfejs', 'Stan'],
+      rt.map((e) => [kind[e.kind], `${e.network}/${e.prefix}`, e.nextHop || 'bezpośrednio', e.iface || '?', e.active ? 'aktywna' : 'nieaktywna']),
+    ),
+    '',
+    'C – sieć podłączona bezpośrednio, S – statyczna, S* – domyślna',
+  ];
+}
+
+export function configLines(d: Device, packs: PackSet = ALL_PACKS): string[] {
+  const c = [`# konfiguracja ${d.name} (${TYPE_LABEL[d.type].toLowerCase()})`, `set hostname ${d.name}`];
+  if (d.type === 'switch') {
+    if (packs.vlan) for (const v of d.vlans) if (v.id !== 1) c.push(`vlan add ${v.id}${v.name ? ` name ${v.name}` : ''}`);
+    for (const i of d.ifaces) {
+      if (packs.vlan && i.vlan !== 1) c.push(`interface ${i.name} vlan ${i.vlan}`);
+      if (!i.up) c.push(`interface ${i.name} down`);
+    }
+    return c;
+  }
+  const dyn = d.type !== 'router' && d.dhcp;
+  for (const i of d.ifaces) {
+    c.push(`interface ${i.name} ${i.up ? 'up' : 'down'}`);
+    if (packs.ipv4 && hasIp(i) && !dyn) c.push(`ip add ${cidr(i.ip, i.mask)} dev ${i.name}`);
+    if (packs.ipv6) for (const a of i.ip6.filter((x) => x.origin === 'static')) c.push(`ip add ${a.addr}/${a.prefix} dev ${i.name}`);
+    if (packs.dhcp && i.relay) c.push(`dhcp-relay set dev ${i.name} server ${i.relay}`);
+  }
+  if (d.type === 'router') {
+    for (const r of d.routes) if (fam(r.nextHop) === 4 ? packs.ipv4 : packs.ipv6) c.push(`route add ${r.prefix === 0 ? 'default' : `${r.network}/${r.prefix}`} via ${r.nextHop}`);
+  } else {
+    if (packs.dhcp && dyn) c.push('dhcp-client start');
+    else if (packs.ipv4 && d.gateway) c.push(`route add default via ${d.gateway}`);
+    if (packs.ipv6 && d.slaac) c.push('ipv6 autoconf');
+    else if (packs.ipv6 && d.gateway6) c.push(`route add default via ${d.gateway6}`);
+    if (packs.dns && d.dns && !dyn) c.push(`dns set ${d.dns}`);
+  }
+  if (packs.dhcp) for (const p of d.pools) c.push(`dhcp-server add ${p.name} net ${cidr(p.network, p.mask)} gw ${p.gateway} range ${p.start}-${p.end}${p.dns ? ` dns ${p.dns}` : ''}`);
+  if (d.type === 'server') {
+    for (const s of SERVICES) if (serviceEnabled(packs, s)) c.push(`service ${s} ${d.services[s] ? 'on' : 'off'}`);
+    if (packs.dns) for (const r of d.records) c.push(`dns-record add ${r.name} ${r.type} ${r.value}`);
+    if (packs.web) {
+      c.push(`set certificate ${d.certName}`);
+      for (const w of d.web) c.push(`web set ${w.path} ${w.body.replace(/\n/g, ' ')}`);
+    }
+    if (packs.ftp) for (const f of d.files) c.push(`ftp-file add ${f.name} ${f.body.replace(/\n/g, ' ')}`);
+    if (packs.ftp || packs.mail) for (const u of d.users) c.push(`user add ${u.name} ${u.pass}`);
+    if (packs.mail) c.push(`set mail-domain ${d.mailDomain}`);
+  }
+  if (d.type === 'pc' && packs.mail && d.mailAccount.addr) c.push(`mail account ${d.mailAccount.addr} pass ${d.mailAccount.pass}`);
+  return c;
+}
+
+function show(net: Network, d: Device, args: string[], packs: PackSet): CliResult {
+  const l3 = d.type !== 'switch';
+  const topics = [
+    'interfaces',
+    ...(l3 ? ['ip', 'routes', 'clock'] : ['mac']),
+    ...(l3 && packs.ipv4 ? ['arp'] : []),
+    ...(l3 && packs.ipv6 ? ['neighbors'] : []),
+    ...(!l3 && packs.vlan ? ['vlans'] : []),
+    ...(packs.dhcp && d.type !== 'switch' ? ['dhcp'] : []),
+    ...(packs.dns && l3 ? ['dns'] : []),
+    ...(d.type === 'server' ? ['services'] : []),
+    ...(packs.mail && (d.type === 'pc' || d.type === 'server') ? ['mail'] : []),
+    ...(packs.ftp && (d.type === 'server' || d.type === 'pc') ? ['files'] : []),
+    ...(d.type === 'printer' ? ['jobs'] : []),
+    'config',
+  ];
+  const t = pick(args[0], topics);
+  if (!t) return fail('podaj, co pokazać', `show ${topics.join(' | ')}`);
+  if (t === 'ambiguous') return fail(`niejednoznaczne „${args[0]}”`, `show ${topics.join(' | ')}`);
+  switch (t) {
+    case 'interfaces':
+      return ok(...showInterfaces(net, d, packs));
+    case 'ip': {
+      const rows: string[][] = [];
+      for (const i of d.ifaces) {
+        if (packs.ipv4 && hasIp(i)) rows.push([i.name, cidr(i.ip, i.mask), `${networkOf(i.ip, i.mask)}/${maskToPrefix(i.mask)}`, 'IPv4']);
+        if (packs.ipv6) for (const a of i.ip6) rows.push([i.name, `${a.addr}/${a.prefix}`, a.origin === 'link' ? 'link-local' : `${netOf(a.addr, a.prefix)}/${a.prefix}`, a.origin === 'auto' ? 'IPv6 SLAAC' : 'IPv6']);
+      }
+      const extra: string[] = [];
+      if (d.type !== 'router') {
+        if (packs.ipv4) extra.push(`Brama IPv4: ${d.gateway || '-'}`);
+        if (packs.ipv6) extra.push(`Brama IPv6: ${d.gateway6 || '-'}`);
+        if (packs.dns) extra.push(`Serwer DNS: ${d.dns || '-'}`);
+      }
+      return ok(...(rows.length ? table(['Interfejs', 'Adres', 'Sieć', 'Rodzaj'], rows) : ['(brak adresów)']), ...(extra.length ? ['', ...extra] : []));
+    }
+    case 'routes':
+      return ok(...showRoutes(net, d, packs));
+    case 'arp':
+      return ok(...(d.arp.length ? table(['Adres IP', 'Adres MAC', 'Interfejs'], d.arp.map((a) => [a.ip, a.mac, a.iface])) : ['(tablica ARP jest pusta)']));
+    case 'neighbors':
+      return ok(...(d.nd.length ? table(['Adres IPv6', 'Adres MAC', 'Interfejs'], d.nd.map((a) => [a.ip, a.mac, a.iface])) : ['(tablica sąsiadów jest pusta)']));
+    case 'mac':
+      return ok(...(d.macTable.length ? table(['VLAN', 'Adres MAC', 'Port'], d.macTable.map((m) => [String(m.vlan), m.mac, m.port])) : ['(tablica MAC jest pusta)']));
+    case 'vlans':
+      return ok(...table(['VLAN', 'Nazwa', 'Porty'], d.vlans.map((v) => [String(v.id), v.name, d.ifaces.filter((i) => i.vlan === v.id).map((i) => i.name).join(', ') || '-'])));
+    case 'dhcp':
+      if (d.type === 'router' || d.type === 'server') {
+        return ok(
+          'Pule:',
+          ...(d.pools.length ? table(['Nazwa', 'Sieć', 'Brama', 'Zakres', 'DNS'], d.pools.map((p) => [p.name, cidr(p.network, p.mask), p.gateway, `${p.start}-${p.end}`, p.dns || '-'])) : ['(brak pul)']),
+          ...(d.type === 'router' && d.ifaces.some((i) => i.relay) ? ['', 'Przekaźnik:', ...d.ifaces.filter((i) => i.relay).map((i) => `  ${i.name} → ${i.relay}`)] : []),
+          '',
+          'Dzierżawy:',
+          ...(d.leases.length ? table(['Adres IP', 'MAC klienta', 'Host', 'Pula'], d.leases.map((l) => [l.ip, l.mac, l.host, l.pool])) : ['(brak dzierżaw)']),
+        );
+      }
+      return ok(`Klient DHCP: ${d.dhcp ? 'włączony' : 'wyłączony (adres statyczny)'}`, `Adres: ${hasIp(d.ifaces[0]) ? cidr(d.ifaces[0].ip, d.ifaces[0].mask) : '-'}`, `Brama: ${d.gateway || '-'}`);
+    case 'dns': {
+      const lines = [`Serwer DNS: ${d.dns || '-'}`, 'Pamięć podręczna:', ...(d.dnsCache.length ? table(['Nazwa', 'Typ', 'Wartość'], d.dnsCache.map((r) => [r.name, r.type, r.value])) : ['  (pusta)'])];
+      if (d.type === 'server') lines.push('', 'Strefa (rekordy serwera):', ...(d.records.length ? table(['Nazwa', 'Typ', 'Wartość'], d.records.map((r) => [r.name, r.type, r.value])) : ['  (brak rekordów)']));
+      return ok(...lines);
+    }
+    case 'services':
+      return ok(...table(['Usługa', 'Stan'], SERVICES.filter((s) => serviceEnabled(packs, s)).map((s) => [SERVICE_LABEL[s], d.services[s] ? 'włączona' : 'wyłączona'])));
+    case 'clock':
+      return ok(`Czas urządzenia: ${fmtClock(EPOCH + d.clock)} (przy kroku 0)`, `Przesunięcie względem czasu wzorcowego: ${(d.clock / 1000).toFixed(3)} s`);
+    case 'mail':
+      if (d.type === 'server') {
+        return ok(`Domena: ${d.mailDomain}`, ...table(['Skrzynka', 'Wiadomości'], d.users.map((u) => [`${u.name}@${d.mailDomain}`, String(u.mail.length)])));
+      }
+      return ok(`Konto: ${d.mailAccount.addr || '(nie ustawiono)'}`, ...(d.inbox.length ? table(['Od', 'Temat'], d.inbox.map((m) => [m.from, m.subject])) : ['(skrzynka odbiorcza pusta)']));
+    case 'files':
+      if (d.type === 'server') return ok(...(d.files.length ? table(['Plik', 'Rozmiar'], d.files.map((f) => [f.name, `${f.body.length} B`])) : ['(brak plików)']));
+      return ok(...(d.downloads.length ? table(['Plik', 'Skąd', 'Rozmiar'], d.downloads.map((f) => [f.name, f.from, `${f.body.length} B`])) : ['(brak pobranych plików)']));
+    case 'jobs':
+      return ok(...(d.jobs.length ? table(['Nr', 'Dokument', 'Od'], d.jobs.map((j) => [String(j.id), j.doc, j.from])) : ['(brak wydruków)']));
+    case 'config':
+      return ok(...configLines(d, packs));
+  }
+  return fail('nieznany temat');
+}
+
+// ---------- konfiguracja ----------
+
+function cmdInterface(net: Network, d: Device, a: string[], packs: PackSet): CliResult {
+  const i = findIface(d, a[0]);
+  if (!i) return fail(`nie ma interfejsu „${a[0] ?? ''}”`, `Interfejsy: ${d.ifaces.map((x) => x.name).join(', ')}`);
+  const acts = d.type === 'switch' && packs.vlan ? ['up', 'down', 'vlan'] : ['up', 'down'];
+  const act = pick(a[1], acts);
+  if (!act || act === 'ambiguous') return fail('brak akcji', `interface ${i.name} ${acts.join(' | ')}`);
+  if (act === 'vlan') {
+    const id = Number(a[2]);
+    if (!Number.isInteger(id) || id < 1 || id > 4094) return fail('numer VLAN musi być z zakresu 1–4094');
+    const lines: CliLine[] = [];
+    if (!d.vlans.some((v) => v.id === id)) {
+      d.vlans.push({ id, name: `VLAN${id}` });
+      lines.push({ text: `VLAN ${id} nie istniał – utworzono go.`, kind: 'hint' });
+    }
+    i.vlan = id;
+    return { lines: [...out(`${i.name}: port dostępowy w VLAN ${id}`), ...lines] };
+  }
+  i.up = act === 'up';
+  return ok(`${i.name}: ${i.up ? 'włączony' : 'wyłączony'} (stan łącza: ${STATUS_LABEL[ifaceStatus(net, d, i)]})`);
+}
+
+function hostRange(ip: string, mask: string) {
+  const n = ipToInt(networkOf(ip, mask)!)!;
+  const b = ipToInt(broadcastOf(ip, mask)!)!;
+  const f = (x: number) => [x >>> 24, (x >>> 16) & 255, (x >>> 8) & 255, x & 255].join('.');
+  return `${f(n + 1)} – ${f(b - 1)}`;
+}
+
+function cmdIp(d: Device, a: string[], packs: PackSet): CliResult {
+  const act = pick(a[0], ['add', 'del']);
+  if (!act || act === 'ambiguous') return fail('brak akcji', 'ip add <adres>/<prefiks> dev <if>  |  ip del <adres>  |  ip del dev <if>');
+  const rest = a.slice(1).filter((x) => x.toLowerCase() !== 'dev');
+  const single = d.type === 'router' ? undefined : d.ifaces[0];
+  if (act === 'del') {
+    const asIf = findIface(d, rest[0]);
+    if (asIf || (!rest[0] && single)) {
+      const i = asIf ?? single!;
+      if (packs.ipv4) {
+        i.ip = '';
+        i.mask = '';
+      }
+      if (packs.ipv6) i.ip6 = i.ip6.filter((x) => x.origin === 'link');
+      return ok(`${i.name}: adresy usunięte (link-local zostaje)`);
+    }
+    const target = rest[0]?.split('/')[0] ?? '';
+    for (const i of d.ifaces) {
+      if (i.ip === target) {
+        i.ip = '';
+        i.mask = '';
+        return ok(`${i.name}: usunięto ${target}`);
+      }
+      const k = i.ip6.find((x) => sameIp(x.addr, target) && x.origin !== 'link');
+      if (k) {
+        i.ip6 = i.ip6.filter((x) => x !== k);
+        return ok(`${i.name}: usunięto ${k.addr}`);
+      }
+    }
+    return fail(`nie znaleziono adresu ${rest[0] ?? ''}`, 'Podaj adres albo interfejs: ip del dev eth0');
+  }
+  const c = parseAddr(rest[0], rest[1]);
+  if (!c) return fail('niepoprawny adres – użyj notacji adres/prefiks', 'np. ip add 192.168.1.10/24 dev eth0  albo  ip add 2001:db8:1::10/64 dev eth0');
+  if (famOff(packs, c.fam)) return fail(`pakiet IPv${c.fam} jest wyłączony w tym projekcie`, 'Włącz go w menu „Pakiety”.');
+  const ifName = rest[c.used];
+  const i = ifName ? findIface(d, ifName) : single;
+  if (!i) return fail(ifName ? `nie ma interfejsu „${ifName}”` : 'podaj interfejs (dev eth0, eth1…)');
+  const lines: CliLine[] = [];
+  if (c.fam === 4) {
+    const mask = prefixToMask(c.prefix);
+    if (c.prefix === 0 || c.prefix === 32) return fail(`prefiks /${c.prefix} nie nadaje się dla interfejsu`);
+    if (c.prefix <= 30 && (c.ip === networkOf(c.ip, mask) || c.ip === broadcastOf(c.ip, mask))) {
+      return fail(`${c.ip} to adres ${c.ip === networkOf(c.ip, mask) ? 'sieci' : 'rozgłoszeniowy'} dla /${c.prefix}, nie adres hosta`, `Adresy hostów w tej sieci: ${hostRange(c.ip, mask)}`);
+    }
+    for (const o of d.ifaces) {
+      if (o === i || !hasIp(o)) continue;
+      if (inSubnet(c.ip, o.ip, o.mask) || inSubnet(o.ip, c.ip, mask)) {
+        return fail(`sieć ${networkOf(c.ip, mask)}/${c.prefix} nakłada się z ${o.name} (${cidr(o.ip, o.mask)})`, 'Każdy interfejs routera musi należeć do innej sieci.');
+      }
+    }
+    i.ip = c.ip;
+    i.mask = mask;
+    if (d.type !== 'router') d.dhcp = false;
+    lines.push(...out(`${i.name}: ${c.ip}/${c.prefix} (sieć ${networkOf(c.ip, mask)}, broadcast ${broadcastOf(c.ip, mask)})`));
+  } else {
+    if (isLinkLocal6(c.ip)) return fail('adres link-local powstaje automatycznie z adresu MAC – nadaj adres globalny', 'np. 2001:db8:1::1/64');
+    if (c.prefix < 1 || c.prefix > 127) return fail(`prefiks /${c.prefix} nie nadaje się dla interfejsu`, 'W sieciach lokalnych IPv6 stosuje się /64.');
+    for (const o of d.ifaces) {
+      if (o === i) continue;
+      const clash = globals6(o).find((x) => inPrefix(c.ip, x.addr, Math.min(x.prefix, c.prefix)));
+      if (clash) return fail(`prefiks nakłada się z ${o.name} (${clash.addr}/${clash.prefix})`, 'Każdy interfejs routera musi należeć do innej sieci.');
+    }
+    i.ip6 = i.ip6.filter((x) => !(x.origin === 'static' && inPrefix(x.addr, c.ip, c.prefix)));
+    i.ip6.push({ addr: norm6(c.ip), prefix: c.prefix, origin: 'static' });
+    lines.push(...out(`${i.name}: ${norm6(c.ip)}/${c.prefix} (prefiks ${netOf(c.ip, c.prefix)}/${c.prefix})`));
+    if (c.prefix !== 64) lines.push({ text: 'SLAAC działa tylko z prefiksem /64.', kind: 'hint' });
+  }
+  if (!i.up) lines.push({ text: `Interfejs ${i.name} jest wyłączony – włącz go: interface ${i.name} up`, kind: 'hint' });
+  return { lines };
+}
+
+function cmdRoute(d: Device, a: string[], packs: PackSet): CliResult {
+  const act = pick(a[0], ['add', 'del']);
+  if (!act || act === 'ambiguous') return fail('brak akcji', 'route add <sieć>/<prefiks> via <ip>  |  route del <sieć>/<prefiks>');
+  const host = d.type !== 'router';
+  const vi = a.findIndex((x) => x.toLowerCase() === 'via');
+  const nh = vi >= 0 ? a[vi + 1] : undefined;
+  const isDef = a[1]?.toLowerCase() === 'default';
+  let f: 4 | 6;
+  let network: string;
+  let prefix: number;
+  if (isDef) {
+    f = nh ? (fam(nh) as 4 | 6) : a.includes('-6') ? 6 : packs.ipv4 ? 4 : 6;
+    network = f === 6 ? '::' : '0.0.0.0';
+    prefix = 0;
+  } else {
+    const t = parseAddr(a[1], a[2]);
+    if (!t) return fail('podaj sieć w notacji adres/prefiks albo „default”', 'np. route add 10.0.2.0/24 via 10.0.0.2');
+    f = t.fam;
+    network = netOf(t.ip, t.prefix);
+    prefix = t.prefix;
+  }
+  if (!f) return fail('niepoprawny adres następnego skoku');
+  if (famOff(packs, f)) return fail(`pakiet IPv${f} jest wyłączony w tym projekcie`);
+  if (host && prefix !== 0) return fail('komputer, serwer i drukarka obsługują tylko trasę domyślną', 'route add default via <adres bramy>');
+  if (act === 'del') {
+    if (host) {
+      if (f === 4) d.gateway = '';
+      else d.gateway6 = '';
+      return ok(`Usunięto bramę IPv${f}.`);
+    }
+    const before = d.routes.length;
+    d.routes = d.routes.filter((r) => !(sameIp(r.network, network) && r.prefix === prefix));
+    return before === d.routes.length ? fail(`nie ma trasy ${network}/${prefix}`) : ok(`Usunięto trasę ${network}/${prefix}.`);
+  }
+  if (!nh || fam(nh) !== f) return fail(`podaj następny skok IPv${f}: via <adres>`);
+  const next = f === 6 ? norm6(nh) : nh;
+  const lines: CliLine[] = [];
+  if (!isDef && a[1].split('/')[0] !== network && f === 4) lines.push({ text: `Uwaga: adres miał bity hosta – zapisano jako sieć ${network}.`, kind: 'hint' });
+  if (f === 6 && isLinkLocal6(next) && !host) return fail('na routerze podaj globalny adres następnego skoku');
+  const direct = (f === 6 && isLinkLocal6(next)) || d.ifaces.some((i) => (f === 4 ? hasIp(i) && inSubnet(next, i.ip, i.mask) : globals6(i).some((x) => inPrefix(next, x.addr, x.prefix))));
+  if (!direct) lines.push({ text: `${next} nie leży w żadnej podłączonej sieci – trasa będzie nieaktywna, dopóki to się nie zmieni.`, kind: 'hint' });
+  if (host) {
+    if (f === 4) d.gateway = next;
+    else d.gateway6 = next;
+    return { lines: [...out(`Brama domyślna IPv${f}: ${next}`), ...lines] };
+  }
+  d.routes = d.routes.filter((r) => !(sameIp(r.network, network) && r.prefix === prefix));
+  d.routes.push({ network, prefix, nextHop: next });
+  return { lines: [...out(`Dodano trasę ${prefix === 0 ? (f === 6 ? 'domyślną ::/0' : 'domyślną 0.0.0.0/0') : `${network}/${prefix}`} przez ${next}`), ...lines] };
+}
+
+function cmdDhcpServer(d: Device, a: string[]): CliResult {
+  const act = pick(a[0], ['add', 'del']);
+  const syntax = 'dhcp-server add <nazwa> net <sieć>/<prefiks> gw <brama> range <od>-<do> [dns <serwer>]';
+  if (!act || act === 'ambiguous') return fail('brak akcji', syntax);
+  const name = a[1];
+  if (!name) return fail('podaj nazwę puli', syntax);
+  if (act === 'del') {
+    const n = d.pools.length;
+    d.pools = d.pools.filter((p) => p.name !== name);
+    return n === d.pools.length ? fail(`nie ma puli „${name}”`) : ok(`Usunięto pulę ${name}.`);
+  }
+  const o = kv(a.slice(2), ['net', 'gw', 'range', 'dns']);
+  const n = parseAddr(o.net);
+  if (!n || n.fam !== 4) return fail('brak lub błędne „net <sieć>/<prefiks>” (pula DHCP jest dla IPv4)', syntax);
+  const mask = prefixToMask(n.prefix);
+  const network = networkOf(n.ip, mask)!;
+  if (!o.gw || !isIp(o.gw) || !inSubnet(o.gw, network, mask)) return fail('brama (gw) musi być adresem z tej sieci', syntax);
+  const [s, e] = (o.range ?? '').split('-');
+  if (!isIp(s) || !isIp(e) || !inSubnet(s, network, mask) || !inSubnet(e, network, mask) || ipToInt(s)! > ipToInt(e)!) {
+    return fail('zakres (range od-do) musi leżeć w sieci puli, „od” ≤ „do”', syntax);
+  }
+  if (o.dns && !fam(o.dns)) return fail('dns musi być adresem IP serwera DNS');
+  const lines: CliLine[] = [];
+  if (d.type === 'router' && !d.ifaces.some((i) => hasIp(i) && inSubnet(i.ip, network, mask))) {
+    lines.push({ text: `Żaden interfejs routera nie należy do sieci ${network}/${n.prefix} – pula nie obsłuży klientów.`, kind: 'hint' });
+  }
+  if (d.type === 'server' && !d.services.dhcp) lines.push({ text: 'Usługa DHCP na serwerze jest wyłączona – włącz: service dhcp on', kind: 'hint' });
+  d.pools = d.pools.filter((p) => p.name !== name);
+  d.pools.push({ name, network, mask, gateway: o.gw, start: s, end: e, dns: o.dns ?? '' });
+  return { lines: [...out(`Pula ${name}: ${network}/${n.prefix}, brama ${o.gw}, zakres ${s}–${e}${o.dns ? `, DNS ${o.dns}` : ''}`), ...lines] };
+}
+
+function cmdVlan(d: Device, a: string[]): CliResult {
+  const act = pick(a[0], ['add', 'del']);
+  if (!act || act === 'ambiguous') return fail('brak akcji', 'vlan add <id> [name <nazwa>]  |  vlan del <id>');
+  const id = Number(a[1]);
+  if (!Number.isInteger(id) || id < 1 || id > 4094) return fail('numer VLAN musi być z zakresu 1–4094');
+  if (act === 'del') {
+    if (id === 1) return fail('VLAN 1 jest domyślny i nie można go usunąć');
+    if (!d.vlans.some((v) => v.id === id)) return fail(`VLAN ${id} nie istnieje`);
+    d.vlans = d.vlans.filter((v) => v.id !== id);
+    const moved = d.ifaces.filter((i) => i.vlan === id);
+    moved.forEach((i) => (i.vlan = 1));
+    d.macTable = d.macTable.filter((m) => m.vlan !== id);
+    return ok(`Usunięto VLAN ${id}.${moved.length ? ` Porty ${moved.map((i) => i.name).join(', ')} wróciły do VLAN 1.` : ''}`);
+  }
+  const ni = a.findIndex((x) => x.toLowerCase() === 'name');
+  const name = ni >= 0 && a[ni + 1] ? a[ni + 1] : `VLAN${id}`;
+  const v = d.vlans.find((x) => x.id === id);
+  if (v) v.name = name;
+  else d.vlans.push({ id, name });
+  d.vlans.sort((x, y) => x.id - y.id);
+  return ok(`VLAN ${id} (${name}) ${v ? 'zaktualizowany' : 'utworzony'}.`);
+}
+
+function cmdServer(d: Device, verb: string, a: string[], packs: PackSet): CliResult {
+  switch (verb) {
+    case 'service': {
+      const avail = SERVICES.filter((s) => serviceEnabled(packs, s));
+      if (!a[0] || pick(a[0], ['list']) === 'list') return ok(...table(['Usługa', 'Stan'], avail.map((s) => [SERVICE_LABEL[s], d.services[s] ? 'włączona' : 'wyłączona'])));
+      const s = pick(a[0], avail) as ServiceName | null | 'ambiguous';
+      if (!s || s === 'ambiguous') return fail(`nieznana usługa „${a[0]}”`, `Dostępne: ${avail.join(', ')}`);
+      const on = pick(a[1], ['on', 'off']);
+      if (on !== 'on' && on !== 'off') return fail(`składnia: service ${s} on | off`);
+      d.services[s] = on === 'on';
+      return ok(`Usługa ${SERVICE_LABEL[s]}: ${d.services[s] ? 'włączona' : 'wyłączona'}`);
+    }
+    case 'dns-record': {
+      const act = pick(a[0], ['add', 'del']);
+      const name = a[1]?.toLowerCase();
+      if (!act || act === 'ambiguous' || !name) return fail('składnia: dns-record add <nazwa> A|AAAA|MX <wartość>  |  dns-record del <nazwa> [typ]');
+      const type = a[2]?.toUpperCase() as RecordType | undefined;
+      if (act === 'del') {
+        const n = d.records.length;
+        d.records = d.records.filter((r) => !(r.name === name && (!type || r.type === type)));
+        return n === d.records.length ? fail(`nie ma rekordu ${name}`) : ok(`Usunięto rekord(y) ${name}${type ? ` ${type}` : ''}.`);
+      }
+      if (!type || !['A', 'AAAA', 'MX'].includes(type)) return fail('typ rekordu: A, AAAA albo MX');
+      let value = a[3] ?? '';
+      if (type === 'A' && !isIp(value)) return fail('rekord A musi wskazywać adres IPv4');
+      if (type === 'AAAA') {
+        if (fam(value) !== 6) return fail('rekord AAAA musi wskazywać adres IPv6');
+        value = norm6(value);
+      }
+      if (type === 'MX' && (!value || fam(value))) return fail('rekord MX wskazuje nazwę serwera poczty, nie adres', 'np. dns-record add szkola.lab MX mail.szkola.lab');
+      d.records = d.records.filter((r) => !(r.name === name && r.type === type));
+      d.records.push({ name, type, value: type === 'MX' ? value.toLowerCase() : value });
+      return ok(`Rekord ${name} ${type} ${value} dodany.`);
+    }
+    case 'web': {
+      const act = pick(a[0], ['set', 'del']);
+      const path = a[1];
+      if (!act || act === 'ambiguous' || !path?.startsWith('/')) return fail('składnia: web set /ścieżka <treść…>  |  web del /ścieżka');
+      if (act === 'del') {
+        d.web = d.web.filter((w) => w.path !== path);
+        return ok(`Usunięto stronę ${path}.`);
+      }
+      const body = a.slice(2).join(' ');
+      if (!body) return fail('podaj treść strony');
+      d.web = d.web.filter((w) => w.path !== path);
+      d.web.push({ path, body });
+      return ok(`Strona ${path} zapisana (${body.length} znaków).`);
+    }
+    case 'ftp-file': {
+      const act = pick(a[0], ['add', 'del']);
+      const name = a[1];
+      if (!act || act === 'ambiguous' || !name) return fail('składnia: ftp-file add <nazwa> <treść…>  |  ftp-file del <nazwa>');
+      if (act === 'del') {
+        d.files = d.files.filter((f) => f.name !== name);
+        return ok(`Usunięto plik ${name}.`);
+      }
+      d.files = d.files.filter((f) => f.name !== name);
+      d.files.push({ name, body: a.slice(2).join(' ') || '(pusty plik)' });
+      return ok(`Plik ${name} udostępniony.`);
+    }
+    case 'user': {
+      const act = pick(a[0], ['add', 'del']);
+      const name = a[1];
+      if (!act || act === 'ambiguous' || !name) return fail('składnia: user add <login> <hasło>  |  user del <login>');
+      if (act === 'del') {
+        d.users = d.users.filter((u) => u.name !== name);
+        return ok(`Usunięto konto ${name}.`);
+      }
+      if (!a[2]) return fail('podaj hasło');
+      const u = d.users.find((x) => x.name === name);
+      if (u) u.pass = a[2];
+      else d.users.push({ name, pass: a[2], mail: [] });
+      return ok(`Konto ${name} ${u ? 'zaktualizowane' : 'utworzone'}${packs.mail ? ` (skrzynka ${name}@${d.mailDomain})` : ''}.`);
+    }
+  }
+  return fail('nieobsłużone polecenie');
+}
+
+// ---------- wejście ----------
+
+export function runCommand(net: Network, d: Device, line: string, act: CliActions, packs: PackSet = ALL_PACKS): CliResult {
+  const tk = line.trim().split(/\s+/).filter(Boolean);
+  if (!tk.length) return { lines: [] };
+  if (tk[0] === '?') return helpFor(d, packs);
+  const avail = commandsFor(d, packs).map((c) => c.verb);
+  const v = pick(tk[0], avail);
+  if (v === 'ambiguous') return fail(`niejednoznaczne „${tk[0]}”: ${avail.filter((x) => x.startsWith(tk[0].toLowerCase())).join(', ')}`);
+  if (!v) {
+    const elsewhere = COMMANDS.find((c) => c.verb === tk[0].toLowerCase() || c.verb.startsWith(tk[0].toLowerCase()));
+    if (elsewhere && elsewhere.for.includes(d.type) && !packOk(elsewhere, packs)) {
+      return fail(`polecenie „${elsewhere.verb}” należy do wyłączonego pakietu`, 'Włącz odpowiedni pakiet w menu „Pakiety”.');
+    }
+    return fail(
+      `nieznane polecenie „${tk[0]}”`,
+      elsewhere ? `„${elsewhere.verb}” nie jest dostępne na urządzeniu typu ${TYPE_LABEL[d.type].toLowerCase()}.` : 'Wpisz help, aby zobaczyć listę poleceń.',
+    );
+  }
+  const a = tk.slice(1);
+  const want = famPref(packs, a);
+  const args = a.filter((x) => x !== '-6' && x !== '-4');
+  switch (v) {
+    case 'help':
+      return helpFor(d, packs, a[0]);
+    case 'clear':
+      return { lines: [], clear: true };
+    case 'show':
+      return show(net, d, a, packs);
+    case 'set': {
+      const what = pick(a[0], d.type === 'server' ? ['hostname', 'certificate', 'mail-domain'] : ['hostname']);
+      if (!what || what === 'ambiguous' || !a[1]) return fail('składnia: set hostname <nazwa>');
+      if (what === 'certificate') {
+        d.certName = a[1].toLowerCase();
+        return ok(`Certyfikat TLS wystawiony dla: ${d.certName}`);
+      }
+      if (what === 'mail-domain') {
+        d.mailDomain = a[1].toLowerCase();
+        return ok(`Domena poczty: ${d.mailDomain}`);
+      }
+      if (!/^[A-Za-z0-9_-]{1,20}$/.test(a[1])) return fail('nazwa: litery, cyfry, „-” i „_”, maks. 20 znaków');
+      if (net.devices.some((x) => x !== d && x.name === a[1])) return fail(`nazwa ${a[1]} jest już zajęta`);
+      d.name = a[1];
+      return ok(`Nazwa urządzenia: ${d.name}`);
+    }
+    case 'interface':
+      return cmdInterface(net, d, a, packs);
+    case 'ip':
+      return cmdIp(d, a, packs);
+    case 'ipv6': {
+      if (pick(a[0], ['autoconf']) !== 'autoconf') return fail('składnia: ipv6 autoconf [off]');
+      if (a[1]?.toLowerCase() === 'off') {
+        d.slaac = false;
+        d.ifaces[0].ip6 = d.ifaces[0].ip6.filter((x) => x.origin !== 'auto');
+        if (isLinkLocal6(d.gateway6)) d.gateway6 = '';
+        return ok('Autokonfiguracja IPv6 wyłączona, adresy SLAAC usunięte.');
+      }
+      act.autoconf(d);
+      return { lines: [] };
+    }
+    case 'route':
+      return cmdRoute(d, a, packs);
+    case 'dhcp-server':
+      return cmdDhcpServer(d, a);
+    case 'dhcp-relay': {
+      const op = pick(a[0], ['set', 'del']);
+      const o = kv(a.slice(1), ['dev', 'server']);
+      const i = findIface(d, o.dev);
+      if (!op || op === 'ambiguous' || !i) return fail('składnia: dhcp-relay set dev <if> server <ip>  |  dhcp-relay del dev <if>');
+      if (op === 'del') {
+        i.relay = '';
+        return ok(`${i.name}: przekaźnik DHCP wyłączony.`);
+      }
+      if (!o.server || !isIp(o.server)) return fail('podaj adres IPv4 serwera DHCP: server <ip>');
+      i.relay = o.server;
+      return ok(`${i.name}: komunikaty DHCP klientów będą przekazywane do ${o.server}.`);
+    }
+    case 'dhcp-client': {
+      const s = pick(a[0] ?? 'start', ['start', 'release']);
+      if (s === 'release') {
+        const i = d.ifaces[0];
+        i.ip = '';
+        i.mask = '';
+        d.gateway = '';
+        d.dhcp = true;
+        return ok('Adres zwolniony.');
+      }
+      if (s !== 'start') return fail('składnia: dhcp-client start | release');
+      act.dhcp(d);
+      return { lines: [] };
+    }
+    case 'dns': {
+      const op = pick(a[0], ['set', 'flush']);
+      if (op === 'flush') {
+        d.dnsCache = [];
+        return ok('Pamięć podręczna DNS wyczyszczona.');
+      }
+      if (op !== 'set' || !a[1] || !fam(a[1])) return fail('składnia: dns set <adres serwera>  |  dns flush');
+      d.dns = fam(a[1]) === 6 ? norm6(a[1]) : a[1];
+      return ok(`Serwer DNS: ${d.dns}`);
+    }
+    case 'nslookup': {
+      if (!a[0]) return fail('podaj nazwę', 'nslookup <nazwa> [A|AAAA|MX]');
+      const t = (a[1]?.toUpperCase() ?? (packs.ipv4 ? 'A' : 'AAAA')) as RecordType;
+      if (!['A', 'AAAA', 'MX'].includes(t)) return fail('typ rekordu: A, AAAA albo MX');
+      act.lookup(d, a[0], t);
+      return { lines: [] };
+    }
+    case 'vlan':
+      return cmdVlan(d, a);
+    case 'arp':
+      if (pick(a[0], ['flush']) !== 'flush') return fail('składnia: arp flush', 'Tablicę ARP pokazuje: show arp');
+      d.arp = [];
+      return ok('Tablica ARP wyczyszczona.');
+    case 'neighbors':
+      if (pick(a[0], ['flush']) !== 'flush') return fail('składnia: neighbors flush', 'Tablicę pokazuje: show neighbors');
+      d.nd = [];
+      return ok('Tablica sąsiadów IPv6 wyczyszczona.');
+    case 'mac':
+      if (pick(a[0], ['flush']) !== 'flush') return fail('składnia: mac flush', 'Tablicę MAC pokazuje: show mac');
+      d.macTable = [];
+      return ok('Tablica MAC wyczyszczona.');
+    case 'ping':
+    case 'trace': {
+      const host = args[0];
+      if (!host) return fail('podaj adres albo nazwę', `${v} <adres | nazwa>`);
+      const hf = fam(host);
+      if (hf && famOff(packs, hf)) return fail(`pakiet IPv${hf} jest wyłączony w tym projekcie`);
+      if (!hf && !packs.dns) return fail(`„${host}” nie jest adresem IP, a pakiet DNS jest wyłączony`);
+      if (famOff(packs, want) && !hf) return fail(`pakiet IPv${want} jest wyłączony`);
+      if (v === 'trace') {
+        act.trace(d, host, want);
+        return { lines: [] };
+      }
+      const o = kv(args.slice(1), ['count']);
+      act.ping(d, host, o.count ? Math.min(10, Math.max(1, Number(o.count) || 1)) : 4, want);
+      return { lines: [] };
+    }
+    case 'http':
+    case 'https': {
+      if (!args[0]) return fail('podaj adres serwera', `${v} <host> [ścieżka]`);
+      act.http(d, args[0], args[1]?.startsWith('/') ? args[1] : '/', v === 'https', want);
+      return { lines: [] };
+    }
+    case 'ftp': {
+      const op = pick(args[1], ['get', 'list']);
+      const o = kv(args.slice(2), ['user', 'pass']);
+      if (!args[0] || !op || op === 'ambiguous' || (op === 'get' && !args[2])) return fail('składnia: ftp <host> get <plik> user <login> pass <hasło>');
+      if (!o.user || !o.pass) return fail('podaj dane logowania: user <login> pass <hasło>');
+      act.ftp(d, args[0], { cmd: op as 'get' | 'list', file: op === 'get' ? args[2] : undefined, user: o.user, pass: o.pass }, want);
+      return { lines: [] };
+    }
+    case 'mail': {
+      const op = pick(a[0], ['account', 'send', 'check']);
+      if (op === 'account') {
+        const o = kv(a.slice(2), ['pass']);
+        if (!a[1]?.includes('@') || !o.pass) return fail('składnia: mail account <użytkownik@domena> pass <hasło>');
+        d.mailAccount = { addr: a[1].toLowerCase(), pass: o.pass };
+        return ok(`Konto pocztowe: ${d.mailAccount.addr}`);
+      }
+      if (op === 'send') {
+        if (!a[1]?.includes('@')) return fail('składnia: mail send <adres> <temat…>');
+        act.mailSend(d, a[1].toLowerCase(), a.slice(2).join(' ') || '(bez tematu)');
+        return { lines: [] };
+      }
+      if (op === 'check') {
+        act.mailCheck(d);
+        return { lines: [] };
+      }
+      return fail('składnia: mail account | send | check');
+    }
+    case 'ntp':
+      if (pick(a[0], ['sync']) !== 'sync' || !a[1]) return fail('składnia: ntp sync <host>');
+      act.ntp(d, a[1]);
+      return { lines: [] };
+    case 'print': {
+      if (!args[0]) return fail('podaj adres drukarki', 'print <adres> [doc <nazwa>]');
+      const o = kv(args.slice(1), ['doc']);
+      act.print(d, args[0], o.doc ?? 'dokument.pdf', want);
+      return { lines: [] };
+    }
+    case 'service':
+    case 'dns-record':
+    case 'web':
+    case 'ftp-file':
+    case 'user':
+      return cmdServer(d, v, a, packs);
+  }
+  return fail('nieobsłużone polecenie');
+}

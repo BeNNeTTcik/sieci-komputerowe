@@ -1,0 +1,23 @@
+---
+title: ARP i ping w sieci lokalnej
+sidebar_position: 2
+hide_table_of_contents: true
+---
+
+import NetworkSimulator from '@site/src/components/NetworkSimulator';
+
+Zanim komputer wyśle pakiet IP do sąsiada w tej samej sieci, musi poznać jego **adres MAC**.
+Służy do tego protokół **ARP** ([RFC 826](https://www.rfc-editor.org/rfc/rfc826)):
+
+1. Nadawca rozgłasza zapytanie „kto ma adres 192.168.1.11?” na adres `FF:FF:FF:FF:FF:FF`.
+2. Przełącznik nie zna jeszcze odbiorcy, więc **zalewa** ramką wszystkie porty.
+3. Odpowiada tylko właściciel adresu – bezpośrednio do pytającego.
+4. Dopiero teraz wychodzi właściwy pakiet ICMP Echo Request ([RFC 792](https://www.rfc-editor.org/rfc/rfc792)).
+
+<NetworkSimulator scenario="lan" lockScenario height={820} />
+
+:::tip[Do sprawdzenia]
+
+Wykonaj ping dwa razy. Ile ramek ARP widać za drugim razem i dlaczego?
+
+:::

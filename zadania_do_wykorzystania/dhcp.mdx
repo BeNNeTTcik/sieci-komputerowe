@@ -1,0 +1,22 @@
+---
+title: DHCP – automatyczna adresacja
+sidebar_position: 3
+hide_table_of_contents: true
+---
+
+import NetworkSimulator from '@site/src/components/NetworkSimulator';
+
+**DHCP** ([RFC 2131](https://www.rfc-editor.org/rfc/rfc2131)) przydziela hostom adres IP, maskę i bramę.
+Wymiana składa się z czterech kroków – w skrócie **DORA**:
+
+| Krok | Komunikat | Kto → do kogo | Adres docelowy IP |
+|---|---|---|---|
+| 1 | DISCOVER | klient → wszyscy | 255.255.255.255 |
+| 2 | OFFER | serwer → klient | proponowany adres |
+| 3 | REQUEST | klient → wszyscy | 255.255.255.255 |
+| 4 | ACK | serwer → klient | przydzielony adres |
+
+Skonfiguruj pulę na routerze, a następnie pobierz adres na komputerach. Przełącz dolny panel na
+**Diagram sekwencji**, aby zobaczyć całą wymianę na jednym rysunku.
+
+<NetworkSimulator scenario="dhcp" lockScenario height={820} />
