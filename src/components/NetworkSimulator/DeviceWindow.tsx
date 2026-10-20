@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Okienkowa konfiguracja urządzeń. Każda akcja w oknie jest tłumaczona na polecenie CLI
 // i wykonywana tak samo, jak wpisana w terminalu – stopka okna pokazuje to polecenie.
 import React, { useEffect, useRef, useState } from 'react';
@@ -31,7 +31,7 @@ import styles from './styles.module.css';
 
 export type WinTab =
   | 'tools' | 'browser' | 'mail' | 'services' | 'dnsrec' | 'web' | 'files' | 'users'
-  | 'ifaces' | 'ip' | 'routes' | 'dhcpc' | 'dhcps' | 'arp' | 'jobs' | 'ports' | 'vlans' | 'mac' | 'term';
+  | 'ifaces' | 'ip' | 'routes' | 'dhcpc' | 'dhcps' | 'arp' | 'jobs' | 'ports' | 'vlans' | 'mac' | 'term' | 'xlat' | 'security';
 
 export const TAB_LABEL: Record<WinTab, string> = {
   tools: 'Narzędzia',
@@ -53,6 +53,8 @@ export const TAB_LABEL: Record<WinTab, string> = {
   vlans: 'VLAN',
   mac: 'Tablica MAC',
   term: 'Terminal',
+  xlat: 'Tunele i NAT64',
+  security: 'Bezpieczeństwo',
 };
 
 export function tabsFor(d: Device, p: PackSet): WinTab[] {
@@ -84,11 +86,13 @@ export function tabsFor(d: Device, p: PackSet): WinTab[] {
       break;
     case 'router':
       add(true, 'ifaces', 'ip', 'routes');
+      add(p.transition, 'xlat');
       add(p.dhcp, 'dhcps');
       add(true, 'arp', 'tools', 'term');
       break;
     case 'switch':
       add(true, 'ports');
+      add(p.security, 'security');
       add(p.vlan, 'vlans');
       add(true, 'mac', 'term');
       break;
@@ -382,7 +386,194 @@ function Panel(p: Props & { tab: WinTab; gui: Gui }) {
       return <UsersPanel dev={dev} gui={gui} packs={packs} />;
     case 'term':
       return <Terminal dev={dev} lines={p.lines} exec={(l) => p.exec(l, 'cli')} />;
+    case 'xlat':
+      return <XlatPanel dev={dev} gui={gui} />;
+    case 'security':
+      return <SecurityPanel net={net} dev={dev} gui={gui} />;
   }
+}
+
+// ---------- tunele i NAT64 (router) ----------
+
+function XlatPanel({ dev, gui }: { dev: Device; gui: Gui }) {
+  const v4 = dev.ifaces.filter((i) => !i.tunnel && hasIp(i)).map((i) => i.ip);
+  const v6 = dev.ifaces.filter((i) => !i.tunnel).flatMap((i) => i.ip6.filter((a) => a.origin !== 'link').map((a) => a.addr));
+  const nextName = () => {
+    let n = 0;
+    while (dev.ifaces.some((i) => i.name === `tun${n}`)) n++;
+    return `tun${n}`;
+  };
+  const [t, setT] = useState({ name: nextName(), mode: '6in4', local: v4[0] ?? '', remote: '' });
+  const [pfx, setPfx] = useState(dev.nat64 ? `${dev.nat64.prefix}/${dev.nat64.len}` : '64:ff9b::/96');
+  const [pool, setPool] = useState(dev.nat64?.pool ?? v4[v4.length - 1] ?? '');
+  const locals = t.mode === '6in4' ? v4 : v6;
+  const tunnels = dev.ifaces.filter((i) => i.tunnel);
+  return (
+    <div className={styles.panel}>
+      <h5>Tunele</h5>
+      <T
+        head={['Tunel', 'Tryb', 'Lokalny', 'Zdalny', 'Adresy', '']}
+        rows={tunnels.map((i) => [
+          <strong>{i.name}</strong>,
+          i.tunnel!.mode,
+          i.tunnel!.local,
+          i.tunnel!.remote,
+          [...(hasIp(i) ? [cidr(i.ip, i.mask)] : []), ...i.ip6.filter((a) => a.origin !== 'link').map((a) => `${a.addr}/${a.prefix}`)].join(', ') || <span className={styles.muted}>brak – dodaj w „Adresy IP”</span>,
+          <Btn onClick={() => gui(`tunnel del ${i.name}`)}>Usuń</Btn>,
+        ])}
+        empty="Brak tuneli."
+      />
+      <Form onSubmit={() => ok(gui(`tunnel add ${t.name.trim()} mode ${t.mode} local ${t.local.trim()} remote ${t.remote.trim()}`)) && setT({ ...t, name: nextName(), remote: '' })}>
+        <Field label="Nazwa" value={t.name} onChange={(v) => setT({ ...t, name: v })} size={6} />
+        <label>
+          Tryb
+          <select value={t.mode} onChange={(e) => setT({ ...t, mode: e.target.value, local: (e.target.value === '6in4' ? v4 : v6)[0] ?? '' })}>
+            <option value="6in4">6in4 – IPv6 w IPv4</option>
+            <option value="4in6">4in6 – IPv4 w IPv6</option>
+          </select>
+        </label>
+        <label>
+          Lokalny koniec
+          <select value={t.local} onChange={(e) => setT({ ...t, local: e.target.value })}>
+            {locals.map((a) => <option key={a}>{a}</option>)}
+          </select>
+        </label>
+        <Field label="Zdalny koniec" value={t.remote} onChange={(v) => setT({ ...t, remote: v })} placeholder={t.mode === '6in4' ? '198.51.100.2' : '2001:db8:ff::2'} size={16} />
+        <Btn type="submit" className={styles.primary} disabled={!t.local || !t.remote.trim()}>Utwórz tunel</Btn>
+      </Form>
+      <p className={styles.muted}>Po utworzeniu nadaj tunelowi adres (zakładka Adresy IP) i dodaj trasę do sieci za drugim końcem przez adres drugiego końca tunelu.</p>
+      <h5>NAT64</h5>
+      <div className={styles.row}>
+        {dev.nat64 ? (
+          <>
+            <span className={styles.good}>włączony</span>
+            <span>
+              {dev.nat64.prefix}/{dev.nat64.len} → IPv4 z {dev.nat64.pool}
+            </span>
+            <span className={styles.spacer} />
+            <Btn onClick={() => gui('nat64 flush')}>Wyczyść tablicę</Btn>
+            <Btn onClick={() => gui('nat64 disable')}>Wyłącz</Btn>
+          </>
+        ) : (
+          <span className={styles.muted}>wyłączony</span>
+        )}
+      </div>
+      {!dev.nat64 && (
+        <Form onSubmit={() => gui(`nat64 enable prefix ${pfx.trim()} pool ${pool}`)}>
+          <Field label="Prefiks NAT64" value={pfx} onChange={setPfx} size={14} />
+          <label>
+            Adres IPv4 routera
+            <select value={pool} onChange={(e) => setPool(e.target.value)}>
+              {v4.map((a) => <option key={a}>{a}</option>)}
+            </select>
+          </label>
+          <Btn type="submit" className={styles.primary} disabled={!pool}>Włącz NAT64</Btn>
+        </Form>
+      )}
+      <T
+        head={['Protokół', 'Strona IPv6', 'Strona IPv4', 'Cel']}
+        rows={dev.natTable.map((e) => [
+          e.proto,
+          <code className={styles.small}>{`[${e.v6}]${e.proto === 'ICMP' ? ` id ${e.v6port}` : `:${e.v6port}`}`}</code>,
+          <code className={styles.small}>{`${dev.nat64?.pool ?? '?'}${e.proto === 'ICMP' ? ` id ${e.v4port}` : `:${e.v4port}`}`}</code>,
+          `${e.v4}${e.proto === 'ICMP' ? '' : `:${e.port}`}`,
+        ])}
+        empty="Tablica translacji jest pusta – wpisy powstają przy pierwszym pakiecie połączenia."
+      />
+      <p className={styles.muted}>Prefiks 64:ff9b::/96 (RFC 6052): ostatnie 32 bity adresu IPv6 to adres IPv4, np. 64:ff9b::192.0.2.80. Hosty IPv6 dostają takie adresy od DNS64.</p>
+    </div>
+  );
+}
+
+// ---------- bezpieczeństwo przełącznika ----------
+
+function SecurityPanel({ net, dev, gui }: { net: Network; dev: Device; gui: Gui }) {
+  const sec = dev.security;
+  const [b, setB] = useState({ mac: '', ip: '', port: dev.ifaces[0].name });
+  const [u, setU] = useState({ name: '', pass: '' });
+  const toggle = (label: string, key: 'dhcp-guard' | 'savi' | 'ra-guard', on: boolean, desc: string) => (
+    <label className={styles.secToggle}>
+      <input type="checkbox" checked={on} onChange={() => gui(`security ${key} ${on ? 'off' : 'on'}`)} />
+      <span>
+        <strong>{label}</strong>
+        <br />
+        <span className={styles.muted}>{desc}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div className={styles.panel}>
+      <div className={styles.secToggles}>
+        {toggle('Ochrona DHCP', 'dhcp-guard', sec.dhcpGuard, 'Odpowiedzi DHCP tylko z portów zaufanych; z ACK powstają powiązania IP ↔ MAC ↔ port (RFC 7513).')}
+        {toggle('Weryfikacja źródła (SAVI)', 'savi', sec.savi, 'Na portach niezaufanych ARP i IPv4 tylko z powiązanych adresów (RFC 7039).')}
+        {toggle('RA-Guard', 'ra-guard', sec.raGuard, 'Ogłoszenia routera IPv6 tylko z portów zaufanych (RFC 6105).')}
+      </div>
+      <h5>Porty</h5>
+      <T
+        head={['Port', 'Połączony z', 'Zaufany', 'Limit MAC', 'Reakcja', '802.1X', 'Stan']}
+        rows={dev.ifaces.map((i) => {
+          const peer = peerOf(net, dev.id, i.name);
+          const pd = peer && getDev(net, peer.dev);
+          return [
+            <strong>{i.name}</strong>,
+            pd ? pd.name : <span className={styles.muted}>—</span>,
+            <input type="checkbox" aria-label={`${i.name} zaufany`} checked={!!i.trusted} onChange={() => gui(`security port ${i.name} ${i.trusted ? 'untrusted' : 'trusted'}`)} />,
+            <select aria-label={`${i.name} limit MAC`} value={i.maxMac ?? 0} onChange={(e) => gui(`security port ${i.name} max-mac ${e.target.value === '0' ? 'off' : `${e.target.value} action ${i.onViolation ?? 'drop'}`}`)}>
+              <option value={0}>bez limitu</option>
+              {[1, 2, 3, 4, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>,
+            i.maxMac ? (
+              <select aria-label={`${i.name} reakcja`} value={i.onViolation ?? 'drop'} onChange={(e) => gui(`security port ${i.name} max-mac ${i.maxMac} action ${e.target.value}`)}>
+                <option value="drop">odrzucaj</option>
+                <option value="shutdown">wyłącz port</option>
+              </select>
+            ) : (
+              <span className={styles.muted}>—</span>
+            ),
+            <input type="checkbox" aria-label={`${i.name} 802.1X`} checked={!!i.dot1x} onChange={() => gui(`security port ${i.name} dot1x ${i.dot1x ? 'off' : 'on'}`)} />,
+            i.errDisabled ? (
+              <span>
+                <span className={styles.bad}>wyłączony</span> <Btn onClick={() => gui(`security port ${i.name} reset`)}>Przywróć</Btn>
+              </span>
+            ) : i.dot1x ? (
+              i.authMac ? <span className={styles.good}>autoryzowany ({i.authUser})</span> : <span className={styles.bad}>nieautoryzowany</span>
+            ) : i.violations ? (
+              <span className={styles.bad}>naruszenia: {i.violations}</span>
+            ) : (
+              <span className={styles.muted}>ok</span>
+            ),
+          ];
+        })}
+      />
+      <h5>Powiązania IP ↔ MAC ↔ port</h5>
+      <T
+        head={['Adres IP', 'MAC', 'Port', 'Źródło', '']}
+        rows={dev.bindings.map((x) => [x.ip, <code className={styles.small}>{x.mac}</code>, x.port, x.origin === 'dhcp' ? 'DHCP' : 'ręcznie', <Btn onClick={() => gui(`security binding del ${x.ip}`)}>Usuń</Btn>])}
+        empty="Brak – powstaną z odpowiedzi DHCP przy włączonej ochronie DHCP albo dodasz je ręcznie."
+      />
+      <Form onSubmit={() => ok(gui(`security binding add ${b.mac.trim()} ${b.ip.trim()} port ${b.port}`)) && setB({ ...b, mac: '', ip: '' })}>
+        <Field label="MAC" value={b.mac} onChange={(v) => setB({ ...b, mac: v })} placeholder="02:AB:CD:00:00:01" size={17} />
+        <Field label="Adres IP" value={b.ip} onChange={(v) => setB({ ...b, ip: v })} placeholder="192.168.1.40" size={13} />
+        <label>
+          Port
+          <select value={b.port} onChange={(e) => setB({ ...b, port: e.target.value })}>
+            {dev.ifaces.map((i) => <option key={i.name}>{i.name}</option>)}
+          </select>
+        </label>
+        <Btn type="submit">Dodaj powiązanie</Btn>
+      </Form>
+      <h5>Konta 802.1X</h5>
+      <T head={['Login', 'Hasło', '']} rows={sec.users.map((x) => [x.name, <code>{x.pass}</code>, <Btn onClick={() => gui(`security user del ${x.name}`)}>Usuń</Btn>])} empty="Brak kont." />
+      <Form onSubmit={() => ok(gui(`security user add ${u.name.trim()} ${u.pass.trim()}`)) && setU({ name: '', pass: '' })}>
+        <Field label="Login" value={u.name} onChange={(v) => setU({ ...u, name: v })} size={10} />
+        <Field label="Hasło" value={u.pass} onChange={(v) => setU({ ...u, pass: v })} size={10} />
+        <Btn type="submit">Dodaj konto</Btn>
+      </Form>
+      <p className={styles.muted}>
+        W sieciach firmowych konta 802.1X trzyma serwer RADIUS (RFC 2865), a zamiast EAP-MD5 stosuje się EAP-TLS. Limit adresów MAC to lokalna funkcja przełącznika – nie wymaga żadnego protokołu.
+      </p>
+    </div>
+  );
 }
 
 function ownerOf(net: Network, mac: string) {
@@ -412,7 +603,7 @@ function IfacesPanel({ net, dev, gui, packs }: { net: Network; dev: Device; gui:
                 : []
               : [addrs.length ? addrs.map((a) => <div key={a}>{a}</div>) : <span className={styles.muted}>—</span>]),
             <code className={styles.small}>{i.mac}</code>,
-            pd ? `${pd.name} ${peer!.iface}` : <span className={styles.muted}>brak kabla</span>,
+            i.tunnel ? `tunel ${i.tunnel.mode} → ${i.tunnel.remote}` : pd ? `${pd.name} ${peer!.iface}` : <span className={styles.muted}>brak kabla</span>,
             <Btn onClick={() => gui(`interface ${i.name} ${i.up ? 'down' : 'up'}`)}>{i.up ? 'Wyłącz' : 'Włącz'}</Btn>,
           ];
         })}
@@ -492,7 +683,7 @@ function RoutesPanel({ net, dev, gui, packs }: { net: Network; dev: Device; gui:
   const [via, setVia] = useState('');
   const [via6, setVia6] = useState('');
   const rt = routingTable(net, dev).filter((e) => (e.fam === 4 ? packs.ipv4 : packs.ipv6));
-  const label = { connected: 'C', static: 'S', default: 'S*' } as const;
+  const label = { connected: 'C', static: 'S', default: 'S*', nat64: 'N' } as const;
   return (
     <div className={styles.panel}>
       <T
@@ -503,7 +694,7 @@ function RoutesPanel({ net, dev, gui, packs }: { net: Network; dev: Device; gui:
           e.nextHop || 'bezpośrednio',
           e.iface || '?',
           e.active ? <span className={styles.good}>aktywna</span> : <span className={styles.bad}>nieaktywna</span>,
-          e.kind === 'connected' ? '' : <Btn onClick={() => gui(`route del ${e.kind === 'default' ? `default${e.fam === 6 ? ' -6' : ''}` : `${e.network}/${e.prefix}`}`)}>Usuń</Btn>,
+          e.kind === 'connected' || e.kind === 'nat64' ? '' : <Btn onClick={() => gui(`route del ${e.kind === 'default' ? `default${e.fam === 6 ? ' -6' : ''}` : `${e.network}/${e.prefix}`}`)}>Usuń</Btn>,
         ])}
         empty="Tablica routingu jest pusta – nadaj adres interfejsowi."
       />
@@ -637,6 +828,15 @@ function DnsPanel({ dev, gui, packs }: { dev: Device; gui: Gui; packs: PackSet }
           <Btn onClick={() => gui('service dns on')}>Włącz</Btn>
         </div>
       )}
+      {packs.transition && (
+        <div className={styles.row}>
+          <span>
+            <strong>DNS64</strong>: {dev.dns64 ? <span className={styles.good}>włączony ({dev.dns64.prefix}/{dev.dns64.len})</span> : <span className={styles.muted}>wyłączony</span>}
+          </span>
+          <Btn onClick={() => gui(dev.dns64 ? 'dns64 disable' : 'dns64 enable prefix 64:ff9b::/96')}>{dev.dns64 ? 'Wyłącz' : 'Włącz DNS64'}</Btn>
+          <span className={styles.muted}>Brakujący rekord AAAA składa z prefiksu NAT64 i rekordu A (RFC 6147).</span>
+        </div>
+      )}
       <T head={['Nazwa', 'Typ', 'Wartość', '']} rows={dev.records.map((r) => [r.name, r.type, r.value, <Btn onClick={() => gui(`dns-record del ${r.name} ${r.type}`)}>Usuń</Btn>])} empty="Strefa jest pusta." />
       <Form onSubmit={() => ok(gui(`dns-record add ${f.name.trim()} ${f.type} ${f.value.trim()}`)) && setF({ ...f, name: '', value: '' })}>
         <Field label="Nazwa" value={f.name} onChange={set('name')} placeholder="www.szkola.lab" size={16} />
@@ -743,6 +943,15 @@ function ToolsPanel({ dev, gui, lines, packs }: { dev: Device; gui: Gui; lines: 
         {packs.dns && <Btn disabled={!h || !!fam(h)} onClick={() => gui(`nslookup ${h} ${v6 ? 'AAAA' : 'A'}`)}>nslookup</Btn>}
         {packs.ntp && <Btn disabled={!h} onClick={() => gui(`ntp sync ${h}`)}>Synchronizuj czas</Btn>}
       </Form>
+      {packs.security && dev.type !== 'router' && (
+        <Form onSubmit={() => gui(`dot1x login user ${user.trim()} pass ${pass.trim()}`)}>
+          <span className={styles.formTitle}>802.1X</span>
+          <Field label="Login" value={user} onChange={setUser} size={9} />
+          <Field label="Hasło" value={pass} onChange={setPass} size={9} type="password" />
+          <Btn type="submit">Zaloguj do sieci</Btn>
+          <Btn onClick={() => gui('dot1x logoff')}>Wyloguj</Btn>
+        </Form>
+      )}
       {dev.type === 'pc' && packs.print && (
         <Form onSubmit={() => h && gui(`print ${h} doc ${doc.trim() || 'dokument.pdf'}`)}>
           <Field label="Dokument" value={doc} onChange={setDoc} size={14} />

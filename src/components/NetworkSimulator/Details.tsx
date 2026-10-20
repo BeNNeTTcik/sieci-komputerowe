@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Szczegóły jednostki danych (enkapsulacja wg warstw) i diagram sekwencji.
 import React from 'react';
-import { BCAST_MAC, Network, PROTO_COLORS, PROTO_INFO, PROTO_LABEL, getDev, stdUrl } from './model';
-import { IPP_PORT, SimEvent, fmtClock, icmpName, portProto } from './engine';
+import { BCAST_MAC, Network, PROTO_COLORS, PROTO_INFO, PROTO_LABEL, StdRef, getDev, stdUrl } from './model';
+import { IPP_PORT, PAE_GROUP, SimEvent, fmtClock, icmpName, portProto } from './engine';
+import { mixed4 } from './ipv6';
 import styles from './styles.module.css';
 
 type Row = [string, React.ReactNode, string?];
@@ -42,8 +43,49 @@ const L3 = '#0d9488';
 const L4 = '#2563eb';
 const L7 = '#9333ea';
 
+const EXTRA_INFO: { match: RegExp; name: string; text: string; refs: StdRef[] }[] = [
+  {
+    match: /NAT64|DNS64/,
+    name: 'NAT64 i DNS64 – translacja IPv6 ↔ IPv4',
+    text: 'DNS64 składa rekord AAAA z prefiksu 64:ff9b::/96 i adresu IPv4 serwera, więc host z samym IPv6 wysyła pakiet na adres w tym prefiksie. Router NAT64 zamienia nagłówek IPv6 na IPv4, podstawia swój adres i port z tablicy translacji, a odpowiedź tłumaczy z powrotem. Treść pakietu się nie zmienia.',
+    refs: [
+      { id: 'RFC 6146', title: 'Stateful NAT64' },
+      { id: 'RFC 6147', title: 'DNS64' },
+      { id: 'RFC 6052', title: 'IPv6 Addressing of IPv4/IPv6 Translators' },
+    ],
+  },
+  {
+    match: /Ochrona DHCP|SAVI|RA-Guard|Limit MAC/,
+    name: 'Zabezpieczenia przełącznika',
+    text: 'Ochrona DHCP przepuszcza odpowiedzi serwerów tylko z portów zaufanych i zapisuje powiązania IP ↔ MAC ↔ port. SAVI sprawdza na tej podstawie adres źródłowy pakietów IPv4 i ARP, więc komputer nie podszyje się pod cudzy adres. RA-Guard blokuje fałszywe ogłoszenia routerów IPv6. Limit adresów MAC to lokalna funkcja przełącznika – chroni przed podłączaniem własnych przełączników i zalewaniem tablicy MAC.',
+    refs: [
+      { id: 'RFC 7039', title: 'Source Address Validation Improvement (SAVI) Framework' },
+      { id: 'RFC 7513', title: 'SAVI Solution for DHCP' },
+      { id: 'RFC 6105', title: 'IPv6 Router Advertisement Guard' },
+    ],
+  },
+];
+
+function Refs({ refs }: { refs: StdRef[] }) {
+  return (
+    <p className={styles.refs}>
+      Źródła:{' '}
+      {refs.map((r, i) => {
+        const u = stdUrl(r.id);
+        return (
+          <React.Fragment key={r.id}>
+            {i > 0 && ', '}
+            {u ? <a href={u} target="_blank" rel="noreferrer" title={r.title}>{r.id}</a> : <span title={r.title}>{r.id}</span>}
+          </React.Fragment>
+        );
+      })}
+    </p>
+  );
+}
+
 function macNote(mac: string) {
   if (mac === BCAST_MAC) return 'broadcast – do wszystkich';
+  if (mac === PAE_GROUP) return 'adres grupowy PAE (802.1X) – przełącznik nie przekazuje go dalej';
   if (mac.startsWith('33:33:')) return 'multicast IPv6 (33:33 + końcówka adresu grupy)';
   return undefined;
 }
@@ -58,7 +100,8 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
     );
   }
   const f = ev.frame;
-  const p = f.ip;
+  const outer = f.ip?.proto === 'ENCAP' ? f.ip : undefined;
+  const p = outer ? outer.inner : f.ip;
   const from = getDev(net, ev.from)?.name ?? '?';
   const to = getDev(net, ev.to)?.name ?? '?';
   const info = PROTO_INFO[ev.protocol];
@@ -67,6 +110,8 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
   const app = p?.tcp?.app;
   const blocks: { label: string; color: string; flex: number }[] = [{ label: 'Ethernet II', color: L2, flex: 2 }];
   if (f.arp) blocks.push({ label: 'ARP', color: PROTO_COLORS.ARP, flex: 3 });
+  if (f.eapol) blocks.push({ label: 'EAPOL / EAP', color: PROTO_COLORS.EAP, flex: 4 });
+  if (outer) blocks.push({ label: `IPv${outer.v} – tunel`, color: PROTO_COLORS.TUNNEL, flex: 3 });
   if (p) {
     blocks.push({ label: v6 ? 'IPv6' : 'IPv4', color: L3, flex: v6 ? 4 : 3 });
     if (p.icmp) blocks.push({ label: ndp ? 'ICMPv6 / NDP' : v6 ? 'ICMPv6' : 'ICMP', color: PROTO_COLORS[ndp ? 'NDP' : 'ICMP'], flex: 2 });
@@ -114,10 +159,39 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
           rows={[
             ['MAC docelowy', f.dst, macNote(f.dst)],
             ['MAC źródłowy', f.src],
-            ['EtherType', f.etherType === 'ARP' ? '0x0806' : f.etherType === 'IPv6' ? '0x86DD' : '0x0800', f.etherType],
+            ['EtherType', f.etherType === 'ARP' ? '0x0806' : f.etherType === 'IPv6' ? '0x86DD' : f.etherType === 'EAPOL' ? '0x888E' : '0x0800', f.etherType],
           ]}
         />
       </Layer>
+
+      {f.eapol && (
+        <Layer n="2" title="IEEE 802.1X – EAPOL / EAP (RFC 3748)" color={PROTO_COLORS.EAP}>
+          <Fields
+            rows={[
+              ['Typ ramki EAPOL', f.eapol.type === 'EAP' ? '0 (EAP-Packet)' : f.eapol.type === 'Start' ? '1 (EAPOL-Start)' : '2 (EAPOL-Logoff)'],
+              ...(f.eapol.code ? ([['Kod EAP', f.eapol.code], ['Identyfikator', String(f.eapol.id ?? '-'), 'łączy prośbę z odpowiedzią']] as Row[]) : []),
+              ...(f.eapol.method ? ([['Metoda', f.eapol.method === 'Identity' ? '1 (Identity)' : '4 (MD5-Challenge)']] as Row[]) : []),
+              ...(f.eapol.data
+                ? ([[f.eapol.method === 'Identity' ? 'Tożsamość' : f.eapol.code === 'Request' ? 'Wyzwanie' : 'Skrót MD5(id + hasło + wyzwanie)', f.eapol.data, f.eapol.code === 'Response' && f.eapol.method !== 'Identity' ? 'hasła nie ma w ramce' : undefined]] as Row[])
+                : []),
+            ]}
+          />
+        </Layer>
+      )}
+
+      {outer && (
+        <Layer n="3" title={`Zewnętrzny nagłówek IPv${outer.v} – tunel ${outer.v === 4 ? '6in4 (RFC 4213)' : '4in6 (RFC 2473)'}`} color={PROTO_COLORS.TUNNEL}>
+          <Fields
+            rows={[
+              ['Adres źródłowy', outer.src, 'początek tunelu'],
+              ['Adres docelowy', outer.dst, 'koniec tunelu'],
+              [outer.v === 4 ? 'TTL' : 'Hop Limit', String(outer.ttl), 'zmniejszają go routery po drodze'],
+              [outer.v === 4 ? 'Protokół' : 'Next Header', outer.v === 4 ? '41' : '4', outer.v === 4 ? 'w środku cały pakiet IPv6' : 'w środku cały pakiet IPv4'],
+              ['Narzut', outer.v === 4 ? '20 B' : '40 B', 'o tyle mniejsze MTU tunelu'],
+            ]}
+          />
+        </Layer>
+      )}
 
       {f.arp && (
         <Layer n="2½" title="ARP (RFC 826)" color={PROTO_COLORS.ARP}>
@@ -134,7 +208,7 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
       )}
 
       {p && !v6 && (
-        <Layer n="3" title="Warstwa sieciowa – IPv4 (RFC 791)" color={L3}>
+        <Layer n="3" title={`${outer ? 'Wewnętrzny pakiet' : 'Warstwa sieciowa'} – IPv4 (RFC 791)`} color={L3}>
           <Fields
             rows={[
               ['Adres źródłowy', p.src || '(uzupełni nadawca)', p.src === '0.0.0.0' ? 'host nie ma jeszcze adresu' : undefined],
@@ -148,11 +222,11 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
         </Layer>
       )}
       {p && v6 && (
-        <Layer n="3" title="Warstwa sieciowa – IPv6 (RFC 8200)" color={L3}>
+        <Layer n="3" title={`${outer ? 'Wewnętrzny pakiet' : 'Warstwa sieciowa'} – IPv6 (RFC 8200)`} color={L3}>
           <Fields
             rows={[
-              ['Adres źródłowy', p.src, p.src.startsWith('fe80') ? 'link-local' : undefined],
-              ['Adres docelowy', p.dst, p.dst.startsWith('ff02') ? 'multicast w obrębie łącza' : undefined],
+              ['Adres źródłowy', p.src, p.src.startsWith('fe80') ? 'link-local' : p.src.startsWith('64:ff9b:') ? `NAT64: ${mixed4(p.src)}` : undefined],
+              ['Adres docelowy', p.dst, p.dst.startsWith('ff02') ? 'multicast w obrębie łącza' : p.dst.startsWith('64:ff9b:') ? `NAT64: ${mixed4(p.dst)}` : undefined],
               ['Hop Limit', String(p.ttl), 'odpowiednik TTL'],
               ['Next Header', p.proto === 'ICMP' ? '58' : p.proto === 'TCP' ? '6' : '17', p.proto === 'ICMP' ? 'ICMPv6' : p.proto],
               ['Flow Label', '0'],
@@ -217,7 +291,7 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
               ...(p.udp.dns.qr === 'response'
                 ? ([
                     ['Kod odpowiedzi', p.udp.dns.rcode, p.udp.dns.rcode === 'NXDOMAIN' ? 'nazwa nie istnieje' : undefined],
-                    ...p.udp.dns.answers.map((a) => [`Odpowiedź ${a.type}`, a.value] as Row),
+                    ...p.udp.dns.answers.map((a) => [`Odpowiedź ${a.type}`, a.value, a.synth ? `DNS64: złożona z rekordu A (${mixed4(a.value)})` : undefined] as Row),
                   ] as Row[])
                 : []),
             ]}
@@ -267,23 +341,20 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
         </Layer>
       )}
 
+      {EXTRA_INFO.filter((x) => [...ev.why, ...ev.notes].some((t) => x.match.test(t))).map((x) => (
+        <div key={x.name} className={styles.about}>
+          <h4>{x.name}</h4>
+          <p>{x.text}</p>
+          <Refs refs={x.refs} />
+        </div>
+      ))}
+
       <div className={styles.about}>
         <h4>{info.name}</h4>
         <p>
           <em>{info.layer}.</em> {info.text}
         </p>
-        <p className={styles.refs}>
-          Źródła:{' '}
-          {info.refs.map((r, i) => {
-            const u = stdUrl(r.id);
-            return (
-              <React.Fragment key={r.id}>
-                {i > 0 && ', '}
-                {u ? <a href={u} target="_blank" rel="noreferrer" title={r.title}>{r.id}</a> : <span title={r.title}>{r.id}</span>}
-              </React.Fragment>
-            );
-          })}
-        </p>
+        <Refs refs={info.refs} />
       </div>
     </div>
   );

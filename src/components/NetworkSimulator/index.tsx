@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Punkt wejścia dla Docusaurusa. Symulator korzysta z API przeglądarki,
 // więc renderujemy go wyłącznie po stronie klienta (BrowserOnly).
 import React from 'react';

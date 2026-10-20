@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Protokoły aplikacji działające nad TCP: HTTP (RFC 9110/9112), HTTPS z TLS 1.3 (RFC 8446),
 // FTP z trybem EPSV (RFC 959, RFC 2428), SMTP (RFC 5321), POP3 (RFC 1939) i IPP (RFC 8010/8011).
 // Każda wymiana to wiadomości tekstowe przesyłane funkcjami silnika tcpSend/tcpClose.

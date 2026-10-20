@@ -1,7 +1,7 @@
 ---
 id: symulator
 title: Symulator sieci
-sidebar_label: Symulator Sieci
+sidebar_label: Symulator
 sidebar_position: 21
 hide_table_of_contents: true
 ---
@@ -16,9 +16,10 @@ w terminalu, a ruch oglądasz krok po kroku – ramka po ramce, warstwa po warst
 
 ## Jak korzystać
 
-- **Scenariusze** u góry to gotowe topologie startowe (LAN, router, DHCP, VLAN, usługi, IPv6…). „Pusty projekt” zaczyna od zera.
+- **Scenariusze** u góry to gotowe topologie startowe. Zawsze widać bazowe (LAN, router, „Pusty projekt” – start od zera); pozostałe włącza prowadzący w pliku `scenarios.config.ts`.
 - **Pakiety** włączają tylko potrzebne protokoły: IPv4, IPv6, VLAN, DHCP, DNS, WWW, FTP, poczta, NTP, drukowanie.
 - Urządzenia **przeciągasz** z paska na obszar roboczy, łączysz narzędziem **Kabel** (z wyborem portów) i konfigurujesz po kliknięciu.
+- Narzędzia **Tekst** i **Obszar** dodają opisy na schemacie, np. prostokąt „Sieć A · 192.168.1.0/24”. Zaznaczony opis przesuwasz, zmieniasz mu rozmiar, kolor i treść (Enter), a Delete go usuwa.
 - Obszar roboczy przewijasz paskami albo przeciągając tło; **Ctrl + kółko** powiększa, przycisk **Dopasuj** pokazuje całą sieć.
 - W trybie **Symulacja** ruch jest odtwarzany powoli. Kliknij ramkę na schemacie, na liście zdarzeń albo na diagramie sekwencji, aby zobaczyć jej zawartość i decyzje urządzeń.
 

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
    Style symulatora. Kolory biorą się z motywu Docusaurusa (Infima: --ifm-*),
    więc komponent sam dopasowuje się do trybu jasnego i ciemnego.
    Układ: góra – scenariusze i urządzenia; środek – obszar roboczy + panel boczny;
@@ -1635,4 +1635,274 @@
     right: 16px;
     bottom: 16px;
   }
+}
+
+/* ---------- opisy: napisy i obszary ---------- */
+
+.nc_ink {
+  --nc: var(--sim-fg);
+}
+.nc_blue {
+  --nc: #2563eb;
+}
+.nc_green {
+  --nc: #15803d;
+}
+.nc_amber {
+  --nc: #b45309;
+}
+.nc_red {
+  --nc: #dc2626;
+}
+.nc_violet {
+  --nc: #7c3aed;
+}
+
+:global(html[data-theme='dark']) .nc_blue {
+  --nc: #60a5fa;
+}
+:global(html[data-theme='dark']) .nc_green {
+  --nc: #4ade80;
+}
+:global(html[data-theme='dark']) .nc_amber {
+  --nc: #fbbf24;
+}
+:global(html[data-theme='dark']) .nc_red {
+  --nc: #f87171;
+}
+:global(html[data-theme='dark']) .nc_violet {
+  --nc: #a78bfa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme])) .nc_blue {
+    --nc: #60a5fa;
+  }
+  :global(html:not([data-theme])) .nc_green {
+    --nc: #4ade80;
+  }
+  :global(html:not([data-theme])) .nc_amber {
+    --nc: #fbbf24;
+  }
+  :global(html:not([data-theme])) .nc_red {
+    --nc: #f87171;
+  }
+  :global(html:not([data-theme])) .nc_violet {
+    --nc: #a78bfa;
+  }
+}
+
+.notesOn .note {
+  cursor: move;
+}
+
+.zoneRect {
+  fill: var(--nc);
+  fill-opacity: 0.07;
+  stroke: var(--nc);
+  stroke-width: 1.6;
+  stroke-opacity: 0.85;
+}
+
+.nc_ink .zoneRect {
+  fill-opacity: 0.04;
+}
+
+.zoneLabel {
+  fill: var(--nc);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.noteText {
+  fill: var(--nc);
+  pointer-events: none;
+}
+
+.noteSel {
+  fill: none;
+  stroke: var(--sim-primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.noteHandle {
+  fill: var(--sim-bg);
+  stroke: var(--sim-primary);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.hNwse {
+  cursor: nwse-resize;
+}
+
+.hNesw {
+  cursor: nesw-resize;
+}
+
+.zoneDraft {
+  fill: var(--sim-primary);
+  fill-opacity: 0.08;
+  stroke: var(--sim-primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 9 6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.toolT {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+}
+
+.noteEdit {
+  position: absolute;
+  z-index: 5;
+  margin: 0;
+  padding: 1px 4px !important;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+  color: var(--nc) !important;
+  background: var(--sim-bg) !important;
+  border: 1.5px dashed var(--sim-primary) !important;
+  border-radius: 4px !important;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.15);
+}
+
+.noteBar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--sim-bg);
+  border: 1px solid var(--sim-border);
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  white-space: nowrap;
+}
+
+.noteBar button {
+  font: inherit;
+  font-size: 13px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sim-fg);
+  cursor: pointer;
+}
+
+.noteBar button:hover:not(:disabled) {
+  background: var(--sim-soft2);
+}
+
+.noteBar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.noteBar .barOn {
+  background: var(--sim-soft2);
+}
+
+.noteBar .swatch {
+  min-width: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0 1px;
+  border-radius: 50%;
+  background: var(--nc);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.noteBar .swatch:hover:not(:disabled) {
+  background: var(--nc);
+  transform: scale(1.12);
+}
+
+.noteBar .swatchOn {
+  outline: 2px solid var(--sim-primary);
+  outline-offset: 2px;
+}
+
+.barSep {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--sim-border);
+}
+
+/* ---------- bezpieczeństwo ---------- */
+
+.secToggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px 14px;
+  margin-bottom: 6px;
+}
+
+.secToggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.secToggle input {
+  margin-top: 3px;
+}
+
+.formTitle {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sim-muted);
+}
+
+/* łuk tunelu na schemacie */
+.tunnelArc {
+  fill: none;
+  stroke: var(--tc);
+  stroke-width: 2.5;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.tunnelArcHalf {
+  opacity: 0.45;
+}
+
+.tunnelLabel {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--tc);
+  paint-order: stroke;
+  stroke: var(--sim-canvas);
+  stroke-width: 4px;
+  pointer-events: none;
+}
+
+/* minimalna stopka z informacją o prawach autorskich */
+.footer {
+  flex: none;
+  padding: 3px 12px;
+  border-top: 1px solid var(--sim-border);
+  color: var(--sim-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }

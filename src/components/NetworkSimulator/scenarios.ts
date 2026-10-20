@@ -1,11 +1,12 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Scenariusze lekcji (use case). Każdy ustawia potrzebne pakiety protokołów, a urządzenia
 // konfiguruje tymi samymi poleceniami CLI, których uczy symulator („show config” je pokaże).
 
 import { runCommand, CliActions } from './cli';
-import { Device, DeviceType, Network, connect, createDevice, emptyNetwork, globals6, hasIp, inSubnet, getIface } from './model';
+import { Device, DeviceType, Network, NoteColor, connect, createDevice, emptyNetwork, globals6, hasIp, inSubnet, getIface } from './model';
 import type { SimEvent } from './engine';
 import { ALL_PACKS, PackId } from './packs';
+import { newNote } from './notes';
 
 export interface CheckCtx {
   net: Network;
@@ -20,6 +21,8 @@ export interface Task {
 
 export interface Scenario {
   id: string;
+  /** scenariusz bazowy – zawsze widoczny na pasku, niezależnie od scenarios.config.ts */
+  base?: boolean;
   short: string;
   title: string;
   level: 'podstawowy' | 'średni' | 'zaawansowany';
@@ -34,6 +37,8 @@ const noop: CliActions = {
   trace() {},
   dhcp() {},
   autoconf() {},
+  dot1x() {},
+  dot1xOff() {},
   lookup() {},
   http() {},
   ftp() {},
@@ -57,11 +62,14 @@ function builder() {
       if (r.error) throw new Error(`${d.name}: ${c} → ${r.lines.map((l) => l.text).join(' ')}`);
     }
   };
+  /** obszar z etykietą (współrzędne jak przy urządzeniach – przed przesunięciem na środek) */
+  const zone = (text: string, x: number, y: number, w: number, h: number, color: NoteColor) =>
+    newNote(net, 'zone', x + 720, y + 520, { w, h, text, color });
   const link = (a: Device, ai: string, b: Device, bi: string) => {
     const r = connect(net, a.id, b.id, ai, bi);
     if (typeof r === 'string') throw new Error(r);
   };
-  return { net, add, run, link };
+  return { net, add, run, link, zone };
 }
 
 const dev = (c: CheckCtx, name: string) => c.net.devices.find((d) => d.name === name);
@@ -107,8 +115,9 @@ const SERVER_CFG = [
 export const SCENARIOS: Scenario[] = [
   {
     id: 'lan',
+    base: true,
     short: 'LAN i ARP',
-    title: '1. Sieć lokalna: ARP i ping',
+    title: 'Sieć lokalna: ARP i ping',
     level: 'podstawowy',
     packs: ['ipv4', 'print'],
     description:
@@ -140,14 +149,17 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: 'routing',
+    base: true,
     short: 'Router',
-    title: '2. Dwie sieci i router',
+    title: 'Dwie sieci i router',
     level: 'podstawowy',
     packs: ['ipv4', 'print'],
     description:
       'Router łączy sieci 192.168.1.0/24 i 192.168.2.0/24, ale jego interfejsy są wyłączone. Włącz je i prześledź, jak router zmienia adresy MAC w ramce, zmniejsza TTL, a adresy IP zostawia bez zmian.',
     build: () => {
-      const { net, add, link } = builder();
+      const { net, add, link, zone } = builder();
+      zone('Sieć A · 192.168.1.0/24', 12, 72, 324, 468, 'blue');
+      zone('Sieć B · 192.168.2.0/24', 624, 72, 336, 468, 'green');
       const r1 = add('router', 'R1', 480, 290, 'ip add 192.168.1.1/24 dev eth0', 'ip add 192.168.2.1/24 dev eth1');
       const sw1 = add('switch', 'SW1', 250, 290);
       const sw2 = add('switch', 'SW2', 710, 290);
@@ -178,7 +190,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'dhcp',
     short: 'DHCP',
-    title: '3. Automatyczna adresacja: DHCP',
+    title: 'Automatyczna adresacja: DHCP',
     level: 'średni',
     packs: ['ipv4', 'dhcp', 'print'],
     description:
@@ -211,13 +223,16 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'static',
     short: 'Trasy statyczne',
-    title: '4. Dwa routery: trasy statyczne',
+    title: 'Dwa routery: trasy statyczne',
     level: 'średni',
     packs: ['ipv4', 'print'],
     description:
       'Routery R1 i R2 łączy sieć 10.0.0.0/30. Każdy zna tylko swoje sieci. Dodaj trasy statyczne, aby PC1 dogadał się z PC2, a potem użyj trace, żeby zobaczyć drogę pakietu.',
     build: () => {
-      const { net, add, link } = builder();
+      const { net, add, link, zone } = builder();
+      zone('Sieć A · 192.168.1.0/24', 0, 72, 300, 300, 'blue');
+      zone('Łącze 10.0.0.0/30', 324, 228, 336, 132, 'amber');
+      zone('Sieć B · 192.168.2.0/24', 696, 72, 300, 468, 'green');
       const r1 = add('router', 'R1', 380, 290, 'ip add 192.168.1.1/24 dev eth0', 'ip add 10.0.0.1/30 dev eth1', 'interface eth0 up', 'interface eth1 up');
       const r2 = add('router', 'R2', 600, 290, 'ip add 192.168.2.1/24 dev eth0', 'ip add 10.0.0.2/30 dev eth1', 'interface eth0 up', 'interface eth1 up');
       const sw1 = add('switch', 'SW1', 190, 290);
@@ -245,7 +260,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'vlan',
     short: 'VLAN',
-    title: '5. VLAN-y: izolacja w jednym przełączniku',
+    title: 'VLAN-y: izolacja w jednym przełączniku',
     level: 'zaawansowany',
     packs: ['ipv4', 'vlan'],
     description: 'Cztery komputery w tej samej podsieci IP, w jednym przełączniku. Podziel je na dwa VLAN-y i sprawdź, że rozgłoszenia ARP nie przechodzą już między grupami.',
@@ -275,7 +290,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'services',
     short: 'Usługi',
-    title: '6. Serwer i usługi sieciowe',
+    title: 'Serwer i usługi sieciowe',
     level: 'średni',
     packs: ['ipv4', 'dhcp', 'dns', 'web', 'ftp', 'mail', 'ntp'],
     description:
@@ -311,13 +326,15 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'relay',
     short: 'DHCP relay',
-    title: '7. DHCP przez router (przekaźnik)',
+    title: 'DHCP przez router (przekaźnik)',
     level: 'zaawansowany',
     packs: ['ipv4', 'dhcp'],
     description:
       'Serwer DHCP stoi w serwerowni (10.0.10.0/24), a komputery w sieci 192.168.1.0/24. Rozgłoszenie DHCPDISCOVER nie przejdzie przez router – trzeba włączyć na nim przekaźnik DHCP.',
     build: () => {
-      const { net, add, link } = builder();
+      const { net, add, link, zone } = builder();
+      zone('Uczniowie · 192.168.1.0/24', 12, 84, 324, 432, 'blue');
+      zone('Serwerownia · 10.0.10.0/24', 624, 192, 348, 192, 'violet');
       const r1 = add('router', 'R1', 480, 290, 'ip add 192.168.1.1/24 dev eth0', 'ip add 10.0.10.1/24 dev eth1', 'interface eth0 up', 'interface eth1 up');
       const sw1 = add('switch', 'SW1', 250, 290);
       const sw2 = add('switch', 'SW2', 710, 290);
@@ -353,13 +370,15 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'ipv6',
     short: 'IPv6',
-    title: '8. IPv6: SLAAC i NDP',
+    title: 'IPv6: SLAAC i NDP',
     level: 'średni',
     packs: ['ipv6'],
     description:
       'Sieć tylko z IPv6 – pakiet IPv4 jest wyłączony. Komputery same zbudują adresy z prefiksu ogłaszanego przez router (SLAAC), a zamiast ARP zobaczysz Neighbor Discovery na adresach multicast.',
     build: () => {
-      const { net, add, link } = builder();
+      const { net, add, link, zone } = builder();
+      zone('Sieć A · 2001:db8:1::/64', 12, 72, 324, 468, 'blue');
+      zone('Sieć B · 2001:db8:2::/64', 624, 72, 348, 468, 'green');
       const r1 = add('router', 'R1', 480, 290, 'ip add 2001:db8:1::1/64 dev eth0', 'ip add 2001:db8:2::1/64 dev eth1', 'interface eth0 up', 'interface eth1 up');
       const sw1 = add('switch', 'SW1', 250, 290);
       const sw2 = add('switch', 'SW2', 710, 290);
@@ -387,7 +406,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: 'dual',
     short: 'Dual stack',
-    title: '9. Dual stack: IPv4 i IPv6 razem',
+    title: 'Dual stack: IPv4 i IPv6 razem',
     level: 'zaawansowany',
     packs: ['ipv4', 'ipv6', 'dns', 'web'],
     description: 'Serwer ma adres IPv4 i IPv6, a DNS zwraca dla nazwy rekord A i AAAA. Otwórz tę samą stronę raz po IPv4, raz po IPv6 i porównaj nagłówki pakietów.',
@@ -423,7 +442,225 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: 'tunnel',
+    short: 'Tunel 6in4',
+    title: 'Tunelowanie: IPv6 przez sieć IPv4 (6in4)',
+    level: 'zaawansowany',
+    packs: ['ipv4', 'ipv6', 'transition'],
+    description:
+      'Dwie wyspy IPv6 łączy operator, który obsługuje tylko IPv4. Routery brzegowe pakują pakiety IPv6 w IPv4 (protokół 41, RFC 4213) – to tunel 6in4. R2 ma już tunel skonfigurowany, R1 jeszcze nie. Odwrotny przypadek, IPv4 w IPv6 (4in6, RFC 2473), ustawisz tym samym poleceniem z trybem 4in6. Starsze automatyczne mechanizmy – 6to4 i Teredo – zostały wycofane lub nie są stosowane.',
+    build: () => {
+      const { net, add, link, zone } = builder();
+      zone('Wyspa IPv6 A · 2001:db8:1::/64', 0, 72, 264, 468, 'blue');
+      zone('Operator – tylko IPv4', 276, 168, 408, 264, 'amber');
+      zone('Wyspa IPv6 B · 2001:db8:2::/64', 696, 72, 276, 468, 'green');
+      const pc1 = add('pc', 'PC1', 70, 150, 'ip add 2001:db8:1::10/64 dev eth0', 'route add default via 2001:db8:1::1');
+      const pc2 = add('pc', 'PC2', 70, 440, 'ip add 2001:db8:1::11/64 dev eth0', 'route add default via 2001:db8:1::1');
+      const sw1 = add('switch', 'SW1', 190, 290);
+      const r1 = add('router', 'R1', 340, 290, 'ip add 2001:db8:1::1/64 dev eth0', 'ip add 203.0.113.1/30 dev eth1', 'interface eth0 up', 'interface eth1 up', 'route add default via 203.0.113.2');
+      const isp = add('router', 'OPERATOR', 480, 290, 'ip add 203.0.113.2/30 dev eth0', 'ip add 198.51.100.1/30 dev eth1', 'interface eth0 up', 'interface eth1 up');
+      const r2 = add(
+        'router',
+        'R2',
+        620,
+        290,
+        'ip add 198.51.100.2/30 dev eth0',
+        'ip add 2001:db8:2::1/64 dev eth1',
+        'interface eth0 up',
+        'interface eth1 up',
+        'route add default via 198.51.100.1',
+        'tunnel add tun0 mode 6in4 local 198.51.100.2 remote 203.0.113.1',
+        'ip add 2001:db8:ff::2/64 dev tun0',
+        'route add 2001:db8:1::/64 via 2001:db8:ff::1',
+      );
+      const sw2 = add('switch', 'SW2', 770, 290);
+      const pc3 = add('pc', 'PC3', 890, 150, 'ip add 2001:db8:2::10/64 dev eth0', 'route add default via 2001:db8:2::1');
+      const pc4 = add('pc', 'PC4', 890, 440, 'ip add 2001:db8:2::11/64 dev eth0', 'route add default via 2001:db8:2::1');
+      link(pc1, 'eth0', sw1, 'port1');
+      link(pc2, 'eth0', sw1, 'port2');
+      link(sw1, 'port8', r1, 'eth0');
+      link(r1, 'eth1', isp, 'eth0');
+      link(isp, 'eth1', r2, 'eth0');
+      link(r2, 'eth1', sw2, 'port8');
+      link(pc3, 'eth0', sw2, 'port1');
+      link(pc4, 'eth0', sw2, 'port2');
+      return net;
+    },
+    tasks: [
+      { text: 'Wyślij ping z PC1 do PC3 (2001:db8:2::10). Który router i z jakim komunikatem odmawia?', hint: 'ping 2001:db8:2::10 count 1 – R1 nie ma trasy IPv6, a operator IPv6 w ogóle nie zna.' },
+      {
+        text: 'Utwórz na R1 tunel do R2, nadaj mu adres 2001:db8:ff::1/64 i dodaj trasę do wyspy B przez drugi koniec tunelu.',
+        hint: 'tunnel add tun0 mode 6in4 local 203.0.113.1 remote 198.51.100.2 · ip add 2001:db8:ff::1/64 dev tun0 · route add 2001:db8:2::/64 via 2001:db8:ff::2 (wzór: show config na R2)',
+        check: (c) => !!dev(c, 'R1')?.ifaces.some((i) => i.tunnel?.remote === '198.51.100.2') && hasRoute(c, 'R1', '2001:db8:2::'),
+      },
+      { text: 'Ping z PC1 do PC3 kończy się sukcesem.', check: (c) => icmpArrived(c, 'PC1', '2001:db8:2::10', REPLY) },
+      {
+        text: 'Kliknij pakiet na łączu R1 – OPERATOR. Co jest w zewnętrznym, a co w wewnętrznym nagłówku?',
+        hint: 'Zewnętrzny IPv4 203.0.113.1 → 198.51.100.2, protokół 41; w środku cały pakiet IPv6.',
+        check: (c) => arrived(c, 'OPERATOR', (e) => e.frame.ip?.proto === 'ENCAP'),
+      },
+      {
+        text: 'Wykonaj trace z PC1 do PC3. Dlaczego na liście nie ma routera OPERATOR?',
+        hint: 'trace 2001:db8:2::10 – tunel liczy się jako jeden skok IPv6.',
+        check: (c) => icmpArrived(c, 'PC1', '2001:db8:ff::2', TIMEX),
+      },
+      { text: 'Ile bajtów nagłówka dokłada tunel 6in4 i co to oznacza dla MTU?' },
+    ],
+  },
+  {
+    id: 'nat64',
+    short: 'NAT64 + DNS64',
+    title: 'Translacja: NAT64 z DNS64',
+    level: 'zaawansowany',
+    packs: ['ipv4', 'ipv6', 'dns', 'web', 'transition'],
+    description:
+      'Komputery mają tylko IPv6, a serwer WWW tylko IPv4. DNS64 (RFC 6147) dorabia brakujący rekord AAAA z prefiksu 64:ff9b::/96 i adresu IPv4 (RFC 6052), a NAT64 na routerze (RFC 6146) tłumaczy pakiety IPv6 na IPv4 i z powrotem. W symulatorze serwer DNS64 sam przechowuje rekord A; w sieciach DNS64 to resolver, który pobiera go z serwerów w internecie.',
+    build: () => {
+      const { net, add, link, zone } = builder();
+      zone('Sieć tylko IPv6 · 2001:db8:1::/64', 0, 60, 420, 480, 'blue');
+      zone('Internet tylko IPv4 · 192.0.2.0/24', 576, 60, 384, 480, 'amber');
+      const v6 = ['route add default via 2001:db8:1::1', 'dns set 2001:db8:1::53'];
+      const pc1 = add('pc', 'PC1', 90, 150, 'ip add 2001:db8:1::10/64 dev eth0', ...v6);
+      const pc2 = add('pc', 'PC2', 90, 440, 'ip add 2001:db8:1::11/64 dev eth0', ...v6);
+      const sw1 = add('switch', 'SW1', 250, 290);
+      const dns = add(
+        'server',
+        'DNS64',
+        330,
+        460,
+        'ip add 2001:db8:1::53/64 dev eth0',
+        'route add default via 2001:db8:1::1',
+        'service http off',
+        'service https off',
+        'service ftp off',
+        'service mail off',
+        'service ntp off',
+        'dns-record add www.ipv4.lab A 192.0.2.80',
+      );
+      const r1 = add('router', 'R1', 480, 290, 'ip add 2001:db8:1::1/64 dev eth0', 'ip add 192.0.2.1/24 dev eth1', 'interface eth0 up', 'interface eth1 up');
+      const sw2 = add('switch', 'SW2', 700, 290);
+      const www = add(
+        'server',
+        'WWW4',
+        860,
+        180,
+        'ip add 192.0.2.80/24 dev eth0',
+        'route add default via 192.0.2.1',
+        'service dns off',
+        'service ftp off',
+        'service mail off',
+        'service ntp off',
+        'set certificate www.ipv4.lab',
+        'web set / Strona serwera, który ma tylko IPv4 (192.0.2.80). Jeśli to czytasz z komputera IPv6, zadziałały DNS64 i NAT64.',
+      );
+      link(pc1, 'eth0', sw1, 'port1');
+      link(pc2, 'eth0', sw1, 'port2');
+      link(dns, 'eth0', sw1, 'port3');
+      link(sw1, 'port8', r1, 'eth0');
+      link(r1, 'eth1', sw2, 'port8');
+      link(www, 'eth0', sw2, 'port1');
+      return net;
+    },
+    tasks: [
+      { text: 'Otwórz na PC1 stronę http://www.ipv4.lab. Dlaczego się nie udaje?', hint: 'PC1 nie ma IPv4, więc pyta DNS o rekord AAAA – a serwer ma tylko A.' },
+      { text: 'Włącz DNS64 na serwerze DNS64.', hint: 'dns64 enable (prefiks domyślny 64:ff9b::/96)', check: (c) => !!dev(c, 'DNS64')?.dns64 },
+      {
+        text: 'Na PC1 zapytaj o rekord AAAA dla www.ipv4.lab. Z czego składa się otrzymany adres?',
+        hint: 'nslookup www.ipv4.lab AAAA → 64:ff9b::c000:250, czyli 64:ff9b::192.0.2.80',
+        check: (c) => arrived(c, 'PC1', (e) => !!e.frame.ip?.udp?.dns?.answers.some((a) => a.synth)),
+      },
+      { text: 'Spróbuj jeszcze raz otworzyć stronę. Gdzie teraz ginie pakiet?', hint: 'Router nie zna trasy do 64:ff9b::/96.' },
+      { text: 'Włącz NAT64 na R1 z adresem IPv4 192.0.2.1.', hint: 'nat64 enable prefix 64:ff9b::/96 pool 192.0.2.1', check: (c) => !!dev(c, 'R1')?.nat64 },
+      { text: 'Otwórz http://www.ipv4.lab na PC1.', check: (c) => !!dev(c, 'PC1')?.page?.status.startsWith('200') && !!dev(c, 'PC1')?.page?.url.includes('ipv4.lab') },
+      {
+        text: 'Porównaj ten sam segment TCP przed routerem i za nim. Co zmieniło się w adresach i portach? Zajrzyj do show nat64.',
+        check: (c) => (dev(c, 'R1')?.natTable.length ?? 0) > 0,
+      },
+      { text: 'Wyślij ping z PC1 na adres 64:ff9b::192.0.2.80.', hint: 'ping 64:ff9b::192.0.2.80 count 1', check: (c) => icmpArrived(c, 'PC1', '64:ff9b::c000:250', REPLY) },
+    ],
+  },
+  {
+    id: 'security',
+    short: 'Bezpieczeństwo',
+    title: 'Bezpieczeństwo w sieci lokalnej',
+    level: 'zaawansowany',
+    packs: ['ipv4', 'dhcp', 'security'],
+    description:
+      'W sieci biurowej działa fałszywy serwer DHCP, który podaje swoją bramę, pod jedno gniazdo ktoś podpiął własny przełącznik, a gniazdo dla gości jest otwarte. Zabezpiecz SW1 mechanizmami opartymi na otwartych standardach: ochrona DHCP i weryfikacja źródła (SAVI, RFC 7039 i 7513), limit adresów MAC na porcie oraz IEEE 802.1X z EAP (RFC 3748).',
+    build: () => {
+      const { net, add, run, link, zone } = builder();
+      zone('Fałszywy serwer DHCP', 744, 60, 216, 168, 'red');
+      zone('Gniazdo z dodatkowym przełącznikiem', 576, 384, 396, 204, 'violet');
+      zone('Gniazdo dla gości (802.1X)', 24, 228, 216, 144, 'amber');
+      const sw = add('switch', 'SW1', 480, 300);
+      const r1 = add('router', 'R1', 640, 90, 'ip add 192.168.1.1/24 dev eth0', 'interface eth0 up', 'dhcp-server add LAN net 192.168.1.0/24 gw 192.168.1.1 range 192.168.1.100-192.168.1.150');
+      const rogue = add(
+        'server',
+        'OBCY',
+        850,
+        140,
+        'ip add 192.168.1.66/24 dev eth0',
+        'service dhcp on',
+        'service dns off',
+        'service http off',
+        'service https off',
+        'service ftp off',
+        'service mail off',
+        'service ntp off',
+        'dhcp-server add FALSZYWA net 192.168.1.0/24 gw 192.168.1.66 range 192.168.1.200-192.168.1.220',
+      );
+      const pc1 = add('pc', 'PC1', 130, 150);
+      const pc2 = add('pc', 'PC2', 130, 450);
+      pc1.dhcp = true;
+      pc2.dhcp = true;
+      const gosc = add('pc', 'GOSC', 130, 300, 'ip add 192.168.1.40/24 dev eth0', 'route add default via 192.168.1.1');
+      const sw2 = add('switch', 'SW-BIURKO', 770, 460);
+      const pc3 = add('pc', 'PC3', 650, 520, 'ip add 192.168.1.31/24 dev eth0', 'route add default via 192.168.1.1');
+      const pc4 = add('pc', 'PC4', 890, 520, 'ip add 192.168.1.32/24 dev eth0', 'route add default via 192.168.1.1');
+      run(sw, 'security user add gosc Wifi2026');
+      link(pc1, 'eth0', sw, 'port1');
+      link(pc2, 'eth0', sw, 'port2');
+      link(sw2, 'port8', sw, 'port3');
+      link(gosc, 'eth0', sw, 'port4');
+      link(rogue, 'eth0', sw, 'port7');
+      link(r1, 'eth0', sw, 'port8');
+      link(pc3, 'eth0', sw2, 'port1');
+      link(pc4, 'eth0', sw2, 'port2');
+      return net;
+    },
+    tasks: [
+      {
+        text: 'Pobierz adres przez DHCP na PC1 i sprawdź bramę (show ip). Kto ją podał?',
+        hint: 'dhcp-client start – odpowiedź fałszywego serwera dotarła pierwsza, brama 192.168.1.66 to atakujący.',
+        check: (c) => dev(c, 'PC1')?.gateway === '192.168.1.66',
+      },
+      {
+        text: 'Włącz na SW1 ochronę DHCP i oznacz port routera (port8) jako zaufany.',
+        hint: 'security dhcp-guard on · security port port8 trusted (albo okno SW1 → Bezpieczeństwo)',
+        check: (c) => !!dev(c, 'SW1')?.security.dhcpGuard && !!getIface(dev(c, 'SW1')!, 'port8')?.trusted,
+      },
+      { text: 'Pobierz adres na PC1 jeszcze raz – teraz brama to 192.168.1.1.', check: (c) => dev(c, 'PC1')?.gateway === '192.168.1.1' },
+      { text: 'Obejrzyj tabelę powiązań IP ↔ MAC ↔ port zbudowaną z odpowiedzi DHCP.', hint: 'show security na SW1', check: (c) => (dev(c, 'SW1')?.bindings.length ?? 0) > 0 },
+      {
+        text: 'Ustaw na port3 limit jednego adresu MAC, a potem wyślij ping do 192.168.1.1 z PC3 i z PC4.',
+        hint: 'mac flush · security port port3 max-mac 1 – drugi komputer za przełącznikiem SW-BIURKO zostanie zablokowany',
+        check: (c) => getIface(dev(c, 'SW1')!, 'port3')?.maxMac === 1 && c.events.some((e) => e.dropped && e.notes.some((n) => n.startsWith('Limit MAC'))),
+      },
+      {
+        text: 'Włącz 802.1X na porcie gościa (port4), sprawdź, że GOSC nie ma dostępu, i zaloguj go kontem gosc / Wifi2026.',
+        hint: 'security port port4 dot1x on · na GOSC: dot1x login user gosc pass Wifi2026',
+        check: (c) => !!getIface(dev(c, 'SW1')!, 'port4')?.authMac,
+      },
+      {
+        text: 'Włącz weryfikację źródła (SAVI). Dlaczego GOSC z adresem statycznym przestał działać? Dodaj mu powiązanie.',
+        hint: 'security savi on · security binding add <MAC GOSC> 192.168.1.40 port port4',
+        check: (c) => !!dev(c, 'SW1')?.security.savi && !!dev(c, 'SW1')?.bindings.some((b) => b.ip === '192.168.1.40'),
+      },
+    ],
+  },
+  {
     id: 'empty',
+    base: true,
     short: 'Pusty projekt',
     title: 'Pusty projekt',
     level: 'podstawowy',
@@ -435,5 +672,14 @@ export const SCENARIOS: Scenario[] = [
 ];
 
 export const scenarioById = (id: string) => SCENARIOS.find((s) => s.id === id) ?? SCENARIOS[0];
+
+/**
+ * Scenariusze widoczne na pasku: bazowe + wskazane w `extra` (oraz `current`, jeśli strona otwiera ukryty scenariusz).
+ * Kolejność zawsze jak w SCENARIOS, „Pusty projekt” na końcu.
+ */
+export function visibleScenarios(extra: readonly string[], current?: string): Scenario[] {
+  const want = new Set([...extra, ...(current ? [current] : [])]);
+  return SCENARIOS.filter((s) => s.base || want.has(s.id));
+}
 
 void globals6;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Własne, proste ikony urządzeń (SVG) – bez grafik producentów.
 import React from 'react';
 import type { DeviceType } from './model';

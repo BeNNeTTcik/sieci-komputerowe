@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Główny komponent symulatora sieci: układ aplikacji, schemat, animacja, panele.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
@@ -20,20 +20,27 @@ import {
   normalizeNet,
   peerOf,
   removeDevice,
+  sameIp,
 } from './model';
 import { OutputLine, Sim, SimEvent } from './engine';
 import { startFtp, startHttp, startMailCheck, startMailSend, startPrint } from './apps';
 import { CliActions, CliResult, commandsFor, prompt, runCommand } from './cli';
-import { SCENARIOS, scenarioById } from './scenarios';
+import { scenarioById, visibleScenarios } from './scenarios';
+import { EXTRA_SCENARIOS } from './scenarios.config';
+import { COPYRIGHT } from './license';
 import { PACKS, PROFILES, PackId, PackSet, devicesFor, matchProfile, packSet, protocolsFor, withDeps, without } from './packs';
 import { DeviceGlyph, DeviceIcon } from './icons';
 import { DeviceWindow, LastCmd, Win, tabsFor } from './DeviceWindow';
 import { EventDetails, SequenceDiagram } from './Details';
+import { Handle, NoteEditor, NoteToolbar, NotesLayer, newNote, noteBox, notesOf } from './notes';
+import type { Note } from './model';
 import styles from './styles.module.css';
 
 export interface SimulatorProps {
-  /** id scenariusza: lan | routing | dhcp | static | vlan | services | relay | ipv6 | dual | empty */
+  /** id scenariusza startowego: lan | routing | dhcp | static | vlan | services | relay | ipv6 | dual | tunnel | nat64 | security | empty */
   scenario?: string;
+  /** dodatkowe scenariusze na pasku (obok bazowych); bez tej właściwości obowiązuje lista z scenarios.config.ts */
+  scenarios?: string[];
   /** wysokość komponentu w pikselach (gdy nie używasz `fill`) */
   height?: number;
   /** ukrywa wybór scenariusza – przydatne w lekcji o jednym temacie */
@@ -64,6 +71,10 @@ function shiftOld(n: Network): Network {
       d.x += 720;
       d.y += 520;
     }
+    for (const o of n.notes ?? []) {
+      o.x += 720;
+      o.y += 520;
+    }
   }
   return n;
 }
@@ -71,7 +82,9 @@ const STEPS_PER_SEC = 1.6;
 const STORE = 'netsim:v2:';
 const LAYOUT = 'netsim:layout';
 
-type Tool = 'select' | 'link' | 'delete';
+type Tool = 'select' | 'link' | 'delete' | 'text' | 'zone';
+const SNAP = 12;
+const snap = (v: number) => Math.round(v / SNAP) * SNAP;
 type Job = (s: Sim) => void;
 
 interface Saved {
@@ -106,7 +119,7 @@ function loadLayout() {
   return { side: 360, bottom: 300, list: 0.55 };
 }
 
-export default function Simulator({ scenario = 'lan', height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
+export default function Simulator({ scenario = 'lan', scenarios, height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
   const [scenarioId, setScenarioId] = useState(scenarioById(scenario).id);
   const initial = useMemo(() => load(scenarioId, persist), []); // eslint-disable-line react-hooks/exhaustive-deps
   const netRef = useRef<Network>(initial.net);
@@ -149,6 +162,11 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
   const scrollRef = useRef<HTMLDivElement>(null);
   const pan = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  const [selNote, setSelNote] = useState<string | null>(null);
+  const [editNote, setEditNote] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const noteDrag = useRef<{ id: string; h: Handle; sx: number; sy: number; o: { x: number; y: number; w: number; h: number }; moved: boolean; dbl: boolean } | null>(null);
+  const lastNoteDown = useRef<{ id: string; t: number }>({ id: '', t: 0 });
 
   const phRef = useRef(0);
   const endRef = useRef(0);
@@ -168,9 +186,11 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
   modeRef.current = mode;
   playingRef.current = playing;
 
-  const W = round120(Math.max(MIN_W, ...net.devices.map((d) => d.x + GROW)));
-  const H = round120(Math.max(MIN_H, ...net.devices.map((d) => d.y + GROW)));
+  const allNotes = notesOf(net);
+  const W = round120(Math.max(MIN_W, ...net.devices.map((d) => d.x + GROW), ...allNotes.map((o) => noteBox(o).x + noteBox(o).w + GROW / 2)));
+  const H = round120(Math.max(MIN_H, ...net.devices.map((d) => d.y + GROW), ...allNotes.map((o) => noteBox(o).y + noteBox(o).h + GROW / 2)));
   const sc = scenarioById(scenarioId);
+  const shown = useMemo(() => visibleScenarios(scenarios ?? EXTRA_SCENARIOS, scenario), [scenarios, scenario]);
   const activeProtos = protocolsFor(packs);
   const deviceTypes = devicesFor(packs);
   const profile = matchProfile(packs);
@@ -308,6 +328,8 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
       trace: (x, h, v) => jobs.push((s) => s.startTrace(x, h, v)),
       dhcp: (x) => jobs.push((s) => s.startDhcp(x)),
       autoconf: (x) => jobs.push((s) => s.startAutoconf(x)),
+      dot1x: (x, u, pw) => jobs.push((s) => s.startDot1x(x, u, pw)),
+      dot1xOff: (x) => jobs.push((s) => s.stopDot1x(x)),
       lookup: (x, n, t) => jobs.push((s) => s.startLookup(x, n, t)),
       http: (x, h, p, sec, v) => jobs.push((s) => startHttp(s, x, h, p, sec, v)),
       ftp: (x, h, op, v) => jobs.push((s) => startFtp(s, x, h, op, v)),
@@ -348,6 +370,9 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
   const loadScenario = (id: string, fresh: boolean) => {
     const s = fresh ? { net: scenarioById(id).build(), done: {}, packs: packSet(scenarioById(id).packs) } : load(id, persist);
     netRef.current = s.net;
+    setSelNote(null);
+    setEditNote(null);
+    setDraft(null);
     setDone(s.done);
     setPacksState(s.packs);
     setScenarioId(id);
@@ -394,18 +419,23 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
     const sc2 = scrollRef.current;
     const n = netRef.current;
     if (!sc2 || !sc2.clientWidth) return;
-    if (!n.devices.length) {
+    const boxes = [
+      ...n.devices.map((d) => ({ x: d.x - 110, y: d.y - 80, w: 220, h: 190 })),
+      ...notesOf(n).map((o) => {
+        const b = noteBox(o);
+        return { x: b.x - 30, y: b.y - 30, w: b.w + 60, h: b.h + 60 };
+      }),
+    ];
+    if (!boxes.length) {
       zoomAnchor.current = { wx: W / 2, wy: H / 2, cx: sc2.clientWidth / 2, cy: sc2.clientHeight / 2 };
       if (zoomRef.current !== 1) setZoom(1);
       else applyAnchor();
       return;
     }
-    const xs = n.devices.map((d) => d.x);
-    const ys = n.devices.map((d) => d.y);
-    const bx = Math.min(...xs) - 110;
-    const by = Math.min(...ys) - 80;
-    const bw = Math.max(...xs) + 110 - bx;
-    const bh = Math.max(...ys) + 110 - by;
+    const bx = Math.min(...boxes.map((b) => b.x));
+    const by = Math.min(...boxes.map((b) => b.y));
+    const bw = Math.max(...boxes.map((b) => b.x + b.w)) - bx;
+    const bh = Math.max(...boxes.map((b) => b.y + b.h)) - by;
     const fz = Math.min(sc2.clientWidth / bw, sc2.clientHeight / bh);
     const z = Math.max(ZMIN, Math.min(fitZoom ? Math.min(fz, 1.4) : Math.min(fz, 1), ZMAX));
     zoomAnchor.current = { wx: bx + bw / 2, wy: by + bh / 2, cx: sc2.clientWidth / 2, cy: sc2.clientHeight / 2 };
@@ -486,7 +516,9 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
   };
 
   const onDevDown = (e: React.PointerEvent, id: string) => {
+    if (tool === 'text' || tool === 'zone') return; // narzędzia opisu działają także nad urządzeniami
     e.stopPropagation();
+    setSelNote(null);
     const d = getDev(net, id)!;
     if (tool === 'delete') {
       removeDevice(net, id);
@@ -519,6 +551,39 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
     }
     const p = toSvg(e);
     if (tool === 'link' && linkStart) setMouse(p);
+    if (draft) {
+      setDraft({ ...draft, x1: p.x, y1: p.y });
+      return;
+    }
+    const nd = noteDrag.current;
+    if (nd) {
+      const o = notesOf(netRef.current).find((x) => x.id === nd.id);
+      if (!o) return;
+      const dx = p.x - nd.sx;
+      const dy = p.y - nd.sy;
+      if (!nd.moved && Math.hypot(dx, dy) < 3) return;
+      nd.moved = true;
+      if (nd.h === 'move') {
+        o.x = Math.max(0, snap(nd.o.x + dx));
+        o.y = Math.max(0, snap(nd.o.y + dy));
+      } else {
+        let { x, y, w, h } = nd.o;
+        const MIN = 60;
+        if (nd.h.includes('w')) {
+          const nx = Math.min(x + w - MIN, snap(x + dx));
+          w += x - nx;
+          x = nx;
+        } else w = Math.max(MIN, snap(w + dx));
+        if (nd.h.includes('n')) {
+          const ny = Math.min(y + h - MIN, snap(y + dy));
+          h += y - ny;
+          y = ny;
+        } else h = Math.max(MIN, snap(h + dy));
+        Object.assign(o, { x: Math.max(0, x), y: Math.max(0, y), w, h });
+      }
+      bump();
+      return;
+    }
     const dr = drag.current;
     if (!dr) return;
     const d = getDev(net, dr.id);
@@ -550,6 +615,26 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
       setPanning(false);
       return;
     }
+    if (draft) {
+      const n = netRef.current;
+      const x = snap(Math.min(draft.x0, draft.x1));
+      const y = snap(Math.min(draft.y0, draft.y1));
+      const w = snap(Math.abs(draft.x1 - draft.x0));
+      const h = snap(Math.abs(draft.y1 - draft.y0));
+      const o = w >= 48 && h >= 48 ? newNote(n, 'zone', x, y, { w, h }) : newNote(n, 'zone', snap(draft.x0 - 180), snap(draft.y0 - 120));
+      setDraft(null);
+      setTool('select');
+      setSelNote(o.id);
+      setEditNote(o.id);
+      bump();
+      return;
+    }
+    const nd = noteDrag.current;
+    if (nd) {
+      noteDrag.current = null;
+      if (!nd.moved && nd.dbl) setEditNote(nd.id);
+      return;
+    }
     const dr = drag.current;
     drag.current = null;
     if (dr && !dr.moved) openWin(dr.id);
@@ -558,6 +643,23 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
   const onBgDown = (e: React.PointerEvent) => {
     if (portPick) setPortPick(null);
     else if (tool === 'link') setLinkStart(null);
+    if (editNote) return; // kliknięcie obok kończy edycję (blur)
+    if (e.button === 0 && (tool === 'text' || tool === 'zone')) {
+      e.preventDefault();
+      const p = toSvg(e);
+      svgRef.current?.setPointerCapture(e.pointerId);
+      if (tool === 'zone') {
+        setDraft({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+        return;
+      }
+      const o = newNote(netRef.current, 'text', snap(p.x), snap(p.y - 10));
+      setTool('select');
+      setSelNote(o.id);
+      setEditNote(o.id);
+      bump();
+      return;
+    }
+    if (e.button === 0) setSelNote(null);
     const sc2 = scrollRef.current;
     // przesuwanie widoku: lewy przycisk na tle (narzędzie Wskaż) albo środkowy przycisk zawsze
     if (sc2 && ((tool === 'select' && e.button === 0) || e.button === 1)) {
@@ -568,10 +670,84 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
     }
   };
 
+  const onNoteDown = (e: React.PointerEvent, id: string, h: Handle) => {
+    if (tool !== 'select' && tool !== 'delete') return; // przekaż dalej (np. rysowanie obszaru w obszarze)
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const n = netRef.current;
+    if (tool === 'delete') {
+      n.notes = notesOf(n).filter((o) => o.id !== id);
+      setSelNote(null);
+      say('Usunięto opis.');
+      bump();
+      return;
+    }
+    const o = notesOf(n).find((x) => x.id === id);
+    if (!o) return;
+    const p = toSvg(e);
+    const now = performance.now();
+    const dbl = lastNoteDown.current.id === id && now - lastNoteDown.current.t < 400;
+    lastNoteDown.current = { id, t: now };
+    setSelNote(id);
+    noteDrag.current = { id, h, sx: p.x, sy: p.y, o: { x: o.x, y: o.y, w: o.w, h: o.h }, moved: false, dbl };
+    svgRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  const updateNote = (id: string, patch: Partial<Note>) => {
+    const o = notesOf(netRef.current).find((x) => x.id === id);
+    if (!o) return;
+    Object.assign(o, patch);
+    bump();
+  };
+
+  const deleteNote = (id: string) => {
+    netRef.current.notes = notesOf(netRef.current).filter((o) => o.id !== id);
+    setSelNote(null);
+    setEditNote(null);
+    bump();
+  };
+
+  const orderNote = (id: string, where: 'front' | 'back') => {
+    const list = notesOf(netRef.current);
+    const o = list.find((x) => x.id === id);
+    if (!o) return;
+    const rest = list.filter((x) => x !== o);
+    netRef.current.notes = where === 'front' ? [...rest, o] : [o, ...rest];
+    bump();
+  };
+
+  const finishEdit = (id: string, text: string | null) => {
+    setEditNote(null);
+    const o = notesOf(netRef.current).find((x) => x.id === id);
+    if (!o || text === null) return;
+    const t = o.kind === 'zone' ? text.trim() : text.replace(/\s+$/, '');
+    if (!t && o.kind === 'text') return deleteNote(id);
+    o.text = t || o.text;
+    bump();
+  };
+
+  // Delete / Enter dla zaznaczonego opisu
+  useEffect(() => {
+    if (!selNote || editNote) return;
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || t.isContentEditable)) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteNote(selNote);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setEditNote(selNote);
+      } else if (e.key === 'Escape') setSelNote(null);
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [selNote, editNote]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickPort = (devId: string, iface: string) => {
     const d = getDev(netRef.current, devId);
     if (!d) return;
-    const chosen = iface || d.ifaces.find((i) => !linkAt(netRef.current, devId, i.name))?.name || '';
+    const chosen = iface || d.ifaces.find((i) => !i.tunnel && !linkAt(netRef.current, devId, i.name))?.name || '';
     setPortPick(null);
     if (!chosen) {
       say(`${d.name}: wszystkie porty są zajęte.`);
@@ -629,6 +805,8 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
         const n: Network = o.net ?? o;
         if (!Array.isArray(n.devices) || !Array.isArray(n.links)) throw new Error();
         netRef.current = normalizeNet(clone(n));
+        setSelNote(null);
+        setEditNote(null);
         if (o.packs) setPacksState(withDeps({ ...packs, ...o.packs }));
         setWins([]);
         clearEvents();
@@ -750,13 +928,13 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
           ) : (
             <nav className={styles.cases} aria-label="Scenariusze">
               <span className={styles.barLabel}>Scenariusz</span>
-              {SCENARIOS.map((s, i) => (
+              {shown.map((s, i) => (
                 <button
                   type="button"
                   key={s.id}
                   className={`${styles.case} ${s.id === scenarioId ? styles.caseOn : ''}`}
                   onClick={() => s.id !== scenarioId && loadScenario(s.id, false)}
-                  title={s.title}
+                  title={s.id === 'empty' ? s.title : `${i + 1}. ${s.title}`}
                   aria-pressed={s.id === scenarioId}
                 >
                   {s.id !== 'empty' && <span className={styles.caseNo}>{i + 1}</span>}
@@ -854,6 +1032,25 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
               </button>
             ))}
           </div>
+          <span className={styles.barLabel}>Opisy</span>
+          <div className={styles.group} role="group" aria-label="Opisy">
+            {([['text', 'T', 'Tekst', 'Kliknij w obszarze roboczym, aby wstawić napis'], ['zone', '▭', 'Obszar', 'Przeciągnij, aby narysować obszar, np. „Sieć A”']] as [Tool, string, string, string][]).map(([t, ic, l, tip]) => (
+              <button
+                type="button"
+                key={t}
+                title={tip}
+                className={`${styles.tbtn} ${tool === t ? styles.tbtnOn : ''}`}
+                onClick={() => {
+                  setTool(tool === t ? 'select' : t);
+                  setLinkStart(null);
+                  setPortPick(null);
+                }}
+              >
+                <span aria-hidden="true" className={t === 'text' ? styles.toolT : undefined}>{ic}</span>
+                <span className={styles.tlabel}>{l}</span>
+              </button>
+            ))}
+          </div>
           <span className={styles.spacer} />
           <div className={styles.group}>
             <button type="button" className={styles.tbtn} onClick={clearTables} title="Czyści tablice ARP, sąsiadów, MAC i pamięć DNS">Wyczyść tablice</button>
@@ -908,6 +1105,8 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
               <rect width={W} height={H} fill="url(#nsgrid5)" />
               <rect x={0.5} y={0.5} width={W - 1} height={H - 1} fill="none" className={styles.gridEdge} />
 
+              <NotesLayer notes={allNotes} kind="zone" selected={selNote} editing={editNote} zoom={zoom} interactive={tool === 'select' || tool === 'delete'} onDown={onNoteDown} />
+
               {net.links.map((l) => {
                 const a = getDev(net, l.a.dev);
                 const b = getDev(net, l.b.dev);
@@ -919,8 +1118,8 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
                 const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
                 const pa = lerp(Math.min(0.4, 44 / len));
                 const pb = lerp(1 - Math.min(0.4, 44 / len));
-                const la = lerp(Math.min(0.46, 76 / len));
-                const lb = lerp(1 - Math.min(0.46, 76 / len));
+                const la = lerp(Math.min(0.3, 60 / len));
+                const lb = lerp(1 - Math.min(0.3, 60 / len));
                 const nx = (-(b.y - a.y) / len) * 11;
                 const ny = ((b.x - a.x) / len) * 11 + 3;
                 const col = (s: string) => (s === 'up' ? '#16a34a' : s === 'disabled' ? '#dc2626' : '#f59e0b');
@@ -945,6 +1144,29 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
                   </g>
                 );
               })}
+
+              {packs.transition &&
+                net.devices.flatMap((d) =>
+                  d.ifaces
+                    .filter((i) => i.tunnel)
+                    .map((i) => {
+                      const t = i.tunnel!;
+                      const far = net.devices.find((x) => x.id !== d.id && x.ifaces.some((j) => !j.tunnel && (sameIp(j.ip, t.remote) || j.ip6.some((a) => sameIp(a.addr, t.remote)))));
+                      if (!far) return null;
+                      const back = far.ifaces.find((j) => j.tunnel && sameIp(j.tunnel.remote, t.local) && sameIp(j.tunnel.local, t.remote));
+                      if (back && far.id < d.id) return null; // para rysowana raz
+                      const mx = (d.x + far.x) / 2;
+                      const my = Math.min(d.y, far.y) - 70 - Math.abs(far.x - d.x) * 0.12;
+                      return (
+                        <g key={`tun-${d.id}-${i.name}`} style={{ ['--tc' as string]: PROTO_COLORS.TUNNEL }}>
+                          <path d={`M${d.x} ${d.y - 28} Q ${mx} ${my} ${far.x} ${far.y - 28}`} className={`${styles.tunnelArc} ${back ? '' : styles.tunnelArcHalf}`} />
+                          <text x={mx} y={(Math.min(d.y, far.y) - 28 + my) / 2 + 4} textAnchor="middle" className={styles.tunnelLabel}>
+                            {back ? `tunel ${t.mode}: ${i.name} ↔ ${back.name}` : `tunel ${t.mode} ${i.name} – drugi koniec nieskonfigurowany`}
+                          </text>
+                        </g>
+                      );
+                    }),
+                )}
 
               {tool === 'link' && linkStart && mouse && pos(linkStart.dev) && (
                 <line x1={pos(linkStart.dev)!.x} y1={pos(linkStart.dev)!.y} x2={mouse.x} y2={mouse.y} className={styles.linkGhost} />
@@ -975,6 +1197,19 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
                   </g>
                 );
               })}
+
+              <NotesLayer notes={allNotes} kind="text" selected={selNote} editing={editNote} zoom={zoom} interactive={tool === 'select' || tool === 'delete'} onDown={onNoteDown} />
+
+              {draft && (
+                <rect
+                  x={Math.min(draft.x0, draft.x1)}
+                  y={Math.min(draft.y0, draft.y1)}
+                  width={Math.abs(draft.x1 - draft.x0)}
+                  height={Math.abs(draft.y1 - draft.y0)}
+                  rx={14}
+                  className={styles.zoneDraft}
+                />
+              )}
 
               {moving.map((e) => {
                 const a = pos(e.from);
@@ -1011,6 +1246,25 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
                 );
               })}
             </svg>
+            {(() => {
+              const sn = allNotes.find((o) => o.id === selNote);
+              const en = allNotes.find((o) => o.id === editNote);
+              return (
+                <>
+                  {sn && !en && (
+                    <NoteToolbar
+                      note={sn}
+                      zoom={zoom}
+                      onChange={(p) => updateNote(sn.id, p)}
+                      onEdit={() => setEditNote(sn.id)}
+                      onDelete={() => deleteNote(sn.id)}
+                      onOrder={(w) => orderNote(sn.id, w)}
+                    />
+                  )}
+                  {en && <NoteEditor key={en.id} note={en} zoom={zoom} onDone={(t) => finishEdit(en.id, t)} />}
+                </>
+              );
+            })()}
             </div>
 
             <div className={styles.zoomBar} role="group" aria-label="Widok obszaru roboczego">
@@ -1034,7 +1288,13 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
                     ? `Kabel z ${getDev(net, linkStart.dev)?.name ?? '?'} ${linkStart.iface}. Kliknij drugie urządzenie i wybierz port (Esc – anuluj).`
                     : 'Kliknij pierwsze urządzenie i wybierz port, do którego wepniesz kabel.'
                   : tool === 'delete'
-                    ? 'Kliknij urządzenie albo kabel, aby je usunąć.'
+                    ? 'Kliknij urządzenie, kabel albo opis, aby je usunąć.'
+                    : tool === 'text'
+                      ? 'Kliknij w miejscu, gdzie ma się pojawić napis. Ctrl + Enter albo kliknięcie obok kończy edycję.'
+                      : tool === 'zone'
+                        ? 'Przeciągnij, aby narysować obszar (np. Sieć A). Samo kliknięcie wstawia obszar domyślnej wielkości.'
+                        : selNote
+                          ? 'Opis zaznaczony: przeciągnij, aby przesunąć; narożniki zmieniają rozmiar obszaru; Enter – edycja, Delete – usunięcie.'
                     : 'Kliknij urządzenie, aby otworzyć jego okno. Przeciągnij tło (albo użyj pasków), aby przesunąć widok; Ctrl + kółko – powiększenie.')}
             </div>
 
@@ -1223,6 +1483,7 @@ export default function Simulator({ scenario = 'lan', height = 860, lockScenario
             </div>
           </div>
         </section>
+        <footer className={styles.footer}>{COPYRIGHT}</footer>
       </div>
     </div>
   );
@@ -1253,12 +1514,13 @@ function PortPicker({
   const first = useRef<HTMLButtonElement>(null);
   useEffect(() => first.current?.focus(), [devId]);
   const w = 260;
-  const h = Math.min(360, 92 + d.ifaces.length * 34);
+  const h = Math.min(360, 92 + d.ifaces.filter((i) => !i.tunnel).length * 34);
   const bw = bounds?.clientWidth ?? 800;
   const bh = bounds?.clientHeight ?? 600;
   const left = Math.max(6, Math.min(x + 14, bw - w - 6));
   const top = Math.max(6, Math.min(y - 20, bh - h - 6));
-  const anyFree = d.ifaces.some((i) => !linkAt(net, d.id, i.name));
+  const phys = d.ifaces.filter((i) => !i.tunnel);
+  const anyFree = phys.some((i) => !linkAt(net, d.id, i.name));
   return (
     <div className={styles.portPick} style={{ left, top, width: w, maxHeight: h }} role="dialog" aria-label={`Wybór portu: ${d.name}`} onPointerDown={(e) => e.stopPropagation()}>
       <div className={styles.portHead}>
@@ -1272,7 +1534,7 @@ function PortPicker({
         <button type="button" ref={first} className={styles.portAuto} disabled={!anyFree} onClick={() => onPick('')}>
           Pierwszy wolny port
         </button>
-        {d.ifaces.map((i) => {
+        {phys.map((i) => {
           const peer = peerOf(net, d.id, i.name);
           const pd = peer && getDev(net, peer.dev);
           const st = ifaceStatus(net, d, i);

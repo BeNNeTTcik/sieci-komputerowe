@@ -1,6 +1,6 @@
 ---
 title: Polecenia CLI symulatora
-sidebar_label: Polecenia CLI do symulatora
+sidebar_label: Polecenia CLI
 sidebar_position: 20
 ---
 
@@ -71,6 +71,36 @@ a `help <polecenie>` pokazuje składnię i przykłady. Adresy podaje się w nota
 | `vlan add <id> [name <nazwa>]` / `vlan del <id>` | VLAN-y (IEEE 802.1Q) |
 | `interface <port> vlan <id>` | port dostępowy w VLAN-ie |
 | `mac flush` | czyszczenie tablicy MAC |
+
+## Przejście IPv4 ↔ IPv6 (pakiet IPv4 ↔ IPv6)
+
+| Polecenie | Urządzenie | Opis |
+|---|---|---|
+| `tunnel add <nazwa> mode 6in4 local <ipv4> remote <ipv4>` | router | tunel IPv6 w IPv4 – protokół 41 (RFC 4213) |
+| `tunnel add <nazwa> mode 4in6 local <ipv6> remote <ipv6>` | router | tunel IPv4 w IPv6 – Next Header 4 (RFC 2473) |
+| `tunnel del <nazwa>` | router | usunięcie tunelu |
+| `nat64 enable [prefix 64:ff9b::/96] pool <ipv4>` | router | NAT64 (RFC 6146); pula to własny adres IPv4 routera |
+| `nat64 disable` / `nat64 flush` | router | wyłączenie / wyczyszczenie tablicy translacji |
+| `dns64 enable [prefix <prefiks>/96]` / `dns64 disable` | serwer | syntetyczne rekordy AAAA z rekordów A (RFC 6147) |
+| `show tunnels` / `show nat64` | router | tunele, tablica translacji |
+
+Tunel to zwykły interfejs: po utworzeniu nadaj mu adres (`ip add 2001:db8:ff::1/64 dev tun0`) i dodaj trasę przez adres drugiego końca.
+
+## Bezpieczeństwo (pakiet Bezpieczeństwo)
+
+| Polecenie | Urządzenie | Opis |
+|---|---|---|
+| `security dhcp-guard on\|off` | przełącznik | odpowiedzi DHCP tylko z portów zaufanych, tablica powiązań IP ↔ MAC ↔ port (RFC 7513) |
+| `security savi on\|off` | przełącznik | weryfikacja adresu źródłowego ARP i IPv4 według powiązań (RFC 7039) |
+| `security ra-guard on\|off` | przełącznik | ogłoszenia routera IPv6 tylko z portów zaufanych (RFC 6105) |
+| `security port <p> trusted\|untrusted` | przełącznik | port zaufany (np. do routera lub serwera DHCP) |
+| `security port <p> max-mac <n>\|off [action drop\|shutdown]` | przełącznik | limit adresów MAC na porcie |
+| `security port <p> dot1x on\|off` | przełącznik | uwierzytelnianie IEEE 802.1X na porcie |
+| `security port <p> reset` | przełącznik | ponowne włączenie portu wyłączonego przez naruszenie |
+| `security binding add <mac> <ip> port <p>` / `security binding del <ip>` | przełącznik | statyczne powiązanie dla hosta z ręcznym adresem |
+| `security user add <login> <hasło>` / `security user del <login>` | przełącznik | konta 802.1X |
+| `dot1x login user <login> pass <hasło>` / `dot1x logoff` | komputer, serwer, drukarka | logowanie EAPOL / EAP-MD5 (RFC 3748) |
+| `show security` | przełącznik | stan ochrony, portów i tablica powiązań |
 
 ## Przykład: router dual stack
 

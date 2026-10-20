@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Model sieci: urządzenia, interfejsy, łącza, usługi serwera oraz adresacja IPv4/IPv6.
 // Mechanizmy opisano na podstawie otwartych standardów (RFC, IEEE 802).
 
@@ -6,13 +6,15 @@ import { fmt6, inPrefix6, isIp6, isLinkLocal6, linkLocal, net6, norm6, parse6 } 
 
 export type DeviceType = 'pc' | 'server' | 'router' | 'switch' | 'printer';
 
-export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP';
-export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP'];
+export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'TUNNEL' | 'EAP' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP';
+export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'TUNNEL', 'EAP', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP'];
 
 export const PROTO_COLORS: Record<Protocol, string> = {
   ARP: '#d97706',
   NDP: '#a16207',
   ICMP: '#7c3aed',
+  TUNNEL: '#0f766e',
+  EAP: '#be123c',
   DHCP: '#059669',
   DNS: '#0891b2',
   NTP: '#475569',
@@ -28,6 +30,8 @@ export const PROTO_LABEL: Record<Protocol, string> = {
   ARP: 'ARP',
   NDP: 'NDP',
   ICMP: 'ICMP',
+  TUNNEL: 'Tunel',
+  EAP: '802.1X',
   DHCP: 'DHCP',
   DNS: 'DNS',
   NTP: 'NTP',
@@ -77,6 +81,26 @@ export const PROTO_INFO: Record<Protocol, { name: string; layer: string; text: s
       { id: 'RFC 792', title: 'Internet Control Message Protocol' },
       { id: 'RFC 4443', title: 'ICMPv6' },
       { id: 'RFC 1812', title: 'Requirements for IP Version 4 Routers' },
+    ],
+  },
+  TUNNEL: {
+    name: 'Tunelowanie – 6in4 i 4in6',
+    layer: 'warstwa 3 w warstwie 3',
+    text: 'Router na początku tunelu wkłada cały pakiet jednej rodziny w nowy pakiet drugiej rodziny: w 6in4 pakiet IPv6 jedzie w IPv4 z numerem protokołu 41, w 4in6 – IPv4 w IPv6 (Next Header 4). Routery po drodze widzą tylko zewnętrzny nagłówek, a koniec tunelu go zdejmuje. Nagłówek kosztuje 20 B (IPv4) albo 40 B (IPv6) z MTU. Starsze automatyczne mechanizmy – 6to4 i Teredo – zostały wycofane albo nie są już stosowane.',
+    refs: [
+      { id: 'RFC 4213', title: 'Basic Transition Mechanisms for IPv6 Hosts and Routers (6in4)' },
+      { id: 'RFC 2473', title: 'Generic Packet Tunneling in IPv6 (4in6)' },
+      { id: 'RFC 7526', title: 'Deprecating the Anycast Prefix for 6to4 Relay Routers' },
+    ],
+  },
+  EAP: {
+    name: 'IEEE 802.1X – uwierzytelnianie na porcie (EAP)',
+    layer: 'warstwa 2 (ramki EAPOL, EtherType 0x888E)',
+    text: 'Port przełącznika z włączonym 802.1X jest najpierw „nieautoryzowany”: przepuszcza tylko ramki EAPOL. Komputer (suplikant) podaje tożsamość, przełącznik (uwierzytelniający) wysyła wyzwanie, komputer odpowiada skrótem z hasła, a po EAP-Success port zaczyna przekazywać ruch. W sieciach firmowych decyzję podejmuje serwer RADIUS (RFC 2865); w symulatorze baza kont jest w przełączniku.',
+    refs: [
+      { id: 'IEEE 802.1X-2020', title: 'Port-Based Network Access Control' },
+      { id: 'RFC 3748', title: 'Extensible Authentication Protocol (EAP)' },
+      { id: 'RFC 3579', title: 'RADIUS Support for EAP' },
     ],
   },
   DHCP: {
@@ -169,8 +193,17 @@ export interface Ip6Addr {
   origin: 'link' | 'static' | 'auto';
 }
 
+export interface Tunnel {
+  /** 6in4: IPv6 w IPv4 (protokół 41); 4in6: IPv4 w IPv6 (Next Header 4) */
+  mode: '6in4' | '4in6';
+  local: string;
+  remote: string;
+}
+
 export interface Iface {
   name: string;
+  /** interfejs wirtualny – koniec tunelu */
+  tunnel?: Tunnel;
   mac: string;
   ip: string;
   mask: string;
@@ -179,6 +212,19 @@ export interface Iface {
   vlan: number;
   /** adres serwera DHCP, do którego router przekazuje komunikaty z tej sieci (relay) */
   relay: string;
+  // bezpieczeństwo portu przełącznika
+  /** port zaufany: wolno z niego wysyłać odpowiedzi DHCP i ogłoszenia routera; nie podlega SAVI */
+  trusted?: boolean;
+  /** limit adresów MAC uczonych na porcie */
+  maxMac?: number;
+  onViolation?: 'drop' | 'shutdown';
+  violations?: number;
+  /** port wyłączony po naruszeniu */
+  errDisabled?: boolean;
+  /** IEEE 802.1X na porcie i MAC uwierzytelnionego suplikanta */
+  dot1x?: boolean;
+  authMac?: string;
+  authUser?: string;
 }
 
 export interface StaticRoute {
@@ -240,6 +286,44 @@ export interface DnsRecord {
   name: string;
   type: RecordType;
   value: string;
+  /** rekord AAAA złożony przez DNS64 z rekordu A */
+  synth?: boolean;
+}
+
+/** Powiązanie adres IP ↔ MAC ↔ port (z obserwacji DHCP albo wpisane ręcznie) – podstawa SAVI (RFC 7039, RFC 7513). */
+export interface Binding {
+  mac: string;
+  ip: string;
+  port: string;
+  vlan: number;
+  origin: 'dhcp' | 'static';
+}
+
+export interface SwitchSecurity {
+  /** ochrona DHCP: odpowiedzi serwerów tylko z portów zaufanych */
+  dhcpGuard: boolean;
+  /** weryfikacja adresu źródłowego IPv4 i ARP na podstawie powiązań */
+  savi: boolean;
+  /** RFC 6105: Router Advertisement tylko z portów zaufanych */
+  raGuard: boolean;
+  /** konta 802.1X (w praktyce: serwer RADIUS) */
+  users: { name: string; pass: string }[];
+}
+
+export interface Nat64 {
+  prefix: string;
+  len: number;
+  /** adres IPv4 routera używany po stronie IPv4 */
+  pool: string;
+}
+
+export interface NatEntry {
+  proto: 'TCP' | 'UDP' | 'ICMP';
+  v6: string;
+  v6port: number;
+  v4port: number;
+  v4: string;
+  port: number;
 }
 
 export interface Mail {
@@ -278,6 +362,13 @@ export interface Device {
   jobs: PrintJob[];
   /** przesunięcie zegara urządzenia w ms względem czasu wzorcowego */
   clock: number;
+  // translacja IPv6 ↔ IPv4
+  nat64: Nat64 | null;
+  natTable: NatEntry[];
+  dns64: { prefix: string; len: number } | null;
+  // bezpieczeństwo (przełącznik)
+  security: SwitchSecurity;
+  bindings: Binding[];
   // serwer
   services: Record<ServiceName, boolean>;
   records: DnsRecord[];
@@ -304,9 +395,30 @@ export interface Link {
   b: LinkEnd;
 }
 
+export type NoteColor = 'ink' | 'blue' | 'green' | 'amber' | 'red' | 'violet';
+
+/** Opis na obszarze roboczym: napis albo obszar (prostokąt z etykietą, np. „Sieć A”). Nie bierze udziału w symulacji. */
+export interface Note {
+  id: string;
+  kind: 'text' | 'zone';
+  x: number;
+  y: number;
+  /** szerokość i wysokość – tylko dla obszaru */
+  w: number;
+  h: number;
+  text: string;
+  color: NoteColor;
+  /** rozmiar czcionki napisu */
+  size: number;
+  bold: boolean;
+  /** obszar: linia przerywana (true) albo ciągła */
+  dashed: boolean;
+}
+
 export interface Network {
   devices: Device[];
   links: Link[];
+  notes?: Note[];
   nextId: number;
 }
 
@@ -492,6 +604,11 @@ export function createDevice(net: Network, type: DeviceType, x: number, y: numbe
     dnsCache: [],
     jobs: [],
     clock: server ? 0 : Math.round((Math.random() * 2 - 1) * 240000),
+    nat64: null,
+    natTable: [],
+    dns64: null,
+    security: { dhcpGuard: false, savi: false, raGuard: false, users: [] },
+    bindings: [],
     services: server ? { dhcp: false, dns: true, http: true, https: true, ftp: true, mail: true, ntp: true } : noServices(),
     records: [],
     web: server
@@ -515,6 +632,7 @@ export function createDevice(net: Network, type: DeviceType, x: number, y: numbe
 
 /** Uzupełnia pola brakujące w starszych zapisach i importach. */
 export function normalizeNet(net: Network): Network {
+  if (!Array.isArray(net.notes)) net.notes = [];
   for (const d of net.devices) {
     const base = createDevice({ devices: [], links: [], nextId: 0 }, d.type, 0, 0, d.name);
     for (const k of Object.keys(base) as (keyof Device)[]) {
@@ -534,7 +652,7 @@ export function normalizeNet(net: Network): Network {
   return net;
 }
 
-export const emptyNetwork = (): Network => ({ devices: [], links: [], nextId: 1 });
+export const emptyNetwork = (): Network => ({ devices: [], links: [], notes: [], nextId: 1 });
 
 export const getDev = (net: Network, id: string) => net.devices.find((d) => d.id === id);
 export const getIface = (d: Device, name: string) => d.ifaces.find((i) => i.name === name);
@@ -550,7 +668,7 @@ export function peerOf(net: Network, dev: string, iface: string): LinkEnd | null
 }
 
 export function freeIface(net: Network, d: Device): Iface | undefined {
-  return d.ifaces.find((i) => !linkAt(net, d.id, i.name));
+  return d.ifaces.find((i) => !i.tunnel && !linkAt(net, d.id, i.name));
 }
 
 export function connect(net: Network, aId: string, bId: string, aIf?: string, bIf?: string): Link | string {
@@ -560,6 +678,7 @@ export function connect(net: Network, aId: string, bId: string, aIf?: string, bI
   if (!a || !b) return 'Nie znaleziono urządzenia.';
   const ai = aIf ? getIface(a, aIf) : freeIface(net, a);
   const bi = bIf ? getIface(b, bIf) : freeIface(net, b);
+  if (ai?.tunnel || bi?.tunnel) return 'Do interfejsu tunelu nie podłącza się kabla – to interfejs wirtualny.';
   if (!ai) return `${a.name}: brak wolnego interfejsu.`;
   if (!bi) return `${b.name}: brak wolnego interfejsu.`;
   if (linkAt(net, a.id, ai.name) || linkAt(net, b.id, bi.name)) return 'Interfejs jest już zajęty.';
@@ -577,6 +696,7 @@ export type IfStatus = 'disabled' | 'no-link' | 'up';
 
 export function ifaceStatus(net: Network, d: Device, i: Iface): IfStatus {
   if (!i.up) return 'disabled';
+  if (i.tunnel) return 'up';
   const p = peerOf(net, d.id, i.name);
   if (!p) return 'no-link';
   const pd = getDev(net, p.dev);
@@ -594,7 +714,7 @@ export const STATUS_LABEL: Record<IfStatus, string> = {
 
 export interface RouteEntry {
   fam: 4 | 6;
-  kind: 'connected' | 'static' | 'default';
+  kind: 'connected' | 'static' | 'default' | 'nat64';
   network: string;
   prefix: number;
   iface: string;
@@ -623,6 +743,9 @@ export function routingTable(net: Network, d: Device): RouteEntry[] {
         ...(isIp(d.gateway) ? [{ network: '0.0.0.0', prefix: 0, nextHop: d.gateway }] : []),
         ...(isIp6(d.gateway6) ? [{ network: '::', prefix: 0, nextHop: d.gateway6 }] : []),
       ];
+  if (router && d.nat64) {
+    r.push({ fam: 6, kind: 'nat64', network: netOf(d.nat64.prefix, d.nat64.len), prefix: d.nat64.len, iface: 'NAT64', nextHop: `→ IPv4 z ${d.nat64.pool}`, active: true });
+  }
   for (const s of statics) {
     const f = fam(s.nextHop);
     if (!f || fam(s.network) !== f) continue;
@@ -646,7 +769,7 @@ export function lookupRoute(table: RouteEntry[], dst: string): RouteEntry | null
   const f = fam(dst);
   let best: RouteEntry | null = null;
   for (const e of table) {
-    if (!e.active || e.fam !== f) continue;
+    if (!e.active || e.fam !== f || e.kind === 'nat64') continue;
     if (inPrefix(dst, e.network, e.prefix) && (!best || e.prefix > best.prefix)) best = e;
   }
   return best;

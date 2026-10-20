@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Dyskretny silnik symulacji. Jeden „krok” czasu to przejście ramki przez jedno łącze
 // (w obliczeniach czasu – NTP, ping – krok liczymy jako 1 ms).
 // Silnik liczy cały przebieg od razu, a interfejs odtwarza go jako animację.
@@ -10,6 +10,7 @@ import {
   DhcpPool,
   DnsRecord,
   Iface,
+  NatEntry as NatEntryT,
   Network,
   PROTO_LABEL,
   Protocol,
@@ -36,8 +37,9 @@ import {
   routingTable,
   sameIp,
 } from './model';
-import { ALL_NODES, ALL_ROUTERS, isLinkLocal6, isMcastMac, isMulticast6, mcastMac, net6, norm6, solicitedNode, withIid } from './ipv6';
+import { ALL_NODES, ALL_ROUTERS, embed4, extract4, isLinkLocal6, isMcastMac, isMulticast6, mcastMac, mixed4, net6, norm6, solicitedNode, withIid } from './ipv6';
 import { serverListener } from './apps';
+import { md5 } from './md5';
 import { ALL_PACKS, PackId, PackSet } from './packs';
 
 // ---------- jednostki danych (PDU) ----------
@@ -124,15 +126,30 @@ export interface IpPacket {
   dst: string;
   ttl: number;
   id: number;
-  proto: 'ICMP' | 'UDP' | 'TCP';
+  /** ENCAP – pakiet tunelu: w `inner` siedzi cały pakiet drugiej rodziny */
+  proto: 'ICMP' | 'UDP' | 'TCP' | 'ENCAP';
+  inner?: IpPacket;
   icmp?: IcmpPdu;
   udp?: UdpPdu;
   tcp?: TcpPdu;
 }
+/** IEEE 802.1X: ramki EAPOL z komunikatami EAP (RFC 3748) */
+export interface EapolPdu {
+  type: 'Start' | 'EAP' | 'Logoff';
+  code?: 'Request' | 'Response' | 'Success' | 'Failure';
+  id?: number;
+  method?: 'Identity' | 'MD5-Challenge';
+  data?: string;
+}
+
+/** adres grupowy PAE – mostki nie przekazują ramek wysłanych na ten adres (IEEE 802.1X) */
+export const PAE_GROUP = '01:80:C2:00:00:03';
+
 export interface Frame {
   src: string;
   dst: string;
-  etherType: 'ARP' | 'IPv4' | 'IPv6';
+  etherType: 'ARP' | 'IPv4' | 'IPv6' | 'EAPOL';
+  eapol?: EapolPdu;
   arp?: ArpPdu;
   ip?: IpPacket;
 }
@@ -203,7 +220,9 @@ export function portProto(port: number): Protocol | null {
 
 export function protocolOf(f: Frame): Protocol {
   if (f.etherType === 'ARP') return 'ARP';
+  if (f.etherType === 'EAPOL') return 'EAP';
   const p = f.ip!;
+  if (p.proto === 'ENCAP') return 'TUNNEL';
   if (p.icmp) return isNdp(p) ? 'NDP' : 'ICMP';
   if (p.udp) {
     if (p.udp.dhcp) return 'DHCP';
@@ -225,7 +244,22 @@ export function summarize(f: Frame): string {
   if (f.arp) {
     return f.arp.op === 'request' ? `Kto ma ${f.arp.targetIp}? (pyta ${f.arp.senderIp})` : `${f.arp.senderIp} to ${f.arp.senderMac}`;
   }
-  const p = f.ip!;
+  if (f.eapol) {
+    const e = f.eapol;
+    if (e.type === 'Start') return 'EAPOL-Start: chcę się uwierzytelnić';
+    if (e.type === 'Logoff') return 'EAPOL-Logoff: wylogowanie';
+    if (e.code === 'Success') return 'EAP-Success: dostęp przyznany';
+    if (e.code === 'Failure') return 'EAP-Failure: odmowa dostępu';
+    if (e.method === 'Identity') return e.code === 'Request' ? 'EAP-Request/Identity: kim jesteś?' : `EAP-Response/Identity: ${e.data}`;
+    return e.code === 'Request' ? 'EAP-Request/MD5-Challenge: wyzwanie' : 'EAP-Response/MD5-Challenge: skrót hasła';
+  }
+  return summarizeIp(f.ip!);
+}
+
+export function summarizeIp(p: IpPacket): string {
+  if (p.proto === 'ENCAP' && p.inner) {
+    return `${p.v === 4 ? '6in4' : '4in6'} ${p.src} → ${p.dst} ⟨ ${summarizeIp(p.inner)} ⟩`;
+  }
   if (p.icmp) {
     const ic = p.icmp;
     if (p.v === 6) {
@@ -481,6 +515,7 @@ export class Sim {
           ? `Ramka multicast ${f.dst} – należę do tej grupy, więc ją przyjmuję.`
           : 'Docelowy MAC zgadza się z moim – przyjmuję ramkę i zaglądam do środka.',
     );
+    if (f.eapol) return this.eapSupplicantRx(d, ifc, f, ev);
     if (f.arp) return this.arpRx(d, ifc, f.arp, ev);
     if (f.ip) {
       if (f.ip.v === 6 && isNdp(f.ip)) return this.ndpRx(d, ifc, f.ip, ev);
@@ -493,6 +528,31 @@ export class Sim {
   private switchRx(sw: Device, port: string, f: Frame, ev: SimEvent) {
     const inP = getIface(sw, port)!;
     const vlan = inP.vlan;
+    const sec = this.has('security');
+    // --- IEEE 802.1X ---
+    if (f.etherType === 'EAPOL') {
+      if (!sec || !inP.dot1x) {
+        return this.drop(ev, `Ramka EAPOL na adres grupowy ${PAE_GROUP} – na porcie ${port} nie ma 802.1X, a przełącznik nie przekazuje dalej ramek na ten zarezerwowany adres.`);
+      }
+      return this.eapAuthRx(sw, inP, f, ev);
+    }
+    if (sec && inP.dot1x && inP.authMac !== f.src) {
+      return this.drop(ev, `802.1X: port ${port} jest nieautoryzowany dla ${f.src} – do czasu zalogowania przepuszczam tylko ramki EAPOL (dot1x login na komputerze).`);
+    }
+    // --- limit adresów MAC na porcie ---
+    if (sec && inP.maxMac && !sw.macTable.some((m) => m.mac === f.src && m.port === port)) {
+      const learned = sw.macTable.filter((m) => m.port === port).length;
+      if (learned >= inP.maxMac) {
+        inP.violations = (inP.violations ?? 0) + 1;
+        if (inP.onViolation === 'shutdown') {
+          inP.up = false;
+          inP.errDisabled = true;
+          this.out(sw.id, `naruszenie limitu MAC na ${port}: ${f.src} – port wyłączony`, 'err');
+          return this.drop(ev, `Limit MAC na ${port} (${inP.maxMac}) przekroczony przez nowy adres ${f.src}. Reakcja „shutdown”: wyłączam port. Przywrócisz go poleceniem: security port ${port} reset.`);
+        }
+        return this.drop(ev, `Limit MAC na ${port} wynosi ${inP.maxMac}, a port zna już ${learned} adres(y). Nowy adres ${f.src} – ramkę odrzucam i nie zapisuję go w tablicy (naruszenie nr ${inP.violations}).`);
+      }
+    }
     const known = sw.macTable.find((m) => m.mac === f.src && m.vlan === vlan);
     if (!known) {
       sw.macTable.push({ mac: f.src, port, vlan });
@@ -503,8 +563,10 @@ export class Sim {
     } else {
       ev.notes.push(`Adres źródłowy ${f.src} jest już w tablicy MAC (${port}).`);
     }
+    if (sec && this.secFilter(sw, inP, f, ev)) return;
+    const closed = (i: Iface) => sec && !!i.dot1x && !i.authMac;
     const flood = (reason: string) => {
-      const outs = sw.ifaces.filter((i) => i.name !== port && i.vlan === vlan && i.up && peerOf(this.net, sw.id, i.name));
+      const outs = sw.ifaces.filter((i) => i.name !== port && i.vlan === vlan && i.up && peerOf(this.net, sw.id, i.name) && !closed(i));
       ev.notes.push(
         `${reason} → zalewanie: kopia ramki na ${outs.length ? outs.map((o) => o.name).join(', ') : 'żaden port'} (tylko porty VLAN ${vlan}, bez portu wejściowego).`,
       );
@@ -515,6 +577,8 @@ export class Sim {
     if (isMcastMac(f.dst)) return flood(`Adres docelowy ${f.dst} to multicast IPv6 – przełącznik bez MLD snooping traktuje go jak broadcast`);
     const dst = sw.macTable.find((m) => m.mac === f.dst && m.vlan === vlan);
     if (!dst) return flood(`Adresu ${f.dst} nie ma w tablicy MAC (nieznany unicast)`);
+    const outP = getIface(sw, dst.port);
+    if (outP && closed(outP)) return this.drop(ev, `802.1X: port ${dst.port} jest nieautoryzowany – nie wysyłam na niego ruchu.`);
     if (dst.port === port) {
       ev.notes.push('Odbiorca jest za tym samym portem – filtrowanie, ramka nie jest przekazywana dalej.');
       ev.dropped = true;
@@ -522,6 +586,144 @@ export class Sim {
     }
     ev.notes.push(`Tablica MAC: ${f.dst} → ${dst.port}. Przekazuję ramkę tylko na ten port.`);
     this.transmit(sw, dst.port, f, [`Przekazanie zgodnie z tablicą MAC przełącznika ${sw.name}.`]);
+  }
+
+  // ----- bezpieczeństwo przełącznika: ochrona DHCP, SAVI (RFC 7039, 7513), RA-Guard (RFC 6105) -----
+
+  /** Zwraca true, jeśli ramka została odrzucona. */
+  private secFilter(sw: Device, inP: Iface, f: Frame, ev: SimEvent): boolean {
+    const cfg = sw.security;
+    const ip = f.ip;
+    const port = inP.name;
+    const m = ip?.udp?.dhcp;
+    if (m && (cfg.dhcpGuard || cfg.savi)) {
+      const fromServer = m.msg === 'OFFER' || m.msg === 'ACK' || m.msg === 'NAK';
+      if (fromServer && !inP.trusted) {
+        this.drop(ev, `Ochrona DHCP: DHCP${m.msg} przyszedł z portu niezaufanego ${port}. Odpowiedzi serwera DHCP wolno wysyłać tylko zza portu zaufanego – odrzucam (to może być fałszywy serwer, który poda złą bramę).`);
+        return true;
+      }
+      if (!fromServer && !inP.trusted && m.chaddr !== f.src) {
+        this.drop(ev, `Ochrona DHCP: w komunikacie DHCP${m.msg} pole chaddr (${m.chaddr}) różni się od MAC nadawcy ramki (${f.src}) – odrzucam (próba wyczerpania puli).`);
+        return true;
+      }
+      if (m.msg === 'ACK') {
+        const at = sw.macTable.find((x) => x.mac === m.chaddr && x.vlan === inP.vlan);
+        if (at) {
+          sw.bindings = sw.bindings.filter((b) => b.ip !== m.yiaddr && !(b.mac === m.chaddr && b.origin === 'dhcp'));
+          sw.bindings.push({ mac: m.chaddr, ip: m.yiaddr, port: at.port, vlan: at.vlan, origin: 'dhcp' });
+          ev.notes.push(`Ochrona DHCP: DHCPACK z portu zaufanego – zapisuję powiązanie ${m.yiaddr} ↔ ${m.chaddr} na ${at.port}. Z tej tabeli korzysta weryfikacja źródła (SAVI).`);
+        }
+      }
+    }
+    if (cfg.raGuard && ip?.v === 6 && ip.icmp?.type === 134 && !inP.trusted) {
+      this.drop(ev, `RA-Guard (RFC 6105): Router Advertisement z portu niezaufanego ${port} – odrzucam. Inaczej każdy komputer mógłby ogłosić się routerem IPv6 dla całej sieci.`);
+      return true;
+    }
+    if (cfg.savi && !inP.trusted) {
+      const claim = f.arp ? f.arp.senderIp : ip?.v === 4 ? ip.src : '';
+      if (claim && claim !== '0.0.0.0') {
+        const b = sw.bindings.find((x) => x.ip === claim);
+        if (!b || b.mac !== f.src || b.port !== port) {
+          const why = !b ? `nie ma powiązania dla ${claim}` : b.mac !== f.src ? `adres ${claim} należy do ${b.mac}, a ramkę wysłał ${f.src}` : `adres ${claim} jest powiązany z portem ${b.port}`;
+          this.drop(ev, `SAVI: ${f.arp ? 'ARP' : 'pakiet IPv4'} z adresem źródłowym ${claim} na porcie ${port} – ${why}. Odrzucam podszywanie się pod cudzy adres.`);
+          return true;
+        }
+        ev.notes.push(`SAVI: ${claim} ↔ ${f.src} na ${port} zgadza się z powiązaniem – przepuszczam.`);
+      }
+    }
+    return false;
+  }
+
+  // ----- IEEE 802.1X: uwierzytelniający (przełącznik) i suplikant (host), EAP-MD5 -----
+
+  private eap = new Map<string, { id: number; user: string; challenge: string }>();
+  private supp = new Map<string, { user: string; pass: string; done: boolean }>();
+
+  private eapSend(from: Device, ifName: string, srcMac: string, dst: string, e: EapolPdu, why: string) {
+    this.transmit(from, ifName, { src: srcMac, dst, etherType: 'EAPOL', eapol: e }, [why]);
+  }
+
+  private eapAuthRx(sw: Device, inP: Iface, f: Frame, ev: SimEvent) {
+    const e = f.eapol!;
+    const key = `${sw.id}|${inP.name}`;
+    if (e.type === 'Logoff') {
+      inP.authMac = undefined;
+      inP.authUser = undefined;
+      ev.notes.push(`Wylogowanie – port ${inP.name} wraca do stanu nieautoryzowanego.`);
+      return;
+    }
+    if (e.type === 'Start') {
+      const id = 1 + Math.floor(Math.random() * 200);
+      this.eap.set(key, { id, user: '', challenge: '' });
+      ev.notes.push(`EAPOL-Start na ${inP.name}. Port jest nieautoryzowany – proszę suplikanta o tożsamość.`);
+      return this.eapSend(sw, inP.name, inP.mac, f.src, { type: 'EAP', code: 'Request', id, method: 'Identity' }, `802.1X krok 2: EAP-Request/Identity (id=${id}).`);
+    }
+    const st = this.eap.get(key);
+    if (!st || e.code !== 'Response' || e.id !== st.id) return this.drop(ev, 'Odpowiedź EAP nie pasuje do bieżącej wymiany (inny identyfikator) – ignoruję.');
+    if (e.method === 'Identity') {
+      st.user = e.data ?? '';
+      st.id = (st.id % 250) + 1;
+      st.challenge = md5(`${Math.random()}${this.t}`).slice(0, 16);
+      ev.notes.push(`Tożsamość: „${st.user}”. Wysyłam losowe wyzwanie – hasło nigdy nie pójdzie siecią wprost.`);
+      return this.eapSend(sw, inP.name, inP.mac, f.src, { type: 'EAP', code: 'Request', id: st.id, method: 'MD5-Challenge', data: st.challenge }, `802.1X krok 4: EAP-Request/MD5-Challenge (id=${st.id}, wyzwanie ${st.challenge}).`);
+    }
+    const u = sw.security.users.find((x) => x.name === st.user);
+    const expect = u ? md5(`${st.id}${u.pass}${st.challenge}`) : '';
+    this.eap.delete(key);
+    if (u && e.data === expect) {
+      inP.authMac = f.src;
+      inP.authUser = st.user;
+      ev.notes.push(`Skrót zgadza się z obliczonym MD5(id + hasło + wyzwanie) – użytkownik ${st.user} uwierzytelniony. Port ${inP.name} jest teraz autoryzowany dla ${f.src}.`);
+      this.out(sw.id, `802.1X: ${inP.name} autoryzowany (${st.user})`);
+      return this.eapSend(sw, inP.name, inP.mac, f.src, { type: 'EAP', code: 'Success', id: e.id }, '802.1X krok 6: EAP-Success – port otwarty.');
+    }
+    ev.notes.push(u ? 'Skrót się nie zgadza – złe hasło.' : `Nie ma konta „${st.user}”.`);
+    return this.eapSend(sw, inP.name, inP.mac, f.src, { type: 'EAP', code: 'Failure', id: e.id }, '802.1X: EAP-Failure – port pozostaje zamknięty.');
+  }
+
+  private eapSupplicantRx(d: Device, ifc: Iface, f: Frame, ev: SimEvent) {
+    const e = f.eapol!;
+    const st = this.supp.get(d.id);
+    if (!st) return this.drop(ev, 'Komunikat EAP, a nie trwa logowanie 802.1X – ignoruję.');
+    if (e.code === 'Request' && e.method === 'Identity') {
+      ev.notes.push(`Przełącznik pyta o tożsamość – odpowiadam nazwą użytkownika „${st.user}”.`);
+      return this.eapSend(d, ifc.name, ifc.mac, f.src, { type: 'EAP', code: 'Response', id: e.id, method: 'Identity', data: st.user }, `802.1X krok 3: EAP-Response/Identity (${st.user}).`);
+    }
+    if (e.code === 'Request' && e.method === 'MD5-Challenge') {
+      const h = md5(`${e.id}${st.pass}${e.data}`);
+      ev.notes.push(`Wyzwanie ${e.data}: liczę MD5(id + hasło + wyzwanie) = ${h}. Hasło zostaje u mnie.`);
+      return this.eapSend(d, ifc.name, ifc.mac, f.src, { type: 'EAP', code: 'Response', id: e.id, method: 'MD5-Challenge', data: h }, '802.1X krok 5: EAP-Response/MD5-Challenge (skrót).');
+    }
+    st.done = true;
+    if (e.code === 'Success') {
+      ev.notes.push('EAP-Success – mogę korzystać z sieci.');
+      this.out(d.id, `802.1X: uwierzytelniono jako ${st.user} – port przełącznika otwarty`);
+    } else {
+      ev.notes.push('EAP-Failure – odmowa.');
+      this.out(d.id, '802.1X: odmowa dostępu (złe konto albo hasło)', 'err');
+    }
+  }
+
+  startDot1x(d: Device, user: string, pass: string) {
+    const ifc = d.ifaces[0];
+    this.supp.set(d.id, { user, pass, done: false });
+    this.out(d.id, `802.1X: logowanie jako ${user} (EAPOL-Start)`);
+    this.transmit(d, ifc.name, { src: ifc.mac, dst: PAE_GROUP, etherType: 'EAPOL', eapol: { type: 'Start' } }, [
+      `802.1X krok 1: EAPOL-Start na adres grupowy ${PAE_GROUP} – odbierze go tylko przełącznik, do którego jestem podłączony.`,
+    ]);
+    this.at(40, () => {
+      const st = this.supp.get(d.id);
+      if (st && !st.done) {
+        this.out(d.id, '802.1X: brak odpowiedzi', 'err');
+        this.out(d.id, 'Czy port przełącznika ma włączone 802.1X (security port <port> dot1x on)?', 'hint');
+      }
+    });
+  }
+
+  stopDot1x(d: Device) {
+    const ifc = d.ifaces[0];
+    this.out(d.id, '802.1X: wylogowanie (EAPOL-Logoff)');
+    this.transmit(d, ifc.name, { src: ifc.mac, dst: PAE_GROUP, etherType: 'EAPOL', eapol: { type: 'Logoff' } }, ['Kończę sesję 802.1X – port wróci do stanu nieautoryzowanego.']);
   }
 
   // ----- ARP (RFC 826) i NDP (RFC 4861) -----
@@ -759,6 +961,7 @@ export class Sim {
   }
 
   private toNextHop(d: Device, ifc: Iface, nh: string, p: IpPacket, why: string[]) {
+    if (ifc.tunnel) return this.encap(d, ifc, p, why);
     const v6 = p.v === 6;
     const table = v6 ? d.nd : d.arp;
     const e = table.find((a) => sameIp(a.ip, nh));
@@ -819,6 +1022,7 @@ export class Sim {
     if (!mine && !bcast) {
       return this.drop(ev, `Pakiet jest adresowany do ${p.dst}, a to nie mój adres. Host nie przekazuje cudzych pakietów (RFC 1122).`);
     }
+    if (p.proto === 'ENCAP') return this.drop(ev, 'Pakiet tunelu – ten host nie jest końcem tunelu, więc nie umie go rozpakować.');
     if (p.proto === 'UDP') return this.udpRx(d, ifc, p, ev);
     if (p.proto === 'ICMP') return this.icmpRx(d, p, ev);
     if (p.proto === 'TCP') return this.tcpRx(d, p, ev);
@@ -827,8 +1031,10 @@ export class Sim {
   private routerIpRx(d: Device, ifc: Iface, p: IpPacket, ev: SimEvent) {
     if (p.proto === 'UDP' && p.udp?.dhcp && p.udp.dstPort === 67) return this.routerDhcp(d, ifc, p, ev);
     const own = p.v === 4 ? d.ifaces.some((i) => hasIp(i) && i.ip === p.dst) : this.ownsIp6(d, p.dst) || sameIp(p.dst, ALL_NODES);
+    if (own && p.v === 4 && d.nat64 && p.dst === d.nat64.pool && this.has('transition') && this.natFind46(d, p)) return this.translate46(d, ifc, p, ev);
     if (own) {
       ev.notes.push(`Pakiet jest adresowany do mnie (${p.dst}).`);
+      if (p.proto === 'ENCAP') return this.decap(d, p, ev);
       if (p.proto === 'ICMP') return this.icmpRx(d, p, ev);
       if (p.proto === 'TCP') return this.tcpRx(d, p, ev);
       return this.udpRx(d, ifc, p, ev);
@@ -848,6 +1054,10 @@ export class Sim {
       return;
     }
     ev.notes.push(`Zmniejszam ${field}: ${old} → ${p.ttl}.`);
+    if (p.v === 6 && d.nat64 && inPrefix(p.dst, d.nat64.prefix, d.nat64.len)) {
+      if (this.has('transition')) return this.translate64(d, ifc, p, ev);
+      return this.drop(ev, 'Pakiet „IPv4 ↔ IPv6” jest wyłączony – NAT64 nie działa.');
+    }
     const r = this.route(d, p.dst);
     if (!r.ok) {
       this.drop(ev, `${r.error} Pakiet odrzucony – odsyłam Destination Unreachable do ${p.src}.`);
@@ -857,8 +1067,121 @@ export class Sim {
     ev.notes.push(...r.notes);
     const out = getIface(d, r.iface)!;
     this.toNextHop(d, out, r.nextHop, p, [
-      `Router ${d.name} przekazuje pakiet ${p.src} → ${p.dst}. Buduje NOWĄ ramkę: MAC źródłowy = ${out.mac} (${out.name}); adresy IP się nie zmieniają.`,
+      out.tunnel
+        ? `Router ${d.name} przekazuje pakiet ${p.src} → ${p.dst} do interfejsu tunelu ${out.name}; adresy IP pakietu się nie zmieniają.`
+        : `Router ${d.name} przekazuje pakiet ${p.src} → ${p.dst}. Buduje NOWĄ ramkę: MAC źródłowy = ${out.mac} (${out.name}); adresy IP się nie zmieniają.`,
     ]);
+  }
+
+  // ----- tunele: 6in4 (RFC 4213) i 4in6 (RFC 2473) -----
+
+  private encap(d: Device, ifc: Iface, p: IpPacket, why: string[]) {
+    const t = ifc.tunnel!;
+    const outerV: 4 | 6 = t.mode === '6in4' ? 4 : 6;
+    const frame: Frame = { src: ifc.mac, dst: '??:??:??:??:??:??', etherType: p.v === 6 ? 'IPv6' : 'IPv4', ip: p };
+    if (!this.has('transition')) return this.dropAt(d, ifc.name, frame, why, 'Pakiet „IPv4 ↔ IPv6” jest wyłączony – tunel nie działa.');
+    if (!ifc.up) return this.dropAt(d, ifc.name, frame, why, `Interfejs tunelu ${ifc.name} jest wyłączony.`);
+    if (p.v === outerV) return this.dropAt(d, ifc.name, frame, why, `Tunel ${t.mode} przenosi tylko pakiety IPv${outerV === 4 ? 6 : 4}.`);
+    const outer: IpPacket = { v: outerV, src: t.local, dst: t.remote, ttl: DEFAULT_TTL, id: ipId++, proto: 'ENCAP', inner: p };
+    const err = this.sendIp(d, outer, [
+      ...why,
+      `Wyjście przez ${ifc.name} – tunel ${t.mode}. Cały pakiet IPv${p.v} wkładam w nowy pakiet IPv${outerV} ${t.local} → ${t.remote} (${outerV === 4 ? 'protokół 41' : 'Next Header 4'}). Routery po drodze widzą tylko ten zewnętrzny nagłówek; ${outerV === 4 ? '20' : '40'} B nagłówka zmniejsza MTU tunelu.`,
+    ]);
+    if (err) this.out(d.id, `tunel ${ifc.name}: nie można wysłać – ${err}`, 'err');
+  }
+
+  private decap(d: Device, p: IpPacket, ev: SimEvent) {
+    const mode = p.v === 4 ? '6in4' : '4in6';
+    const tun = d.ifaces.find((i) => i.tunnel && i.tunnel.mode === mode && sameIp(i.tunnel.local, p.dst) && sameIp(i.tunnel.remote, p.src));
+    if (!this.has('transition')) return this.drop(ev, 'Pakiet „IPv4 ↔ IPv6” jest wyłączony – nie rozpakowuję tunelu.');
+    if (!tun || !p.inner) {
+      return this.drop(ev, `Pakiet tunelu ${mode} od ${p.src}, a nie mam tunelu z takim drugim końcem – odrzucam (RFC 4213 każe sprawdzać adres źródłowy, żeby nikt nie wstrzykiwał pakietów).`);
+    }
+    if (!tun.up) return this.drop(ev, `Interfejs tunelu ${tun.name} jest wyłączony.`);
+    ev.notes.push(
+      `Koniec tunelu ${tun.name}: zdejmuję zewnętrzny nagłówek IPv${p.v} (${p.src} → ${p.dst}) i obsługuję wewnętrzny pakiet IPv${p.inner.v} ${p.inner.src} → ${p.inner.dst} tak, jakby przyszedł interfejsem ${tun.name}.`,
+    );
+    this.routerIpRx(d, tun, p.inner, ev);
+  }
+
+  // ----- NAT64 (RFC 6146) z adresami RFC 6052 -----
+
+  private natPortFor(d: Device, proto: 'TCP' | 'UDP' | 'ICMP') {
+    let port = proto === 'ICMP' ? 1000 : 40000;
+    while (d.natTable.some((e) => e.proto === proto && e.v4port === port)) port++;
+    return port;
+  }
+
+  private natFind46(d: Device, p: IpPacket) {
+    if (p.tcp || p.udp) {
+      const t = (p.tcp ?? p.udp)!;
+      return d.natTable.find((e) => e.proto === p.proto && e.v4port === t.dstPort && e.v4 === p.src && e.port === t.srcPort);
+    }
+    if (p.icmp && p.icmp.type === 0) return d.natTable.find((e) => e.proto === 'ICMP' && e.v4port === p.icmp!.id && e.v4 === p.src);
+    return undefined;
+  }
+
+  private translate64(d: Device, inIfc: Iface, p: IpPacket, ev: SimEvent) {
+    const cfg = d.nat64!;
+    const v4 = extract4(p.dst);
+    const proto = p.proto as 'TCP' | 'UDP' | 'ICMP';
+    let q: IpPacket;
+    let e: NatEntryT | undefined;
+    if (p.tcp || p.udp) {
+      const t = (p.tcp ?? p.udp)!;
+      e = d.natTable.find((x) => x.proto === proto && sameIp(x.v6, p.src) && x.v6port === t.srcPort && x.v4 === v4 && x.port === t.dstPort);
+      if (!e) {
+        e = { proto, v6: p.src, v6port: t.srcPort, v4port: this.natPortFor(d, proto), v4, port: t.dstPort };
+        d.natTable.push(e);
+        ev.notes.push(`Nowy wpis w tablicy NAT64 (${proto}): [${p.src}]:${t.srcPort} ↔ ${cfg.pool}:${e.v4port} → ${v4}:${t.dstPort}.`);
+      }
+      q = { v: 4, src: cfg.pool, dst: v4, ttl: p.ttl, id: ipId++, proto, ...(p.tcp ? { tcp: { ...p.tcp, srcPort: e.v4port } } : { udp: { ...p.udp!, srcPort: e.v4port } }) };
+    } else if (p.icmp && p.icmp.type === 128) {
+      const ic = p.icmp;
+      e = d.natTable.find((x) => x.proto === 'ICMP' && sameIp(x.v6, p.src) && x.v6port === ic.id && x.v4 === v4);
+      if (!e) {
+        e = { proto: 'ICMP', v6: p.src, v6port: ic.id, v4port: this.natPortFor(d, 'ICMP'), v4, port: 0 };
+        d.natTable.push(e);
+        ev.notes.push(`Nowy wpis w tablicy NAT64 (ICMP): [${p.src}] id=${ic.id} ↔ ${cfg.pool} id=${e.v4port}.`);
+      }
+      q = { v: 4, src: cfg.pool, dst: v4, ttl: p.ttl, id: ipId++, proto: 'ICMP', icmp: { type: 8, code: 0, id: e.v4port, seq: ic.seq } };
+    } else {
+      return this.drop(ev, 'Symulator tłumaczy w NAT64 tylko TCP, UDP i ICMP Echo – ten pakiet odrzucam.');
+    }
+    ev.notes.push(
+      `NAT64: adres ${mixed4(p.dst)} leży w prefiksie ${cfg.prefix}/${cfg.len}, więc ostatnie 32 bity to adres IPv4 ${v4}. Buduję pakiet IPv4 ${cfg.pool} → ${v4}${p.icmp ? ' (ICMPv6 Echo → ICMP Echo)' : ''}; nagłówek IPv6 znika.`,
+    );
+    const r = this.route(d, v4);
+    if (!r.ok) {
+      this.drop(ev, `${r.error} Po translacji nie ma dokąd wysłać pakietu IPv4.`);
+      this.icmpError(d, inIfc, p, 'unreach');
+      return;
+    }
+    const out = getIface(d, r.iface)!;
+    this.toNextHop(d, out, r.nextHop, q, [`NAT64 na ${d.name}: pakiet od [${p.src}] po translacji na IPv4 (${cfg.pool}:${e.v4port}).`, ...r.notes]);
+  }
+
+  private translate46(d: Device, inIfc: Iface, p: IpPacket, ev: SimEvent) {
+    const cfg = d.nat64!;
+    const e = this.natFind46(d, p)!;
+    const old = p.ttl;
+    p.ttl -= 1;
+    if (p.ttl <= 0) {
+      this.drop(ev, `TTL ${old} → 0 – pakiet odrzucony.`);
+      return;
+    }
+    const src = embed4(cfg.prefix, p.src);
+    const q: IpPacket = p.icmp
+      ? { v: 6, src, dst: e.v6, ttl: p.ttl, id: ipId++, proto: 'ICMP', icmp: { type: 129, code: 0, id: e.v6port, seq: p.icmp.seq } }
+      : { v: 6, src, dst: e.v6, ttl: p.ttl, id: ipId++, proto: p.proto, ...(p.tcp ? { tcp: { ...p.tcp, dstPort: e.v6port } } : { udp: { ...p.udp!, dstPort: e.v6port } }) };
+    ev.notes.push(
+      `NAT64: odpowiedź na ${cfg.pool}:${p.tcp?.dstPort ?? p.udp?.dstPort ?? p.icmp?.id} pasuje do wpisu w tablicy – tłumaczę z powrotem na IPv6: źródło ${mixed4(src)} (prefiks + ${p.src}), cel [${e.v6}]${p.icmp ? '' : `:${e.v6port}`}. Zmniejszam TTL: ${old} → ${p.ttl}.`,
+    );
+    const r = this.route(d, e.v6);
+    if (!r.ok) return this.drop(ev, `${r.error} Nie mogę oddać odpowiedzi hostowi IPv6.`);
+    const out = getIface(d, r.iface)!;
+    this.toNextHop(d, out, r.nextHop, q, [`NAT64 na ${d.name}: odpowiedź od ${p.src} przetłumaczona na IPv6.`, ...r.notes]);
+    void inIfc;
   }
 
   private icmpError(d: Device, inIfc: Iface, p: IpPacket, kind: 'unreach' | 'timex') {
@@ -889,6 +1212,15 @@ export class Sim {
       ]);
       if (err) ev.notes.push(`Nie mogę odesłać odpowiedzi: ${err}`);
       return;
+    }
+    if (ic.type === T.unreach[p.v] && ic.orig) {
+      const c = this.conns.find((x) => x.dev === d.id && x.state === 'SYN_SENT' && sameIp(x.remote, ic.orig!.dst));
+      if (c) {
+        c.state = 'CLOSED';
+        ev.notes.push(`Destination Unreachable od ${p.src} dotyczy mojej próby połączenia z ${ic.orig.dst} – przerywam ją od razu, nie czekam na upływ czasu.`);
+        c.h.fail?.(c, `cel nieosiągalny – router ${p.src} nie ma trasy`);
+        return;
+      }
     }
     const isRep = ic.type === T.echoRep[p.v];
     const jobId = isRep ? ic.id : ic.orig?.id;
@@ -1230,6 +1562,11 @@ export class Sim {
   /** Nazwa → adres wybranej rodziny (A albo AAAA). Błąd wypisuje na terminal i nie wywołuje cb. */
   resolveHost(d: Device, host: string, want: 4 | 6, cb: (ip: string | null) => void) {
     if (fam(host)) return cb(host);
+    // host bez adresu jednej rodziny pyta o adres drugiej (np. komputer tylko z IPv6 – o rekord AAAA)
+    const has4 = d.ifaces.some(hasIp) && this.has('ipv4');
+    const has6 = d.ifaces.some((i) => globals6(i).length > 0) && this.has('ipv6');
+    if (want === 4 && !has4 && has6) want = 6;
+    else if (want === 6 && !has6 && has4) want = 4;
     this.resolve(d, host, want === 6 ? 'AAAA' : 'A', (ip, err) => {
       if (!ip) {
         this.out(d.id, `nie można rozwiązać nazwy ${host}`, 'err');
@@ -1251,9 +1588,18 @@ export class Sim {
   private dnsServe(d: Device, p: IpPacket, ev: SimEvent) {
     const q = p.udp!.dns!;
     const all = d.records.filter((r) => r.name.toLowerCase() === q.name);
-    const answers = all.filter((r) => r.type === q.qtype);
+    let answers: DnsRecord[] = all.filter((r) => r.type === q.qtype);
     const rcode = all.length ? 'NOERROR' : 'NXDOMAIN';
-    ev.notes.push(
+    if (q.qtype === 'AAAA' && !answers.length && d.dns64 && this.has('transition')) {
+      const a = all.filter((r) => r.type === 'A');
+      if (a.length) {
+        answers = a.map((r) => ({ name: r.name, type: 'AAAA', value: embed4(d.dns64!.prefix, r.value), synth: true }));
+        ev.notes.push(
+          `DNS64: nazwa ma tylko rekord A (${a.map((r) => r.value).join(', ')}). Składam rekord AAAA: prefiks ${d.dns64.prefix}/${d.dns64.len} + adres IPv4 = ${answers.map((r) => mixed4(r.value)).join(', ')} (RFC 6147). Host IPv6 połączy się z tym adresem, a NAT64 przetłumaczy ruch.`,
+        );
+      }
+    }
+    if (!answers.some((r) => r.synth)) ev.notes.push(
       rcode === 'NXDOMAIN'
         ? `Nie mam w strefie nazwy „${q.name}” – odpowiadam NXDOMAIN.`
         : answers.length

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Adresy IPv6: zapis (RFC 4291, RFC 5952), identyfikator EUI-64, adresy multicast używane przez NDP (RFC 4861).
 
 const B = BigInt;
@@ -9,11 +9,26 @@ export const ALL_NODES = 'ff02::1';
 export const ALL_ROUTERS = 'ff02::2';
 export const UNSPECIFIED = '::';
 
+function v4int(s: string): number | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (!m) return null;
+  const p = m.slice(1).map(Number);
+  if (p.some((x) => x > 255)) return null;
+  return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+}
+
 export function parse6(input: string): bigint | null {
   if (!input) return null;
   let s = input.trim().toLowerCase();
   if (!s.includes(':')) return null;
   if (s.includes('%')) s = s.split('%')[0];
+  // zapis mieszany z adresem IPv4 na końcu, np. 64:ff9b::192.0.2.80 (RFC 4291, 2.2)
+  if (s.includes('.')) {
+    const i = s.lastIndexOf(':');
+    const n = v4int(s.slice(i + 1));
+    if (n === null) return null;
+    s = `${s.slice(0, i + 1)}${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`;
+  }
   const parts = s.split('::');
   if (parts.length > 2) return null;
   const head = parts[0] ? parts[0].split(':') : [];
@@ -125,3 +140,25 @@ export const isMulticast6 = (a: string) => {
 };
 
 export const isMcastMac = (mac: string) => mac.startsWith('33:33:');
+
+/** Adres IPv6 z osadzonym adresem IPv4 dla prefiksu /96 (RFC 6052), np. 64:ff9b:: + 192.0.2.80. */
+export function embed4(prefix: string, v4: string): string {
+  const p = parse6(prefix) ?? ZERO;
+  const n = v4int(v4) ?? 0;
+  return fmt6((p & mask6(96)) | B(n));
+}
+
+/** Ostatnie 32 bity adresu IPv6 jako adres IPv4. */
+export function extract4(a: string): string {
+  const x = parse6(a) ?? ZERO;
+  const n = Number(x & B(0xffffffff));
+  return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+}
+
+/** Zapis mieszany: 64:ff9b::192.0.2.80 (czytelniejszy dla adresów NAT64). */
+export function mixed4(a: string): string {
+  const x = parse6(a);
+  if (x === null) return a;
+  const head = fmt6(x & mask6(96));
+  return head.endsWith('::') ? `${head}${extract4(a)}` : fmt6(x);
+}

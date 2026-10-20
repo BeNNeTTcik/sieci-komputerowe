@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// © 2026 Mateusz Dampc. Wszelkie prawa zastrzeżone. Szczegóły: plik LICENSE.
 // Własny, niezależny od producentów język poleceń symulatora.
 // Ta sama składnia działa na każdym urządzeniu; dostępne są tylko polecenia
 // pasujące do typu urządzenia i do włączonych pakietów protokołów.
@@ -34,8 +34,11 @@ import {
   prefixToMask,
   routingTable,
   sameIp,
+  newIface,
+  addressesOf,
 } from './model';
 import { ALL_PACKS, PackId, PackSet, serviceEnabled } from './packs';
+import { mixed4 } from './ipv6';
 import { fmtClock, EPOCH } from './engine';
 
 export interface CliActions {
@@ -43,6 +46,8 @@ export interface CliActions {
   trace(d: Device, host: string, v: 4 | 6): void;
   dhcp(d: Device): void;
   autoconf(d: Device): void;
+  dot1x(d: Device, user: string, pass: string): void;
+  dot1xOff(d: Device): void;
   lookup(d: Device, name: string, type: RecordType): void;
   http(d: Device, host: string, path: string, secure: boolean, v: 4 | 6): void;
   ftp(d: Device, host: string, op: { cmd: 'get' | 'list'; file?: string; user: string; pass: string }, v: 4 | 6): void;
@@ -181,6 +186,51 @@ export const COMMANDS: CmdDoc[] = [
   { verb: 'web', for: ['server'], pack: 'web', syntax: ['web set <ścieżka> <treść…>', 'web del <ścieżka>'], text: 'Strony serwera WWW.', examples: ['web set /kontakt Sekretariat: pokój 12'] },
   { verb: 'ftp-file', for: ['server'], pack: 'ftp', syntax: ['ftp-file add <nazwa> <treść…>', 'ftp-file del <nazwa>'], text: 'Pliki udostępniane przez FTP.', examples: ['ftp-file add notatki.txt Adresacja IPv6 – powtórka'] },
   { verb: 'user', for: ['server'], pack: ['ftp', 'mail'], syntax: ['user add <login> <hasło>', 'user del <login>'], text: 'Konta użytkowników (logowanie FTP i skrzynki pocztowe).', examples: ['user add nauczyciel tajne1'] },
+  {
+    verb: 'tunnel',
+    for: ['router'],
+    pack: 'transition',
+    syntax: ['tunnel add <nazwa> mode 6in4|4in6 local <adres> remote <adres>', 'tunnel del <nazwa>'],
+    text: 'Tunel: 6in4 przenosi IPv6 w IPv4 (protokół 41, RFC 4213), 4in6 – IPv4 w IPv6 (RFC 2473). Potem nadaj interfejsowi tunelu adres i dodaj trasę przez drugi koniec.',
+    examples: ['tunnel add tun0 mode 6in4 local 203.0.113.1 remote 198.51.100.2', 'ip add 2001:db8:ff::1/64 dev tun0', 'route add 2001:db8:2::/64 via 2001:db8:ff::2'],
+  },
+  {
+    verb: 'nat64',
+    for: ['router'],
+    pack: 'transition',
+    syntax: ['nat64 enable [prefix 64:ff9b::/96] pool <adres IPv4>', 'nat64 disable', 'nat64 flush'],
+    text: 'Stanowy NAT64 (RFC 6146): pakiety IPv6 do prefiksu NAT64 zamienia na IPv4 wysyłane z adresu pool. Prefiks domyślny 64:ff9b::/96 (RFC 6052).',
+    examples: ['nat64 enable prefix 64:ff9b::/96 pool 192.0.2.1', 'show nat64'],
+  },
+  {
+    verb: 'dns64',
+    for: ['server'],
+    pack: 'transition',
+    syntax: ['dns64 enable [prefix 64:ff9b::/96]', 'dns64 disable'],
+    text: 'DNS64 (RFC 6147): gdy nazwa ma tylko rekord A, serwer odpowiada na pytanie AAAA adresem złożonym z prefiksu NAT64 i adresu IPv4.',
+    examples: ['dns64 enable'],
+  },
+  {
+    verb: 'security',
+    for: ['switch'],
+    pack: 'security',
+    syntax: [
+      'security dhcp-guard on|off',
+      'security savi on|off',
+      'security ra-guard on|off',
+      'security port <port> trusted|untrusted',
+      'security port <port> max-mac <n>|off [action drop|shutdown]',
+      'security port <port> dot1x on|off',
+      'security port <port> reset',
+      'security binding add <mac> <ip> port <port>',
+      'security binding del <ip>',
+      'security user add <login> <hasło>',
+      'security user del <login>',
+    ],
+    text: 'Zabezpieczenia przełącznika: ochrona DHCP i weryfikacja źródła (SAVI, RFC 7039/7513), RA-Guard (RFC 6105), limit adresów MAC na porcie, IEEE 802.1X z EAP (RFC 3748).',
+    examples: ['security dhcp-guard on', 'security port port8 trusted', 'security port port3 max-mac 1 action shutdown', 'security port port4 dot1x on', 'security user add gosc Wifi2026'],
+  },
+  { verb: 'dot1x', for: ['pc', 'printer', 'server'], pack: 'security', syntax: ['dot1x login user <login> pass <hasło>', 'dot1x logoff'], text: 'Uwierzytelnienie 802.1X na porcie przełącznika (EAPOL, EAP-MD5).', examples: ['dot1x login user gosc pass Wifi2026'] },
   { verb: 'clear', for: ALL, syntax: ['clear'], text: 'Czyści ekran terminala.', examples: ['clear'] },
 ];
 
@@ -263,7 +313,9 @@ function showInterfaces(net: Network, d: Device, packs: PackSet): string[] {
     const p = peerOf(net, d.id, i.name);
     const pd = p && getDev(net, p.dev);
     const addrs = sw ? ['-'] : [...(packs.ipv4 && hasIp(i) ? [cidr(i.ip, i.mask)] : []), ...(packs.ipv6 ? i.ip6.map((a) => `${a.addr}/${a.prefix}`) : [])];
-    rows.push([i.name, STATUS_LABEL[ifaceStatus(net, d, i)], addrs[0] ?? '-', i.mac, ...(sw && packs.vlan ? [String(i.vlan)] : []), pd ? `${pd.name} ${p!.iface}` : '-']);
+    const peerTxt = i.tunnel ? `tunel ${i.tunnel.mode} → ${i.tunnel.remote}` : pd ? `${pd.name} ${p!.iface}` : '-';
+    const st = i.errDisabled ? 'wyłączony (naruszenie)' : STATUS_LABEL[ifaceStatus(net, d, i)];
+    rows.push([i.name, st, addrs[0] ?? '-', i.tunnel ? '-' : i.mac, ...(sw && packs.vlan ? [String(i.vlan)] : []), peerTxt]);
     for (const a of addrs.slice(1)) rows.push(['', '', a, '', ...(sw && packs.vlan ? [''] : []), '']);
   }
   return table(['Interfejs', 'Stan', 'Adres', 'MAC', ...(sw && packs.vlan ? ['VLAN'] : []), 'Połączony z'], rows);
@@ -272,14 +324,14 @@ function showInterfaces(net: Network, d: Device, packs: PackSet): string[] {
 function showRoutes(net: Network, d: Device, packs: PackSet): string[] {
   const rt = routingTable(net, d).filter((e) => (e.fam === 4 ? packs.ipv4 : packs.ipv6));
   if (!rt.length) return ['(tablica routingu jest pusta)'];
-  const kind = { connected: 'C', static: 'S', default: 'S*' } as const;
+  const kind = { connected: 'C', static: 'S', default: 'S*', nat64: 'N' } as const;
   return [
     ...table(
       ['Typ', 'Sieć docelowa', 'Następny skok', 'Interfejs', 'Stan'],
       rt.map((e) => [kind[e.kind], `${e.network}/${e.prefix}`, e.nextHop || 'bezpośrednio', e.iface || '?', e.active ? 'aktywna' : 'nieaktywna']),
     ),
     '',
-    'C – sieć podłączona bezpośrednio, S – statyczna, S* – domyślna',
+    'C – sieć podłączona bezpośrednio, S – statyczna, S* – domyślna, N – prefiks NAT64',
   ];
 }
 
@@ -289,12 +341,26 @@ export function configLines(d: Device, packs: PackSet = ALL_PACKS): string[] {
     if (packs.vlan) for (const v of d.vlans) if (v.id !== 1) c.push(`vlan add ${v.id}${v.name ? ` name ${v.name}` : ''}`);
     for (const i of d.ifaces) {
       if (packs.vlan && i.vlan !== 1) c.push(`interface ${i.name} vlan ${i.vlan}`);
-      if (!i.up) c.push(`interface ${i.name} down`);
+      if (!i.up && !i.errDisabled) c.push(`interface ${i.name} down`);
+    }
+    if (packs.security) {
+      const sec = d.security;
+      if (sec.dhcpGuard) c.push('security dhcp-guard on');
+      if (sec.savi) c.push('security savi on');
+      if (sec.raGuard) c.push('security ra-guard on');
+      for (const i of d.ifaces) {
+        if (i.trusted) c.push(`security port ${i.name} trusted`);
+        if (i.maxMac) c.push(`security port ${i.name} max-mac ${i.maxMac} action ${i.onViolation ?? 'drop'}`);
+        if (i.dot1x) c.push(`security port ${i.name} dot1x on`);
+      }
+      for (const b of d.bindings) if (b.origin === 'static') c.push(`security binding add ${b.mac} ${b.ip} port ${b.port}`);
+      for (const u of sec.users) c.push(`security user add ${u.name} ${u.pass}`);
     }
     return c;
   }
   const dyn = d.type !== 'router' && d.dhcp;
   for (const i of d.ifaces) {
+    if (i.tunnel) c.push(`tunnel add ${i.name} mode ${i.tunnel.mode} local ${i.tunnel.local} remote ${i.tunnel.remote}`);
     c.push(`interface ${i.name} ${i.up ? 'up' : 'down'}`);
     if (packs.ipv4 && hasIp(i) && !dyn) c.push(`ip add ${cidr(i.ip, i.mask)} dev ${i.name}`);
     if (packs.ipv6) for (const a of i.ip6.filter((x) => x.origin === 'static')) c.push(`ip add ${a.addr}/${a.prefix} dev ${i.name}`);
@@ -302,6 +368,7 @@ export function configLines(d: Device, packs: PackSet = ALL_PACKS): string[] {
   }
   if (d.type === 'router') {
     for (const r of d.routes) if (fam(r.nextHop) === 4 ? packs.ipv4 : packs.ipv6) c.push(`route add ${r.prefix === 0 ? 'default' : `${r.network}/${r.prefix}`} via ${r.nextHop}`);
+    if (packs.transition && d.nat64) c.push(`nat64 enable prefix ${d.nat64.prefix}/${d.nat64.len} pool ${d.nat64.pool}`);
   } else {
     if (packs.dhcp && dyn) c.push('dhcp-client start');
     else if (packs.ipv4 && d.gateway) c.push(`route add default via ${d.gateway}`);
@@ -320,6 +387,7 @@ export function configLines(d: Device, packs: PackSet = ALL_PACKS): string[] {
     if (packs.ftp) for (const f of d.files) c.push(`ftp-file add ${f.name} ${f.body.replace(/\n/g, ' ')}`);
     if (packs.ftp || packs.mail) for (const u of d.users) c.push(`user add ${u.name} ${u.pass}`);
     if (packs.mail) c.push(`set mail-domain ${d.mailDomain}`);
+    if (packs.transition && d.dns64) c.push(`dns64 enable prefix ${d.dns64.prefix}/${d.dns64.len}`);
   }
   if (d.type === 'pc' && packs.mail && d.mailAccount.addr) c.push(`mail account ${d.mailAccount.addr} pass ${d.mailAccount.pass}`);
   return c;
@@ -339,6 +407,8 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
     ...(packs.mail && (d.type === 'pc' || d.type === 'server') ? ['mail'] : []),
     ...(packs.ftp && (d.type === 'server' || d.type === 'pc') ? ['files'] : []),
     ...(d.type === 'printer' ? ['jobs'] : []),
+    ...(d.type === 'router' && packs.transition ? ['tunnels', 'nat64'] : []),
+    ...(d.type === 'switch' && packs.security ? ['security'] : []),
     'config',
   ];
   const t = pick(args[0], topics);
@@ -404,6 +474,52 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
       return ok(...(d.jobs.length ? table(['Nr', 'Dokument', 'Od'], d.jobs.map((j) => [String(j.id), j.doc, j.from])) : ['(brak wydruków)']));
     case 'config':
       return ok(...configLines(d, packs));
+    case 'tunnels': {
+      const t = d.ifaces.filter((i) => i.tunnel);
+      return ok(
+        ...(t.length
+          ? table(
+              ['Tunel', 'Tryb', 'Lokalny', 'Zdalny', 'Stan', 'Adresy'],
+              t.map((i) => [i.name, i.tunnel!.mode, i.tunnel!.local, i.tunnel!.remote, i.up ? 'włączony' : 'wyłączony', [...(hasIp(i) ? [cidr(i.ip, i.mask)] : []), ...globals6(i).map((a) => `${a.addr}/${a.prefix}`)].join(', ') || '-']),
+            )
+          : ['(brak tuneli)']),
+      );
+    }
+    case 'nat64':
+      if (!d.nat64) return ok('NAT64 wyłączony. Włącz: nat64 enable prefix 64:ff9b::/96 pool <adres IPv4>');
+      return ok(
+        `NAT64: prefiks ${d.nat64.prefix}/${d.nat64.len}, adres IPv4 ${d.nat64.pool}`,
+        '',
+        ...(d.natTable.length
+          ? table(
+              ['Protokół', 'Strona IPv6', 'Strona IPv4', 'Cel'],
+              d.natTable.map((e) => [e.proto, `[${e.v6}]${e.proto === 'ICMP' ? ` id ${e.v6port}` : `:${e.v6port}`}`, `${d.nat64!.pool}${e.proto === 'ICMP' ? ` id ${e.v4port}` : `:${e.v4port}`}`, `${e.v4}${e.proto === 'ICMP' ? '' : `:${e.port}`}`]),
+            )
+          : ['(tablica translacji jest pusta)']),
+      );
+    case 'security': {
+      const sec = d.security;
+      const onoff = (b: boolean) => (b ? 'włączona' : 'wyłączona');
+      return ok(
+        `Ochrona DHCP: ${onoff(sec.dhcpGuard)} · SAVI (weryfikacja źródła): ${onoff(sec.savi)} · RA-Guard: ${onoff(sec.raGuard)}`,
+        '',
+        ...table(
+          ['Port', 'Zaufany', 'Limit MAC', '802.1X', 'Stan'],
+          d.ifaces.map((i) => [
+            i.name,
+            i.trusted ? 'tak' : '-',
+            i.maxMac ? `${i.maxMac} (${i.onViolation === 'shutdown' ? 'wyłącz port' : 'odrzucaj'})` : '-',
+            i.dot1x ? (i.authMac ? `autoryzowany (${i.authUser})` : 'nieautoryzowany') : '-',
+            i.errDisabled ? `wyłączony – naruszenie (${i.violations ?? 0})` : i.violations ? `naruszenia: ${i.violations}` : 'ok',
+          ]),
+        ),
+        '',
+        'Powiązania IP ↔ MAC ↔ port:',
+        ...(d.bindings.length ? table(['Adres IP', 'MAC', 'Port', 'VLAN', 'Źródło'], d.bindings.map((b) => [b.ip, b.mac, b.port, String(b.vlan), b.origin === 'dhcp' ? 'DHCP' : 'ręcznie'])) : ['  (brak)']),
+        '',
+        `Konta 802.1X: ${sec.users.map((u) => u.name).join(', ') || '(brak)'}`,
+      );
+    }
   }
   return fail('nieznany temat');
 }
@@ -693,6 +809,184 @@ function cmdServer(d: Device, verb: string, a: string[], packs: PackSet): CliRes
   return fail('nieobsłużone polecenie');
 }
 
+// ---------- przejście IPv4 ↔ IPv6 ----------
+
+function cmdTunnel(d: Device, a: string[]): CliResult {
+  const act = pick(a[0], ['add', 'del']);
+  const syntax = 'tunnel add <nazwa> mode 6in4|4in6 local <adres> remote <adres>  |  tunnel del <nazwa>';
+  const name = a[1];
+  if (!act || act === 'ambiguous' || !name) return fail('brak akcji albo nazwy', syntax);
+  if (act === 'del') {
+    const i = d.ifaces.find((x) => x.name === name && x.tunnel);
+    if (!i) return fail(`nie ma tunelu ${name}`);
+    d.ifaces = d.ifaces.filter((x) => x !== i);
+    return ok(`Usunięto tunel ${name}. Trasy przez niego stały się nieaktywne.`);
+  }
+  if (!/^[a-z][a-z0-9]{0,9}$/i.test(name)) return fail('nazwa: litery i cyfry, np. tun0');
+  if (d.ifaces.some((x) => x.name === name)) return fail(`interfejs ${name} już istnieje`);
+  const o = kv(a.slice(2), ['mode', 'local', 'remote']);
+  const mode = o.mode?.toLowerCase();
+  if (mode !== '6in4' && mode !== '4in6') return fail('tryb: 6in4 (IPv6 w IPv4) albo 4in6 (IPv4 w IPv6)', syntax);
+  const want = mode === '6in4' ? 4 : 6;
+  if (fam(o.local ?? '') !== want || fam(o.remote ?? '') !== want) return fail(`w trybie ${mode} końce tunelu (local, remote) to adresy IPv${want}`, syntax);
+  const local = want === 6 ? norm6(o.local) : o.local;
+  const remote = want === 6 ? norm6(o.remote) : o.remote;
+  const lines: CliLine[] = [];
+  if (!addressesOf(d).some((x) => sameIp(x, local))) lines.push({ text: `${local} nie jest adresem żadnego interfejsu tego routera – drugi koniec nie rozpozna pakietów.`, kind: 'hint' });
+  const t = newIface(name, true, true);
+  t.tunnel = { mode, local, remote };
+  d.ifaces.push(t);
+  return {
+    lines: [
+      ...out(`Tunel ${name} (${mode}): ${local} → ${remote}`),
+      ...lines,
+      { text: `Dalej: ip add <adres>/<prefiks> dev ${name} oraz route add <sieć> via <adres drugiego końca tunelu>.`, kind: 'hint' },
+    ],
+  };
+}
+
+function prefix96(arg: string | undefined): { prefix: string; len: number } | string {
+  const pr = parseAddr(arg ?? '64:ff9b::/96');
+  if (!pr || pr.fam !== 6) return 'prefiks musi być prefiksem IPv6, np. 64:ff9b::/96';
+  if (pr.prefix !== 96) return 'symulator obsługuje prefiks /96 (adres IPv4 w ostatnich 32 bitach, RFC 6052)';
+  return { prefix: netOf(pr.ip, 96), len: 96 };
+}
+
+function cmdNat64(d: Device, a: string[]): CliResult {
+  const act = pick(a[0], ['enable', 'disable', 'flush']);
+  if (!act || act === 'ambiguous') return fail('składnia: nat64 enable [prefix 64:ff9b::/96] pool <adres IPv4>  |  nat64 disable  |  nat64 flush');
+  if (act === 'disable') {
+    d.nat64 = null;
+    d.natTable = [];
+    return ok('NAT64 wyłączony.');
+  }
+  if (act === 'flush') {
+    d.natTable = [];
+    return ok('Tablica translacji NAT64 wyczyszczona.');
+  }
+  const o = kv(a.slice(1), ['prefix', 'pool']);
+  const pr = prefix96(o.prefix);
+  if (typeof pr === 'string') return fail(pr);
+  if (!o.pool || !isIp(o.pool)) return fail('podaj adres IPv4 routera po stronie IPv4: pool <adres>', 'np. nat64 enable pool 192.0.2.1');
+  if (!d.ifaces.some((i) => i.ip === o.pool)) return fail(`${o.pool} nie jest adresem żadnego interfejsu routera`, 'Odpowiedzi z sieci IPv4 muszą wracać na adres routera.');
+  d.nat64 = { prefix: pr.prefix, len: pr.len, pool: o.pool };
+  return {
+    lines: [
+      ...out(`NAT64: ${pr.prefix}/${pr.len} → IPv4 z adresu ${o.pool}`),
+      { text: `Przykład: ${mixed4(pr.prefix.replace(/::$/, '::c000:250'))} to adres IPv4 192.0.2.80 widziany z sieci IPv6.`, kind: 'hint' },
+    ],
+  };
+}
+
+function cmdDns64(d: Device, a: string[]): CliResult {
+  const act = pick(a[0], ['enable', 'disable']);
+  if (!act || act === 'ambiguous') return fail('składnia: dns64 enable [prefix 64:ff9b::/96]  |  dns64 disable');
+  if (act === 'disable') {
+    d.dns64 = null;
+    return ok('DNS64 wyłączony.');
+  }
+  const o = kv(a.slice(1), ['prefix']);
+  const pr = prefix96(o.prefix);
+  if (typeof pr === 'string') return fail(pr);
+  d.dns64 = pr;
+  const lines: CliLine[] = out(`DNS64: brakujące rekordy AAAA będą składane z prefiksu ${pr.prefix}/${pr.len}.`);
+  if (!d.services.dns) lines.push({ text: 'Usługa DNS jest wyłączona – włącz: service dns on', kind: 'hint' });
+  return { lines };
+}
+
+// ---------- bezpieczeństwo przełącznika ----------
+
+function cmdSecurity(d: Device, a: string[]): CliResult {
+  const sec = d.security;
+  const what = pick(a[0], ['dhcp-guard', 'savi', 'ra-guard', 'port', 'binding', 'user']);
+  if (!what || what === 'ambiguous') return fail('składnia: security dhcp-guard|savi|ra-guard on|off  |  security port …  |  security binding …  |  security user …', 'help security pokaże wszystkie warianty');
+  const onoff = (t?: string) => pick(t, ['on', 'off']);
+  if (what === 'dhcp-guard' || what === 'savi' || what === 'ra-guard') {
+    const v = onoff(a[1]);
+    if (v !== 'on' && v !== 'off') return fail(`składnia: security ${what} on|off`);
+    const key = what === 'dhcp-guard' ? 'dhcpGuard' : what === 'savi' ? 'savi' : 'raGuard';
+    sec[key] = v === 'on';
+    const name = { dhcpGuard: 'Ochrona DHCP', savi: 'Weryfikacja źródła (SAVI)', raGuard: 'RA-Guard' }[key];
+    const lines = out(`${name}: ${sec[key] ? 'włączona' : 'wyłączona'}`);
+    if (sec[key] && key !== 'savi' && !d.ifaces.some((i) => i.trusted)) {
+      lines.push({ text: `Żaden port nie jest zaufany – oznacz port w stronę prawdziwego ${key === 'raGuard' ? 'routera' : 'serwera DHCP'}: security port <port> trusted`, kind: 'hint' });
+    }
+    if (sec[key] && key === 'savi') lines.push({ text: 'Hosty z adresem statycznym potrzebują powiązania: security binding add <mac> <ip> port <port>', kind: 'hint' });
+    return { lines };
+  }
+  if (what === 'port') {
+    const i = findIface(d, a[1]);
+    if (!i) return fail(`nie ma portu „${a[1] ?? ''}”`, `Porty: ${d.ifaces.map((x) => x.name).join(', ')}`);
+    const opt = pick(a[2], ['trusted', 'untrusted', 'max-mac', 'dot1x', 'reset']);
+    if (!opt || opt === 'ambiguous') return fail(`składnia: security port ${i.name} trusted|untrusted|max-mac <n>|dot1x on|off|reset`);
+    if (opt === 'trusted' || opt === 'untrusted') {
+      i.trusted = opt === 'trusted';
+      return ok(`${i.name}: port ${i.trusted ? 'zaufany' : 'niezaufany'}`);
+    }
+    if (opt === 'reset') {
+      i.errDisabled = false;
+      i.up = true;
+      i.violations = 0;
+      i.authMac = undefined;
+      i.authUser = undefined;
+      d.macTable = d.macTable.filter((m) => m.port !== i.name);
+      return ok(`${i.name}: port przywrócony, liczniki i nauczone adresy wyczyszczone.`);
+    }
+    if (opt === 'dot1x') {
+      const v = onoff(a[3]);
+      if (v !== 'on' && v !== 'off') return fail(`składnia: security port ${i.name} dot1x on|off`);
+      i.dot1x = v === 'on';
+      i.authMac = undefined;
+      i.authUser = undefined;
+      const lines = out(`${i.name}: 802.1X ${i.dot1x ? 'włączone – port nieautoryzowany do czasu logowania' : 'wyłączone'}`);
+      if (i.dot1x && !d.security.users.length) lines.push({ text: 'Dodaj konto: security user add <login> <hasło>', kind: 'hint' });
+      return { lines };
+    }
+    if (a[3]?.toLowerCase() === 'off') {
+      i.maxMac = undefined;
+      return ok(`${i.name}: bez limitu adresów MAC`);
+    }
+    const n = Number(a[3]);
+    if (!Number.isInteger(n) || n < 1 || n > 64) return fail('limit: liczba od 1 do 64 albo off');
+    const o = kv(a.slice(4), ['action']);
+    const act = o.action ? pick(o.action, ['drop', 'shutdown']) : 'drop';
+    if (act !== 'drop' && act !== 'shutdown') return fail('action: drop (odrzucaj ramki) albo shutdown (wyłącz port)');
+    i.maxMac = n;
+    i.onViolation = act;
+    const learned = d.macTable.filter((m) => m.port === i.name).length;
+    const lines = out(`${i.name}: najwyżej ${n} adres(y) MAC, przy naruszeniu: ${act === 'drop' ? 'odrzucaj ramki' : 'wyłącz port'}`);
+    if (learned > n) lines.push({ text: `Port zna już ${learned} adresy – wyczyść tablicę (mac flush), żeby limit liczył się od zera.`, kind: 'hint' });
+    return { lines };
+  }
+  if (what === 'binding') {
+    const op = pick(a[1], ['add', 'del']);
+    if (op === 'del') {
+      const n = d.bindings.length;
+      d.bindings = d.bindings.filter((b) => b.ip !== a[2]);
+      return n === d.bindings.length ? fail(`nie ma powiązania dla ${a[2] ?? ''}`) : ok(`Usunięto powiązanie ${a[2]}.`);
+    }
+    const o = kv(a.slice(4), ['port']);
+    const mac = a[2]?.toUpperCase();
+    const port = findIface(d, o.port);
+    if (op !== 'add' || !mac || !/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac) || !isIp(a[3] ?? '') || !port) {
+      return fail('składnia: security binding add <mac> <ip> port <port>', 'np. security binding add 02:AB:CD:00:00:01 192.168.1.40 port port4');
+    }
+    d.bindings = d.bindings.filter((b) => b.ip !== a[3]);
+    d.bindings.push({ mac, ip: a[3], port: port.name, vlan: port.vlan, origin: 'static' });
+    return ok(`Powiązanie: ${a[3]} ↔ ${mac} na ${port.name}`);
+  }
+  const op = pick(a[1], ['add', 'del']);
+  if (!op || op === 'ambiguous' || !a[2]) return fail('składnia: security user add <login> <hasło>  |  security user del <login>');
+  if (op === 'del') {
+    sec.users = sec.users.filter((u) => u.name !== a[2]);
+    return ok(`Usunięto konto ${a[2]}.`);
+  }
+  if (!a[3]) return fail('podaj hasło');
+  sec.users = sec.users.filter((u) => u.name !== a[2]);
+  sec.users.push({ name: a[2], pass: a[3] });
+  return ok(`Konto 802.1X ${a[2]} zapisane.`);
+}
+
 // ---------- wejście ----------
 
 export function runCommand(net: Network, d: Device, line: string, act: CliActions, packs: PackSet = ALL_PACKS): CliResult {
@@ -872,6 +1166,25 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       if (!args[0]) return fail('podaj adres drukarki', 'print <adres> [doc <nazwa>]');
       const o = kv(args.slice(1), ['doc']);
       act.print(d, args[0], o.doc ?? 'dokument.pdf', want);
+      return { lines: [] };
+    }
+    case 'tunnel':
+      return cmdTunnel(d, a);
+    case 'nat64':
+      return cmdNat64(d, a);
+    case 'dns64':
+      return cmdDns64(d, a);
+    case 'security':
+      return cmdSecurity(d, a);
+    case 'dot1x': {
+      const op = pick(a[0], ['login', 'logoff']);
+      if (op === 'logoff') {
+        act.dot1xOff(d);
+        return { lines: [] };
+      }
+      const o = kv(a.slice(1), ['user', 'pass']);
+      if (op !== 'login' || !o.user || !o.pass) return fail('składnia: dot1x login user <login> pass <hasło>  |  dot1x logoff');
+      act.dot1x(d, o.user, o.pass);
       return { lines: [] };
     }
     case 'service':

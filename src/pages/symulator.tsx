@@ -2,7 +2,6 @@ import React from 'react';
 import Layout from '@docusaurus/theme-classic/lib/theme/Layout';
 import NetworkSimulator from '../components/NetworkSimulator';
 
-// Strona pełnoekranowa: symulator zajmuje całą przestrzeń pod paskiem nawigacji.
 export default function SymulatorPage() {
   return (
     <Layout
@@ -29,4 +28,3 @@ export default function SymulatorPage() {
     </Layout>
   );
 }
-
