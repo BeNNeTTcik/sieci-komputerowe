@@ -36,6 +36,7 @@ import {
   peerOf,
   routingTable,
   sameIp,
+  DISCARD_PORT,
 } from './model';
 import { ALL_NODES, ALL_ROUTERS, embed4, extract4, isLinkLocal6, isMcastMac, isMulticast6, mcastMac, mixed4, net6, norm6, solicitedNode, withIid } from './ipv6';
 import { serverListener } from './apps';
@@ -63,6 +64,8 @@ export interface IcmpPdu {
   prefixes?: { prefix: string; len: number }[];
   router?: boolean;
   solicited?: boolean;
+  /** Port Unreachable: port, którego dotyczy */
+  port?: number;
 }
 export type DhcpMsg = 'DISCOVER' | 'OFFER' | 'REQUEST' | 'ACK' | 'NAK';
 export interface DhcpPdu {
@@ -101,6 +104,8 @@ export interface UdpPdu {
   dhcp?: DhcpPdu;
   dns?: DnsPdu;
   ntp?: NtpPdu;
+  /** dane testowe (udp-send) – numer części jest tylko w treści, UDP nie ma numerów sekwencyjnych */
+  data?: { part: number; total: number; len: number };
 }
 export interface AppData {
   proto: Protocol;
@@ -118,7 +123,11 @@ export interface TcpPdu {
   seq: number;
   ack: number;
   len: number;
+  /** okno odbiorcy (pole Window) */
+  win?: number;
   app?: AppData;
+  /** numer retransmisji – adnotacja symulatora, nie pole nagłówka */
+  retx?: number;
 }
 export interface IpPacket {
   v: 4 | 6;
@@ -228,7 +237,7 @@ export function protocolOf(f: Frame): Protocol {
     if (p.udp.dhcp) return 'DHCP';
     if (p.udp.dns) return 'DNS';
     if (p.udp.ntp) return 'NTP';
-    return 'TCP';
+    return 'UDP';
   }
   if (p.tcp) return p.tcp.app?.proto ?? portProto(p.tcp.dstPort) ?? portProto(p.tcp.srcPort) ?? 'TCP';
   return 'TCP';
@@ -268,7 +277,7 @@ export function summarizeIp(p: IpPacket): string {
       if (ic.type === 133) return 'RS: szukam routera';
       if (ic.type === 134) return `RA: prefiks ${ic.prefixes?.map((x) => `${x.prefix}/${x.len}`).join(', ') || '(brak)'}`;
     }
-    const n = icmpName(p.v, ic.type);
+    const n = ic.type === T.unreach[p.v] && ic.code === (p.v === 4 ? 3 : 4) ? `Port Unreachable${ic.port ? ` (port ${ic.port})` : ''}` : icmpName(p.v, ic.type);
     const echo = ic.type === T.echoReq[p.v] || ic.type === T.echoRep[p.v];
     return `${p.v === 6 ? 'ICMPv6 ' : ''}${n}${echo ? ` seq=${ic.seq}` : ''} (${p.src} → ${p.dst})`;
   }
@@ -282,13 +291,17 @@ export function summarizeIp(p: IpPacket): string {
     if (q.qr === 'query') return `DNS: pytanie ${q.qtype} ${q.name}`;
     return q.rcode === 'NXDOMAIN' ? `DNS: ${q.name} – nie istnieje` : `DNS: ${q.name} → ${q.answers.map((a) => a.value).join(', ') || 'brak rekordu'}`;
   }
+  if (p.udp?.data) {
+    const x = p.udp.data;
+    return `UDP ${p.udp.srcPort} → ${p.udp.dstPort}: datagram ${x.part}/${x.total} (${x.len} B)`;
+  }
   if (p.udp?.ntp) {
     const n = p.udp.ntp;
     return n.mode === 3 ? 'NTP: prośba o czas' : `NTP: czas serwera ${fmtClock(n.t3 ?? 0).slice(11)}`;
   }
   if (p.tcp) {
     const t = p.tcp;
-    const fl = `[${t.flags.join(', ')}]`;
+    const fl = `${t.retx ? '↻ ' : ''}[${t.flags.join(', ')}]`;
     if (t.app) {
       if (t.app.enc) return `${fl} 🔒 TLS ${t.app.tls ?? 'Application Data'} (${t.app.len} B)`;
       const head = t.app.tls ? `TLS ${t.app.tls}` : t.app.text.split('\n')[0];
@@ -304,8 +317,23 @@ export function summarizeIp(p: IpPacket): string {
 const ARP_TIMEOUT = 24;
 const PING_TIMEOUT = 40;
 const DHCP_TIMEOUT = 50;
-const DNS_TIMEOUT = 40;
-const TCP_TIMEOUT = 60;
+/** czas oczekiwania na odpowiedź DNS przed ponowieniem i liczba prób */
+const DNS_RETRY = 16;
+const DNS_TRIES = 3;
+/** MSS w symulatorze – mniejszy niż w Ethernecie (1460 B), żeby segmentów było niewiele i dało się je śledzić */
+export const TCP_MSS = 1000;
+/** okno odbiorcy ogłaszane w polu Window (bajty) */
+export const TCP_RWND = 4000;
+const TCP_RTO_INIT = 12;
+const TCP_RTO_MIN = 6;
+const TCP_RTO_MAX = 96;
+const TCP_SYN_RETRIES = 3;
+const TCP_DATA_RETRIES = 4;
+/** TIME-WAIT (2×MSL) w krokach */
+export const TCP_TIME_WAIT = 30;
+
+const tcpWhat = (s: { flags: string[]; seq: number; app?: { len: number } }) =>
+  s.flags.includes('SYN') ? 'SYN' : s.flags.includes('FIN') ? 'FIN' : `segment z bajtami od ${s.seq} (${s.app?.len ?? 0} B)`;
 const TRACE_MAX_HOPS = 8;
 
 let ipId = 1;
@@ -344,13 +372,40 @@ export interface Conn {
   lip: string;
   remote: string;
   rport: number;
-  state: 'SYN_SENT' | 'SYN_RCVD' | 'EST' | 'FIN_WAIT' | 'LAST_ACK' | 'CLOSED';
+  state: 'SYN_SENT' | 'SYN_RCVD' | 'EST' | 'FIN_WAIT' | 'LAST_ACK' | 'TIME_WAIT' | 'CLOSED';
+  /** następny numer sekwencyjny do wysłania (SND.NXT) */
   seq: number;
+  /** następny oczekiwany bajt od drugiej strony (RCV.NXT) */
   ack: number;
+  /** początkowy numer sekwencyjny (ISS) i najstarszy niepotwierdzony bajt (SND.UNA) */
+  iss: number;
+  una: number;
   proto: Protocol;
   h: ConnHandlers;
   ctx: Record<string, unknown>;
   sent: boolean;
+  unacked: Unacked[];
+  rto: number;
+  srtt?: number;
+  rttvar?: number;
+  dupAcks: number;
+  /** okno ogłoszone przez drugą stronę */
+  peerWnd: number;
+  /** segmenty odebrane poza kolejnością (czekają na wypełnienie luki) */
+  ooo: { seq: number; len: number; app?: AppData }[];
+  timerGen: number;
+  stats: { segs: number; bytes: number; retx: number; rxBytes: number };
+  /** przesył danych testowych (tcp-send) */
+  bulk?: { total: number; next: number; done: boolean };
+}
+
+interface Unacked {
+  seq: number;
+  end: number;
+  flags: string[];
+  app?: AppData;
+  tries: number;
+  sentAt: number;
 }
 
 interface Pending {
@@ -376,6 +431,10 @@ export class Sim {
   private dhcpClients = new Map<string, { xid: number; bound: boolean; offered: boolean }>();
   private dnsQ = new Map<number, { dev: string; name: string; type: RecordType; cb: (v: string | null, err?: string) => void; done: boolean }>();
   private ntpQ = new Map<string, { t1: number; done: boolean }>();
+  /** liczniki datagramów przyjętych przez usługę Discard (UDP) */
+  private udpRxCount = new Map<string, number>();
+  /** generatory strat na łączach – powtarzalne w obrębie jednego polecenia */
+  private lossRng = new Map<string, () => number>();
   private rsWait = new Map<string, boolean>();
   conns: Conn[] = [];
   /** włączone pakiety protokołów */
@@ -482,8 +541,31 @@ export class Sim {
     if (!pi.up) return this.dropAt(d, ifName, frame, why, `Brak łącza: interfejs ${pi.name} na ${pd.name} jest wyłączony.`);
     const link = linkAt(this.net, d.id, ifName)!;
     const ev = this.mk('hop', d, ifName, pd, pi.name, link.id, frame, why);
+    if (link.loss && this.lost(link.id, link.loss)) {
+      ev.dropped = true;
+      ev.notes.push(`Ramka zginęła na łączu ${d.name} – ${pd.name} (ustawiona utrata ${link.loss}% ramek). Warstwa 2 tego nie naprawia – ewentualną powtórkę musi zlecić wyższa warstwa, np. TCP.`);
+      return;
+    }
     const copy = clone(frame);
     this.at(1, () => this.receive(pd, pi.name, copy, ev));
+  }
+
+  private lost(linkId: string, pct: number) {
+    let r = this.lossRng.get(linkId);
+    if (!r) {
+      let h = 2166136261 ^ (this.run * 2654435761);
+      for (const ch of linkId) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+      let a = h >>> 0;
+      // mulberry32
+      r = () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let x = Math.imul(a ^ (a >>> 15), 1 | a);
+        x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+      };
+      this.lossRng.set(linkId, r);
+    }
+    return r() * 100 < pct;
   }
 
   /** Czy karta sieciowa przyjmuje ramkę wysłaną na ten adres multicast? */
@@ -1222,6 +1304,11 @@ export class Sim {
         return;
       }
     }
+    if (ic.type === T.unreach[p.v] && ic.code === (p.v === 4 ? 3 : 4)) {
+      ev.notes.push(`Port Unreachable od ${p.src}: na porcie UDP ${ic.port ?? '?'} nic nie nasłuchuje.`);
+      this.out(d.id, `UDP: ${p.src} odpowiada ICMP Port Unreachable – port ${ic.port ?? '?'} jest zamknięty`, 'err');
+      return;
+    }
     const isRep = ic.type === T.echoRep[p.v];
     const jobId = isRep ? ic.id : ic.orig?.id;
     const seq = isRep ? ic.seq : ic.orig?.seq;
@@ -1355,6 +1442,7 @@ export class Sim {
       }
       return this.ntpAnswer(d, p, ev);
     }
+    if (u.data) return this.udpDataRx(d, p, ev);
     this.drop(ev, `Brak usługi na porcie UDP ${u.dstPort}.`);
   }
 
@@ -1542,21 +1630,33 @@ export class Sim {
     const id = Math.floor(Math.random() * 0xffff);
     const q = { dev: d.id, name: n, type, cb, done: false };
     this.dnsQ.set(id, q);
-    const err = this.sendIp(
-      d,
-      { v: fam(d.dns) as 4 | 6, src: '', dst: d.dns, ttl: DEFAULT_TTL, id: ipId++, proto: 'UDP', udp: { srcPort: 49152 + Math.floor(Math.random() * 16000), dstPort: 53, dns: { id, qr: 'query', name: n, qtype: type, answers: [], rcode: 'NOERROR' } } },
-      [`Rozwiązywanie nazwy: pytam serwer DNS ${d.dns} o rekord ${type} dla „${n}”.`],
-    );
+    const sport = 49152 + Math.floor(Math.random() * 16000);
+    // UDP niczego nie powtarza – to klient DNS ponawia zapytanie, gdy odpowiedź nie przychodzi (RFC 1035, 4.2.1)
+    const ask = (attempt: number): string | null =>
+      this.sendIp(
+        d,
+        { v: fam(d.dns) as 4 | 6, src: '', dst: d.dns, ttl: DEFAULT_TTL, id: ipId++, proto: 'UDP', udp: { srcPort: sport, dstPort: 53, dns: { id, qr: 'query', name: n, qtype: type, answers: [], rcode: 'NOERROR' } } },
+        attempt === 1
+          ? [`Rozwiązywanie nazwy: pytam serwer DNS ${d.dns} o rekord ${type} dla „${n}”.`]
+          : [`Brak odpowiedzi DNS po ${DNS_RETRY} krokach. UDP sam niczego nie powtarza, więc to klient DNS (aplikacja) ponawia zapytanie – próba ${attempt}/${DNS_TRIES}.`],
+      );
+    const err = ask(1);
     if (err) {
       q.done = true;
       return cb(null, err);
     }
-    this.at(DNS_TIMEOUT, () => {
-      if (!q.done) {
+    const wait = (attempt: number) =>
+      this.at(DNS_RETRY, () => {
+        if (q.done) return;
+        if (attempt < DNS_TRIES) {
+          ask(attempt + 1);
+          wait(attempt + 1);
+          return;
+        }
         q.done = true;
-        cb(null, `Serwer DNS ${d.dns} nie odpowiada.`);
-      }
-    });
+        cb(null, `Serwer DNS ${d.dns} nie odpowiada (${DNS_TRIES} próby).`);
+      });
+    wait(1);
   }
 
   /** Nazwa → adres wybranej rodziny (A albo AAAA). Błąd wypisuje na terminal i nie wywołuje cb. */
@@ -1647,7 +1747,7 @@ export class Sim {
         [`Prośba NTP (tryb 3 – klient) ze znacznikiem czasu wysłania t1 = ${fmtClock(t1).slice(11)}.`],
       );
       if (err) this.out(d.id, err, 'hint');
-      this.at(DNS_TIMEOUT, () => {
+      this.at(DNS_RETRY * DNS_TRIES, () => {
         const s = this.ntpQ.get(d.id);
         if (s && !s.done) this.out(d.id, 'NTP: serwer nie odpowiada', 'err');
       });
@@ -1680,8 +1780,31 @@ export class Sim {
   }
 
   // ----- TCP (RFC 9293) -----
+  // Niezawodność: numery sekwencyjne i skumulowane ACK, okno odbiorcy (pole Window),
+  // retransmisja po upływie RTO (RFC 6298, z podwajaniem), szybka retransmisja po 3 duplikatach ACK (RFC 5681),
+  // bufor segmentów poza kolejnością, TIME-WAIT po zamknięciu. Bez kontroli przeciążenia (cwnd).
 
-  private tcpSeg(d: Device, c: Conn, flags: string[], why: string[], app?: AppData): string | null {
+  private newConn(d: Device, init: Pick<Conn, 'role' | 'local' | 'lip' | 'remote' | 'rport' | 'state' | 'seq' | 'ack' | 'proto' | 'h'>): Conn {
+    return {
+      id: connId++,
+      dev: d.id,
+      ...init,
+      iss: init.seq,
+      una: init.seq,
+      ctx: {},
+      sent: false,
+      unacked: [],
+      rto: TCP_RTO_INIT,
+      dupAcks: 0,
+      peerWnd: TCP_RWND,
+      ooo: [],
+      timerGen: 0,
+      stats: { segs: 0, bytes: 0, retx: 0, rxBytes: 0 },
+    };
+  }
+
+  private tcpSeg(d: Device, c: Conn, flags: string[], why: string[], app?: AppData, seq = c.seq, retx?: number): string | null {
+    c.stats.segs++;
     return this.sendIp(
       d,
       {
@@ -1691,17 +1814,129 @@ export class Sim {
         ttl: DEFAULT_TTL,
         id: ipId++,
         proto: 'TCP',
-        tcp: { srcPort: c.local, dstPort: c.rport, flags, seq: c.seq, ack: c.ack, len: app?.len ?? 0, app },
+        tcp: { srcPort: c.local, dstPort: c.rport, flags, seq, ack: c.ack, len: app?.len ?? 0, win: TCP_RWND, app, ...(retx ? { retx } : {}) },
       },
       why,
     );
   }
 
+  /** wysyła segment zajmujący numery sekwencyjne (SYN, FIN, dane) i czeka na jego potwierdzenie */
+  private tcpTracked(d: Device, c: Conn, flags: string[], why: string[], app?: AppData, delay = 0): string | null {
+    const len = (app?.len ?? 0) + (flags.includes('SYN') ? 1 : 0) + (flags.includes('FIN') ? 1 : 0);
+    const seg: Unacked = { seq: c.seq, end: c.seq + len, flags, app, tries: 0, sentAt: this.t + delay };
+    let err: string | null = null;
+    if (delay) {
+      const seq = c.seq;
+      // kolejne segmenty z okna wychodzą jeden po drugim (karta sieciowa nadaje ramki po kolei)
+      this.at(delay, () => {
+        if (c.state !== 'CLOSED' && c.unacked.includes(seg)) this.tcpSeg(d, c, flags, why, app, seq);
+      });
+    } else err = this.tcpSeg(d, c, flags, why, app);
+    if (app) c.stats.bytes += app.len;
+    c.seq += len;
+    c.unacked.push(seg);
+    if (c.unacked.length === 1) this.tcpTimer(c);
+    return err;
+  }
+
+  /** (ponowne) uruchomienie zegara retransmisji dla najstarszego niepotwierdzonego segmentu */
+  private tcpTimer(c: Conn) {
+    const gen = ++c.timerGen;
+    if (!c.unacked.length) return;
+    this.at(c.rto, () => {
+      if (gen === c.timerGen && c.state !== 'CLOSED') this.tcpTimeout(c);
+    });
+  }
+
+  private tcpTimeout(c: Conn) {
+    const d = this.dev(c.dev);
+    const seg = c.unacked[0];
+    if (!d || !seg) return;
+    const max = seg.flags.includes('SYN') ? TCP_SYN_RETRIES : TCP_DATA_RETRIES;
+    if (seg.tries >= max) {
+      c.state = 'CLOSED';
+      c.h.fail?.(c, seg.flags.includes('SYN') && !seg.flags.includes('ACK') ? `brak odpowiedzi – SYN wysłany ${seg.tries + 1} razy` : `brak potwierdzeń po ${seg.tries} retransmisjach – połączenie zerwane`);
+      return;
+    }
+    const old = c.rto;
+    c.rto = Math.min(c.rto * 2, TCP_RTO_MAX);
+    seg.tries++;
+    c.stats.retx++;
+    this.tcpSeg(d, c, seg.flags, [`Minął czas RTO (${old} kroków), a ${tcpWhat(seg)} wciąż nie jest potwierdzony – retransmisja nr ${seg.tries}. RTO podwajam do ${c.rto} kroków (RFC 6298).`], seg.app, seg.seq, seg.tries);
+    this.tcpTimer(c);
+  }
+
+  /** przetwarza pole ACK odebranego segmentu (strona nadawcy) */
+  private tcpAckIn(d: Device, c: Conn, t: TcpPdu, ev: SimEvent) {
+    if (!t.flags.includes('ACK')) return;
+    c.peerWnd = t.win ?? TCP_RWND;
+    if (t.ack > c.una && t.ack <= c.seq) {
+      const done = c.unacked.filter((s) => s.end <= t.ack);
+      c.unacked = c.unacked.filter((s) => s.end > t.ack);
+      // pomiar RTT tylko na segmentach bez retransmisji (algorytm Karna)
+      const sample = done.find((s) => !s.tries);
+      if (sample) {
+        const r = this.t - sample.sentAt;
+        if (c.srtt === undefined) {
+          c.srtt = r;
+          c.rttvar = r / 2;
+        } else {
+          c.rttvar = 0.75 * c.rttvar! + 0.25 * Math.abs(c.srtt - r);
+          c.srtt = 0.875 * c.srtt + 0.125 * r;
+        }
+        c.rto = Math.max(TCP_RTO_MIN, Math.round(c.srtt + 4 * c.rttvar!));
+      }
+      const bytes = done.reduce((n, s) => n + (s.app?.len ?? 0), 0);
+      if (bytes) ev.notes.push(`ACK=${t.ack} potwierdza dane do bajtu ${t.ack - 1} (${bytes} B). ${c.unacked.length ? `Niepotwierdzone zostają ${c.seq - t.ack} B.` : 'Wszystko, co wysłałem, dotarło.'}${sample ? ` RTT ≈ ${this.t - sample.sentAt} kroków, RTO = ${c.rto}.` : ''}`);
+      c.una = t.ack;
+      c.dupAcks = 0;
+      this.tcpTimer(c);
+      if (c.bulk) this.tcpPump(d, c);
+      return;
+    }
+    if (t.ack === c.una && c.unacked.length && !t.len && !t.flags.includes('SYN') && !t.flags.includes('FIN')) {
+      c.dupAcks++;
+      ev.notes.push(`Duplikat ACK nr ${c.dupAcks} (ACK=${t.ack}) – odbiorca wciąż czeka na bajt ${t.ack}, więc coś po drodze zginęło.`);
+      if (c.dupAcks === 3) {
+        const seg = c.unacked[0];
+        seg.tries++;
+        c.stats.retx++;
+        this.tcpSeg(d, c, seg.flags, [`Trzy duplikaty ACK – szybka retransmisja (RFC 5681) ${tcpWhat(seg)}, bez czekania na RTO.`], seg.app, seg.seq, seg.tries);
+        this.tcpTimer(c);
+      }
+    }
+  }
+
+  /** wysyłanie danych masowych (tcp-send) w granicach okna odbiorcy */
+  private tcpPump(d: Device, c: Conn) {
+    const b = c.bulk!;
+    if (c.state !== 'EST') return;
+    let k = 0;
+    while (b.next < b.total) {
+      const len = Math.min(TCP_MSS, b.total - b.next);
+      const flight = c.seq - c.una;
+      if (flight + len > c.peerWnd) break;
+      const from = b.next + 1;
+      b.next += len;
+      this.tcpTracked(
+        d,
+        c,
+        ['PSH', 'ACK'],
+        [`Dane ${from}–${b.next} z ${b.total} B (seq=${c.seq}). Okno odbiorcy ${c.peerWnd} B, w drodze ${flight} B – mieszczę się, wysyłam bez czekania na ACK.`],
+        { proto: 'TCP', text: `bajty ${from}–${b.next} z ${b.total}`, len },
+        k++,
+      );
+    }
+    if (b.next >= b.total && !c.unacked.length && !b.done) {
+      b.done = true;
+      this.out(d.id, `TCP: wszystkie ${b.total} B potwierdzone – wysłane segmenty: ${c.stats.segs}, w tym retransmisje: ${c.stats.retx}`);
+      this.at(1, () => this.tcpClose(c, ['Wszystkie dane potwierdzone – zamykam połączenie (FIN).']));
+    }
+  }
+
   tcpConnect(d: Device, dst: string, port: number, h: ConnHandlers, why: string[] = []): Conn | null {
     const remote = fam(dst) === 6 ? norm6(dst) : dst;
-    const c: Conn = {
-      id: connId++,
-      dev: d.id,
+    const c = this.newConn(d, {
       role: 'client',
       local: 49152 + Math.floor(Math.random() * 16000),
       lip: '',
@@ -1712,24 +1947,15 @@ export class Sim {
       ack: 0,
       proto: h.proto,
       h,
-      ctx: {},
-      sent: false,
-    };
+    });
     this.conns.push(c);
-    const err = this.tcpSeg(d, c, ['SYN'], [...why, `Krok 1/3 uzgadniania TCP: SYN do portu ${port} (numer początkowy ISN=${c.seq}).`]);
+    const err = this.tcpTracked(d, c, ['SYN'], [...why, `Krok 1/3 uzgadniania TCP: SYN do portu ${port} (numer początkowy ISN=${c.seq}).`]);
     if (err) {
       c.state = 'CLOSED';
       this.out(d.id, err, 'hint');
       h.fail?.(c, 'nie można wysłać segmentu');
       return null;
     }
-    c.seq += 1;
-    this.at(TCP_TIMEOUT, () => {
-      if (c.state === 'SYN_SENT') {
-        c.state = 'CLOSED';
-        h.fail?.(c, 'brak odpowiedzi (upłynął czas)');
-      }
-    });
     return c;
   }
 
@@ -1737,17 +1963,15 @@ export class Sim {
     const d = this.dev(c.dev);
     if (!d || c.state === 'CLOSED') return;
     c.sent = true;
-    this.tcpSeg(d, c, ['PSH', 'ACK'], why, app);
-    c.seq += app.len;
+    this.tcpTracked(d, c, ['PSH', 'ACK'], why, app);
   }
 
   tcpClose(c: Conn, why: string[] = ['Koniec wymiany – zamykam połączenie (FIN).']) {
     const d = this.dev(c.dev);
     if (!d || c.state !== 'EST') return;
     c.sent = true;
-    this.tcpSeg(d, c, ['FIN', 'ACK'], why);
-    c.seq += 1;
     c.state = 'FIN_WAIT';
+    this.tcpTracked(d, c, ['FIN', 'ACK'], why);
   }
 
   /** Rejestruje jednorazowe nasłuchiwanie (np. port danych FTP w trybie EPSV). */
@@ -1765,17 +1989,20 @@ export class Sim {
     return serverListener(this, d, port);
   }
 
+  private tcpAckOnly(d: Device, c: Conn, why: string) {
+    this.tcpSeg(d, c, ['ACK'], [why]);
+  }
+
   private tcpRx(d: Device, p: IpPacket, ev: SimEvent) {
     const t = p.tcp!;
     const has = (f: string) => t.flags.includes(f);
+    if (t.retx) ev.notes.push(`To retransmisja (próba ${t.retx + 1}) – nadawca nie dostał potwierdzenia.`);
     const c = this.conns.find((x) => x.dev === d.id && x.local === t.dstPort && sameIp(x.remote, p.src) && x.rport === t.srcPort && x.state !== 'CLOSED');
     if (!c) {
       if (has('SYN') && !has('ACK')) {
         const L = this.listener(d, t.dstPort);
         if (L) {
-          const s: Conn = {
-            id: connId++,
-            dev: d.id,
+          const s = this.newConn(d, {
             role: 'server',
             local: t.dstPort,
             lip: p.dst,
@@ -1786,17 +2013,15 @@ export class Sim {
             ack: t.seq + 1,
             proto: L.proto,
             h: L,
-            ctx: {},
-            sent: false,
-          };
+          });
+          s.peerWnd = t.win ?? TCP_RWND;
           this.conns.push(s);
           ev.notes.push(`Port ${t.dstPort} (${PROTO_LABEL[L.proto]}) nasłuchuje – odpowiadam SYN-ACK (krok 2/3).`);
-          this.tcpSeg(d, s, ['SYN', 'ACK'], [`Krok 2/3: potwierdzam SYN klienta (ack=${s.ack}) i wysyłam własny SYN (ISN=${s.seq}).`]);
-          s.seq += 1;
+          this.tcpTracked(d, s, ['SYN', 'ACK'], [`Krok 2/3: potwierdzam SYN klienta (ack=${s.ack}) i wysyłam własny SYN (ISN=${s.seq}).`]);
           return;
         }
         ev.notes.push(`Port TCP ${t.dstPort} jest zamknięty – odpowiadam RST (odmowa połączenia).`);
-        const tmp = { local: t.dstPort, rport: t.srcPort, remote: p.src, lip: p.dst, seq: 0, ack: t.seq + 1 } as Conn;
+        const tmp = { local: t.dstPort, rport: t.srcPort, remote: p.src, lip: p.dst, seq: 0, ack: t.seq + 1, stats: { segs: 0, bytes: 0, retx: 0, rxBytes: 0 } } as unknown as Conn;
         this.tcpSeg(d, tmp, ['RST', 'ACK'], ['Brak usługi na tym porcie – RST zamyka próbę połączenia.']);
         return;
       }
@@ -1808,59 +2033,176 @@ export class Sim {
       c.h.fail?.(c, 'połączenie odrzucone (RST)');
       return;
     }
-    if (c.state === 'SYN_SENT' && has('SYN') && has('ACK')) {
-      c.ack = t.seq + 1;
-      c.state = 'EST';
-      ev.notes.push('Otrzymano SYN-ACK. Wysyłam ACK (krok 3/3) – połączenie nawiązane (ESTABLISHED).');
-      this.tcpSeg(d, c, ['ACK'], ['Krok 3/3 uzgadniania trójetapowego.']);
-      this.at(1, () => c.h.open?.(c));
+    // --- uzgadnianie ---
+    if (has('SYN') && has('ACK')) {
+      if (c.state === 'SYN_SENT') {
+        c.ack = t.seq + 1;
+        this.tcpAckIn(d, c, t, ev);
+        c.state = 'EST';
+        ev.notes.push(`Otrzymano SYN-ACK (ISN serwera=${t.seq}, okno ${t.win ?? TCP_RWND} B). Wysyłam ACK (krok 3/3) – połączenie nawiązane (ESTABLISHED).`);
+        this.tcpAckOnly(d, c, 'Krok 3/3 uzgadniania trójetapowego.');
+        this.at(1, () => c.h.open?.(c));
+        return;
+      }
+      ev.notes.push('Powtórzony SYN-ACK – moje ACK z kroku 3 chyba zginęło. Potwierdzam jeszcze raz.');
+      this.tcpAckOnly(d, c, 'Ponowne ACK na powtórzony SYN-ACK.');
       return;
     }
-    if (c.state === 'SYN_RCVD' && has('ACK')) {
+    if (has('SYN')) {
+      const seg = c.unacked[0];
+      if (c.state === 'SYN_RCVD' && seg) {
+        ev.notes.push('Powtórzony SYN – mój SYN-ACK do klienta nie dotarł. Wysyłam go ponownie.');
+        seg.tries++;
+        c.stats.retx++;
+        this.tcpSeg(d, c, seg.flags, ['Ponowny SYN-ACK w odpowiedzi na powtórzony SYN.'], undefined, seg.seq, seg.tries);
+      } else ev.notes.push('Powtórzony SYN w nawiązanym połączeniu – ignoruję.');
+      return;
+    }
+    this.tcpAckIn(d, c, t, ev);
+    if (c.state === 'SYN_RCVD' && c.una > c.iss) {
       c.state = 'EST';
       ev.notes.push('Krok 3/3: ACK od klienta – połączenie ESTABLISHED.');
-      if (!t.len) {
+      if (!t.len && !has('FIN')) {
         c.sent = false;
         c.h.open?.(c);
         return;
       }
     }
-    if (t.len > 0 && t.app) {
-      c.ack = t.seq + t.len;
-      ev.notes.push(
-        t.app.enc
-          ? `Odebrano ${t.len} B zaszyfrowanych danych – odszyfrowuje je tylko ${d.name} (klucz sesji TLS).`
-          : `Odebrano ${t.len} B danych aplikacji ${PROTO_LABEL[c.proto]} (ack = ${c.ack}).`,
-      );
-      c.sent = false;
-      c.h.data?.(c, t.app, ev);
-      if (!c.sent && (c.state === 'EST' || c.state === 'FIN_WAIT')) {
-        this.tcpSeg(d, c, ['ACK'], ['Potwierdzam odebrane dane (ACK bez danych).']);
-      }
+    if (c.state === 'LAST_ACK' && !c.unacked.length && !t.len && !has('FIN')) {
+      c.state = 'CLOSED';
+      ev.notes.push('Ostatnie ACK potwierdza mój FIN – połączenie zamknięte po obu stronach.');
       return;
     }
+    // --- dane ---
+    if (t.len > 0) {
+      if (t.seq < c.ack) {
+        ev.notes.push(`Duplikat: bajty od ${t.seq} już mam (oczekuję ${c.ack}). Nie przekazuję ich drugi raz aplikacji, tylko ponawiam ACK.`);
+        this.tcpAckOnly(d, c, `Ponowne potwierdzenie ACK=${c.ack}.`);
+        return;
+      }
+      if (t.seq > c.ack) {
+        if (!c.ooo.some((x) => x.seq === t.seq)) c.ooo.push({ seq: t.seq, len: t.len, app: t.app });
+        ev.notes.push(`Segment poza kolejnością: przyszły bajty od ${t.seq}, a brakuje bajtów od ${c.ack}. Odkładam go do bufora i ponawiam ACK=${c.ack} (duplikat ACK).`);
+        this.tcpAckOnly(d, c, `Duplikat ACK=${c.ack} – sygnał dla nadawcy, że brakuje danych.`);
+        return;
+      }
+      c.sent = false;
+      this.tcpDeliver(d, c, t.len, t.app, ev);
+      // z bufora: segmenty, które czekały na wypełnienie luki
+      for (;;) {
+        const i = c.ooo.findIndex((x) => x.seq === c.ack);
+        if (i < 0) break;
+        const x = c.ooo.splice(i, 1)[0];
+        ev.notes.push(`Luka wypełniona – z bufora przekazuję dalej bajty od ${x.seq} (${x.len} B).`);
+        this.tcpDeliver(d, c, x.len, x.app, ev);
+      }
+      c.ooo = c.ooo.filter((x) => x.seq >= c.ack);
+      if (!has('FIN')) {
+        if (!c.sent && c.state !== 'CLOSED') this.tcpAckOnly(d, c, `Potwierdzam odebrane dane: ACK=${c.ack} (następny oczekiwany bajt).`);
+        return;
+      }
+    }
+    // --- zamykanie ---
     if (has('FIN')) {
-      c.ack = t.seq + 1;
+      const finSeq = t.seq + t.len;
+      if (finSeq < c.ack) {
+        ev.notes.push(c.state === 'TIME_WAIT' ? 'Powtórzony FIN – moje ostatnie ACK zginęło. Właśnie po to czekam w stanie TIME-WAIT: potwierdzam ponownie.' : 'Powtórzony FIN – potwierdzam ponownie.');
+        this.tcpAckOnly(d, c, `Ponowne ACK=${c.ack} na powtórzony FIN.`);
+        return;
+      }
+      if (finSeq > c.ack) {
+        ev.notes.push(`FIN przyszedł przed częścią danych (brakuje bajtów od ${c.ack}) – czekam na retransmisję brakujących danych.`);
+        this.tcpAckOnly(d, c, `Duplikat ACK=${c.ack}.`);
+        return;
+      }
+      c.ack = finSeq + 1;
       if (c.state === 'FIN_WAIT') {
-        c.state = 'CLOSED';
-        ev.notes.push('Druga strona też zamknęła połączenie (FIN). Wysyłam ostatnie ACK – połączenie zamknięte.');
-        this.tcpSeg(d, c, ['ACK'], ['Potwierdzenie FIN – koniec połączenia.']);
+        c.state = 'TIME_WAIT';
+        ev.notes.push(`Druga strona też zamknęła połączenie (FIN). Wysyłam ostatnie ACK i przechodzę do TIME-WAIT na ${TCP_TIME_WAIT} kroków – na wypadek, gdyby to ACK zginęło.`);
+        this.tcpAckOnly(d, c, 'Potwierdzenie FIN – koniec połączenia.');
+        this.at(TCP_TIME_WAIT, () => {
+          if (c.state === 'TIME_WAIT') c.state = 'CLOSED';
+        });
         c.h.closed?.(c);
         return;
       }
       ev.notes.push('Druga strona zamyka połączenie – odpowiadam FIN-ACK.');
-      this.tcpSeg(d, c, ['FIN', 'ACK'], ['Zamykam swoją stronę połączenia.']);
-      c.seq += 1;
       c.state = 'LAST_ACK';
+      c.sent = true;
+      this.tcpTracked(d, c, ['FIN', 'ACK'], ['Zamykam swoją stronę połączenia.']);
       c.h.closed?.(c);
       return;
     }
-    if (c.state === 'LAST_ACK' && has('ACK')) {
-      c.state = 'CLOSED';
-      ev.notes.push('Ostatnie ACK – połączenie zamknięte po obu stronach.');
+    if (!t.len && !ev.notes.length) ev.notes.push('Potwierdzenie (ACK) – segment nie zmienia stanu połączenia.');
+  }
+
+  private tcpDeliver(d: Device, c: Conn, len: number, app: AppData | undefined, ev: SimEvent) {
+    c.ack += len;
+    c.stats.rxBytes += len;
+    ev.notes.push(
+      app?.enc
+        ? `Odebrano ${len} B zaszyfrowanych danych – odszyfrowuje je tylko ${d.name} (klucz sesji TLS).`
+        : `Odebrano ${len} B danych ${app?.proto === 'TCP' ? '' : `aplikacji ${PROTO_LABEL[c.proto]} `}w kolejności – przekazuję je aplikacji (ACK = ${c.ack}).`,
+    );
+    if (app) c.h.data?.(c, app, ev);
+  }
+
+  // ----- przesył danych testowych: tcp-send i udp-send (usługa Discard, RFC 863) -----
+
+  startTcpSend(d: Device, host: string, port: number, size: number, want: 4 | 6) {
+    this.out(d.id, `TCP: wysyłam ${size} B do ${host}, port ${port} (segmenty po ${TCP_MSS} B)`);
+    this.resolveHost(d, host, want, (ip) => {
+      if (!ip) return;
+      this.tcpConnect(d, ip, port, {
+        proto: 'TCP',
+        open: (c) => {
+          this.out(d.id, `TCP: połączenie nawiązane (okno odbiorcy ${c.peerWnd} B)`);
+          c.bulk = { total: size, next: 0, done: false };
+          this.tcpPump(d, c);
+        },
+        closed: () => this.out(d.id, 'TCP: połączenie zamknięte'),
+        fail: (_c, why) => this.out(d.id, `TCP: ${why}`, 'err'),
+      });
+    });
+  }
+
+  startUdpSend(d: Device, host: string, port: number, size: number, want: 4 | 6) {
+    const total = Math.max(1, Math.ceil(size / TCP_MSS));
+    this.out(d.id, `UDP: wysyłam ${size} B do ${host}, port ${port} – ${total} datagram(ów) po ${TCP_MSS} B`);
+    this.resolveHost(d, host, want, (ip) => {
+      if (!ip) return;
+      const sport = 49152 + Math.floor(Math.random() * 16000);
+      for (let i = 0; i < total; i++) {
+        const len = Math.min(TCP_MSS, size - i * TCP_MSS);
+        this.at(i, () => {
+          this.sendIp(d, { v: fam(ip) as 4 | 6, src: '', dst: ip, ttl: DEFAULT_TTL, id: ipId++, proto: 'UDP', udp: { srcPort: sport, dstPort: port, data: { part: i + 1, total, len } } }, [
+            i === 0
+              ? `Datagram UDP 1/${total}: bez nawiązywania połączenia – po prostu wysyłam dane. Nagłówek UDP ma tylko 8 B (porty, długość, suma kontrolna).`
+              : `Datagram ${i + 1}/${total} – UDP nie czeka na potwierdzenia ani nie pilnuje okna.`,
+          ]);
+        });
+      }
+      this.at(total, () => this.out(d.id, `UDP: wysłano ${total} datagram(ów). UDP nie potwierdza odbioru – nadawca nie wie, ile z nich dotarło.`, 'hint'));
+    });
+  }
+
+  private udpDataRx(d: Device, p: IpPacket, ev: SimEvent) {
+    const u = p.udp!;
+    const dt = u.data!;
+    if (u.dstPort === DISCARD_PORT && d.type === 'server' && d.services.discard && this.has('transport')) {
+      const key = `${p.src}:${u.srcPort}`;
+      const got = (this.udpRxCount.get(key) ?? 0) + 1;
+      this.udpRxCount.set(key, got);
+      ev.notes.push(`Usługa Discard (RFC 863) przyjmuje datagram ${dt.part}/${dt.total} (${dt.len} B) i nic nie odsyła – UDP nie ma potwierdzeń. Dotychczas dotarło ${got} z ${dt.total}.`);
+      this.out(d.id, `Discard (UDP): datagram ${dt.part}/${dt.total} od ${p.src} – odebrano ${got} z ${dt.total}`);
       return;
     }
-    ev.notes.push('Potwierdzenie (ACK) – segment nie zmienia stanu połączenia.');
+    ev.notes.push(`Na porcie UDP ${u.dstPort} nic nie nasłuchuje – odsyłam ICMP Port Unreachable.`);
+    this.sendIp(
+      d,
+      { v: p.v, src: p.dst, dst: p.src, ttl: DEFAULT_TTL, id: ipId++, proto: 'ICMP', icmp: { type: T.unreach[p.v], code: p.v === 4 ? 3 : 4, id: 0, seq: 0, orig: { src: p.src, dst: p.dst, id: p.id, seq: 0 }, port: u.dstPort } },
+      ['Port zamknięty: UDP nie ma RST, więc o błędzie informuje ICMP (Port Unreachable).'],
+    );
   }
 
   ownAddresses(d: Device) {

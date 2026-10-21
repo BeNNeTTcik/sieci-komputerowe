@@ -4,7 +4,7 @@
 // Każda wymiana to wiadomości tekstowe przesyłane funkcjami silnika tcpSend/tcpClose.
 
 import type { AppData, Conn, ConnHandlers, Sim } from './engine';
-import { Device, Mail, Protocol, fam } from './model';
+import { DISCARD_PORT, Device, Mail, Protocol, fam } from './model';
 
 const MAX_PASV = 999;
 
@@ -22,7 +22,23 @@ export function serverListener(sim: Sim, d: Device, port: number): ConnHandlers 
   if (port === 21 && s.ftp && sim.has('ftp')) return ftpServer(sim, d);
   if (port === 25 && s.mail && sim.has('mail')) return smtpServer(sim, d);
   if (port === 110 && s.mail && sim.has('mail')) return pop3Server(sim, d);
+  if (port === DISCARD_PORT && s.discard && sim.has('transport')) return discardServer(sim, d);
   return null;
+}
+
+// ---------- Discard (RFC 863) – odbiornik danych testowych tcp-send ----------
+
+function discardServer(sim: Sim, d: Device): ConnHandlers {
+  return {
+    proto: 'TCP',
+    open(c) {
+      c.ctx.rx = 0;
+    },
+    data(c, a) {
+      c.ctx.rx = ((c.ctx.rx as number) ?? 0) + a.len;
+      sim.out(d.id, `Discard (TCP): ${a.text} – odebrano razem ${c.ctx.rx} B od ${c.remote}`);
+    },
+  };
 }
 
 // ---------- HTTP / HTTPS ----------

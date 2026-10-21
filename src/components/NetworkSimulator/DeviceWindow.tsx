@@ -19,6 +19,7 @@ import {
   netOf,
   networkOf,
   parseAddr,
+  linkAt,
   peerOf,
   prefixToMask,
   routingTable,
@@ -602,8 +603,24 @@ function IfacesPanel({ net, dev, gui, packs }: { net: Network; dev: Device; gui:
                   ]
                 : []
               : [addrs.length ? addrs.map((a) => <div key={a}>{a}</div>) : <span className={styles.muted}>—</span>]),
-            <code className={styles.small}>{i.mac}</code>,
-            i.tunnel ? `tunel ${i.tunnel.mode} → ${i.tunnel.remote}` : pd ? `${pd.name} ${peer!.iface}` : <span className={styles.muted}>brak kabla</span>,
+            <code className={`${styles.small} ${styles.nowrap}`}>{i.mac}</code>,
+            i.tunnel ? (
+              `tunel ${i.tunnel.mode} → ${i.tunnel.remote}`
+            ) : pd ? (
+              <>
+                {pd.name} {peer!.iface}
+                {packs.transport && (
+                  <label className={styles.lossPick} title="Utrata ramek na tym kablu (w obie strony)">
+                    utrata
+                    <select value={linkAt(net, dev.id, i.name)?.loss ?? 0} onChange={(e) => gui(`interface ${i.name} loss ${e.target.value}`)} aria-label={`Utrata ramek na kablu ${i.name}`}>
+                      {[0, 5, 10, 20, 30, 50, 80].map((v) => <option key={v} value={v}>{v ? `${v}%` : 'brak'}</option>)}
+                    </select>
+                  </label>
+                )}
+              </>
+            ) : (
+              <span className={styles.muted}>brak kabla</span>
+            ),
             <Btn onClick={() => gui(`interface ${i.name} ${i.up ? 'down' : 'up'}`)}>{i.up ? 'Wyłącz' : 'Włącz'}</Btn>,
           ];
         })}
@@ -925,6 +942,8 @@ function ToolsPanel({ dev, gui, lines, packs }: { dev: Device; gui: Gui; lines: 
   const [file, setFile] = useState('zadanie.txt');
   const [user, setUser] = useState('uczen');
   const [pass, setPass] = useState('haslo123');
+  const [port, setPort] = useState('9');
+  const [size, setSize] = useState('4000');
   const h = host.trim();
   const flag = v6 && packs.ipv4 ? ' -6' : '';
   return (
@@ -943,6 +962,15 @@ function ToolsPanel({ dev, gui, lines, packs }: { dev: Device; gui: Gui; lines: 
         {packs.dns && <Btn disabled={!h || !!fam(h)} onClick={() => gui(`nslookup ${h} ${v6 ? 'AAAA' : 'A'}`)}>nslookup</Btn>}
         {packs.ntp && <Btn disabled={!h} onClick={() => gui(`ntp sync ${h}`)}>Synchronizuj czas</Btn>}
       </Form>
+      {packs.transport && (dev.type === 'pc' || dev.type === 'server') && (
+        <Form onSubmit={() => h && gui(`tcp-send ${h} port ${port.trim() || '9'} size ${size.trim() || '4000'}${flag}`)}>
+          <span className={styles.formTitle}>TCP / UDP</span>
+          <Field label="Port" value={port} onChange={setPort} size={5} />
+          <Field label="Bajtów" value={size} onChange={setSize} size={6} />
+          <Btn type="submit" disabled={!h}>Wyślij przez TCP</Btn>
+          <Btn disabled={!h} onClick={() => gui(`udp-send ${h} port ${port.trim() || '9'} size ${size.trim() || '4000'}${flag}`)}>Wyślij przez UDP</Btn>
+        </Form>
+      )}
       {packs.security && dev.type !== 'router' && (
         <Form onSubmit={() => gui(`dot1x login user ${user.trim()} pass ${pass.trim()}`)}>
           <span className={styles.formTitle}>802.1X</span>

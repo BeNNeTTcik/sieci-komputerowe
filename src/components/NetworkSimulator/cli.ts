@@ -30,6 +30,7 @@ import {
   networkOf,
   norm6,
   parseAddr,
+  linkAt,
   peerOf,
   prefixToMask,
   routingTable,
@@ -55,6 +56,8 @@ export interface CliActions {
   mailCheck(d: Device): void;
   ntp(d: Device, host: string): void;
   print(d: Device, host: string, doc: string, v: 4 | 6): void;
+  tcpSend(d: Device, host: string, port: number, size: number, v: 4 | 6): void;
+  udpSend(d: Device, host: string, port: number, size: number, v: 4 | 6): void;
 }
 
 export interface CliLine {
@@ -108,8 +111,8 @@ export const COMMANDS: CmdDoc[] = [
   {
     verb: 'interface',
     for: ALL,
-    syntax: ['interface <if> up | down', 'interface <port> vlan <id>   (przełącznik, pakiet VLAN)'],
-    text: 'Włącza/wyłącza interfejs lub przypisuje port przełącznika do VLAN-u.',
+    syntax: ['interface <if> up | down', 'interface <port> vlan <id>   (przełącznik, pakiet VLAN)', 'interface <if> loss <0–100>   (pakiet TCP i UDP)'],
+    text: 'Włącza/wyłącza interfejs, przypisuje port przełącznika do VLAN-u albo ustawia utratę ramek (%) na podłączonym kablu.',
     examples: ['interface eth0 up', 'interface port3 vlan 10'],
   },
   {
@@ -161,6 +164,22 @@ export const COMMANDS: CmdDoc[] = [
   { verb: 'mac', for: ['switch'], syntax: ['mac flush'], text: 'Czyści tablicę adresów MAC przełącznika.', examples: ['mac flush'] },
   { verb: 'ping', for: L3, pack: ['ipv4', 'ipv6'], syntax: ['ping <adres | nazwa> [count <n>] [-6]'], text: 'Echo Request / Echo Reply (RFC 792, RFC 4443). -6 wymusza IPv6 przy nazwie.', examples: ['ping 192.168.1.1', 'ping www.szkola.lab -6'] },
   { verb: 'trace', for: L3, pack: ['ipv4', 'ipv6'], syntax: ['trace <adres | nazwa> [-6]'], text: 'Śledzi trasę: sondy z rosnącym TTL/Hop Limit zbierają Time Exceeded od routerów.', examples: ['trace 192.168.2.10'] },
+  {
+    verb: 'tcp-send',
+    for: ['pc', 'server'],
+    pack: 'transport',
+    syntax: ['tcp-send <host> [port <n>] [size <bajty>] [-6]'],
+    text: 'Przesyła dane testowe przez TCP (domyślnie 4000 B na port 9 – usługa Discard, RFC 863): uzgadnianie, segmenty po 1000 B w oknie odbiorcy, potwierdzenia, retransmisje, zamknięcie.',
+    examples: ['tcp-send 192.168.2.10', 'tcp-send srv1.lab size 8000'],
+  },
+  {
+    verb: 'udp-send',
+    for: ['pc', 'server'],
+    pack: 'transport',
+    syntax: ['udp-send <host> [port <n>] [size <bajty>] [-6]'],
+    text: 'Przesyła te same dane przez UDP: datagramy po 1000 B bez połączenia, potwierdzeń i retransmisji. Zamknięty port – ICMP Port Unreachable.',
+    examples: ['udp-send 192.168.2.10', 'udp-send 192.168.2.10 port 5000'],
+  },
   { verb: 'http', for: ['pc'], pack: 'web', syntax: ['http <host> [ścieżka] [-6]'], text: 'Pobiera stronę protokołem HTTP (TCP 80) – jawny tekst.', examples: ['http www.szkola.lab', 'http www.szkola.lab /plan'] },
   { verb: 'https', for: ['pc'], pack: 'web', syntax: ['https <host> [ścieżka] [-6]'], text: 'Pobiera stronę przez TLS 1.3 (TCP 443) – dane zaszyfrowane.', examples: ['https www.szkola.lab'] },
   {
@@ -313,7 +332,8 @@ function showInterfaces(net: Network, d: Device, packs: PackSet): string[] {
     const p = peerOf(net, d.id, i.name);
     const pd = p && getDev(net, p.dev);
     const addrs = sw ? ['-'] : [...(packs.ipv4 && hasIp(i) ? [cidr(i.ip, i.mask)] : []), ...(packs.ipv6 ? i.ip6.map((a) => `${a.addr}/${a.prefix}`) : [])];
-    const peerTxt = i.tunnel ? `tunel ${i.tunnel.mode} → ${i.tunnel.remote}` : pd ? `${pd.name} ${p!.iface}` : '-';
+    const loss = linkAt(net, d.id, i.name)?.loss;
+    const peerTxt = i.tunnel ? `tunel ${i.tunnel.mode} → ${i.tunnel.remote}` : pd ? `${pd.name} ${p!.iface}${loss ? ` · utrata ${loss}%` : ''}` : '-';
     const st = i.errDisabled ? 'wyłączony (naruszenie)' : STATUS_LABEL[ifaceStatus(net, d, i)];
     rows.push([i.name, st, addrs[0] ?? '-', i.tunnel ? '-' : i.mac, ...(sw && packs.vlan ? [String(i.vlan)] : []), peerTxt]);
     for (const a of addrs.slice(1)) rows.push(['', '', a, '', ...(sw && packs.vlan ? [''] : []), '']);
@@ -335,7 +355,13 @@ function showRoutes(net: Network, d: Device, packs: PackSet): string[] {
   ];
 }
 
-export function configLines(d: Device, packs: PackSet = ALL_PACKS): string[] {
+export function configLines(d: Device, packs: PackSet = ALL_PACKS, net?: Network): string[] {
+  const c = configBody(d, packs);
+  if (net && packs.transport) for (const l of net.links) if (l.a.dev === d.id && l.loss) c.push(`interface ${l.a.iface} loss ${l.loss}`);
+  return c;
+}
+
+function configBody(d: Device, packs: PackSet): string[] {
   const c = [`# konfiguracja ${d.name} (${TYPE_LABEL[d.type].toLowerCase()})`, `set hostname ${d.name}`];
   if (d.type === 'switch') {
     if (packs.vlan) for (const v of d.vlans) if (v.id !== 1) c.push(`vlan add ${v.id}${v.name ? ` name ${v.name}` : ''}`);
@@ -473,7 +499,7 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
     case 'jobs':
       return ok(...(d.jobs.length ? table(['Nr', 'Dokument', 'Od'], d.jobs.map((j) => [String(j.id), j.doc, j.from])) : ['(brak wydruków)']));
     case 'config':
-      return ok(...configLines(d, packs));
+      return ok(...configLines(d, packs, net));
     case 'tunnels': {
       const t = d.ifaces.filter((i) => i.tunnel);
       return ok(
@@ -529,9 +555,18 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
 function cmdInterface(net: Network, d: Device, a: string[], packs: PackSet): CliResult {
   const i = findIface(d, a[0]);
   if (!i) return fail(`nie ma interfejsu „${a[0] ?? ''}”`, `Interfejsy: ${d.ifaces.map((x) => x.name).join(', ')}`);
-  const acts = d.type === 'switch' && packs.vlan ? ['up', 'down', 'vlan'] : ['up', 'down'];
+  const acts = [...(d.type === 'switch' && packs.vlan ? ['up', 'down', 'vlan'] : ['up', 'down']), ...(packs.transport ? ['loss'] : [])];
   const act = pick(a[1], acts);
   if (!act || act === 'ambiguous') return fail('brak akcji', `interface ${i.name} ${acts.join(' | ')}`);
+  if (act === 'loss') {
+    const l = linkAt(net, d.id, i.name);
+    if (!l) return fail(`do ${i.name} nie podłączono kabla`);
+    const raw = (a[2] ?? '').toLowerCase().replace('%', '');
+    const pct = raw === 'off' ? 0 : Number(raw);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return fail('podaj procent utraconych ramek 0–100', `interface ${i.name} loss 20`);
+    l.loss = Math.round(pct) || undefined;
+    return ok(l.loss ? `Kabel na ${i.name}: ginie średnio ${l.loss}% ramek (w obie strony).` : `Kabel na ${i.name}: bez strat.`);
+  }
   if (act === 'vlan') {
     const id = Number(a[2]);
     if (!Number.isInteger(id) || id < 1 || id > 4094) return fail('numer VLAN musi być z zakresu 1–4094');
@@ -1123,6 +1158,21 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       }
       const o = kv(args.slice(1), ['count']);
       act.ping(d, host, o.count ? Math.min(10, Math.max(1, Number(o.count) || 1)) : 4, want);
+      return { lines: [] };
+    }
+    case 'tcp-send':
+    case 'udp-send': {
+      const host = args[0];
+      if (!host) return fail('podaj adres albo nazwę odbiorcy', `${v} <host> [port <n>] [size <bajty>]`);
+      const hf = fam(host);
+      if (hf && famOff(packs, hf)) return fail(`pakiet IPv${hf} jest wyłączony w tym projekcie`);
+      if (!hf && !packs.dns) return fail(`„${host}” nie jest adresem IP, a pakiet DNS jest wyłączony`);
+      const o = kv(args.slice(1), ['port', 'size']);
+      const port = o.port === undefined ? 9 : Number(o.port);
+      const size = o.size === undefined ? 4000 : Number(o.size);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) return fail('port musi być liczbą 1–65535');
+      if (!Number.isInteger(size) || size < 1 || size > 20000) return fail('rozmiar danych: 1–20000 bajtów');
+      (v === 'tcp-send' ? act.tcpSend : act.udpSend)(d, host, port, size, want);
       return { lines: [] };
     }
     case 'http':

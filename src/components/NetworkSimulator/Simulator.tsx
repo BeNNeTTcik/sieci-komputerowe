@@ -17,6 +17,7 @@ import {
   getIface,
   ifaceStatus,
   linkAt,
+  emptyNetwork,
   normalizeNet,
   peerOf,
   removeDevice,
@@ -25,11 +26,12 @@ import {
 import { OutputLine, Sim, SimEvent } from './engine';
 import { startFtp, startHttp, startMailCheck, startMailSend, startPrint } from './apps';
 import { CliActions, CliResult, commandsFor, prompt, runCommand } from './cli';
-import { scenarioById, visibleScenarios } from './scenarios';
-import { EXTRA_SCENARIOS } from './scenarios.config';
+// jawnie folder scenarios/ – stary plik scenarios.ts (z poprzedniej wersji) nie może go przesłonić
+import { EXTRA_SCENARIOS, buildScenario, scenarioById, scenarioSig, variantOf, visibleScenarios } from './scenarios/index';
 import { COPYRIGHT } from './license';
+import { TransportView } from './transport';
 import { PACKS, PROFILES, PackId, PackSet, devicesFor, matchProfile, packSet, protocolsFor, withDeps, without } from './packs';
-import { DeviceGlyph, DeviceIcon } from './icons';
+import { DeviceGlyph, DeviceIcon, UiIcon, UiIconName } from './icons';
 import { DeviceWindow, LastCmd, Win, tabsFor } from './DeviceWindow';
 import { EventDetails, SequenceDiagram } from './Details';
 import { Handle, NoteEditor, NoteToolbar, NotesLayer, newNote, noteBox, notesOf } from './notes';
@@ -39,8 +41,10 @@ import styles from './styles.module.css';
 export interface SimulatorProps {
   /** id scenariusza startowego: lan | routing | dhcp | static | vlan | services | relay | ipv6 | dual | tunnel | nat64 | security | empty */
   scenario?: string;
-  /** dodatkowe scenariusze na pasku (obok bazowych); bez tej właściwości obowiązuje lista z scenarios.config.ts */
+  /** dodatkowe scenariusze na pasku (obok bazowych); bez tej właściwości obowiązuje lista z scenarios/config.ts */
   scenarios?: string[];
+  /** wariant stanu początkowego scenariusza startowego (id z pliku scenariusza); domyślnie `start` z tego pliku */
+  variant?: string;
   /** wysokość komponentu w pikselach (gdy nie używasz `fill`) */
   height?: number;
   /** ukrywa wybór scenariusza – przydatne w lekcji o jednym temacie */
@@ -91,22 +95,38 @@ interface Saved {
   net: Network;
   done: Record<number, boolean>;
   packs: PackSet;
+  /** podpis stanu początkowego scenariusza (scenarioSig) */
+  sig?: string;
+  /** wariant stanu początkowego */
+  variant?: string;
 }
 
-function load(id: string, persist: boolean): Saved {
+function load(id: string, persist: boolean, variant?: string): Saved {
   const sc = scenarioById(id);
   if (persist) {
     try {
       const raw = window.localStorage.getItem(STORE + id);
       if (raw) {
         const s = JSON.parse(raw) as Saved;
-        if (s?.net?.devices) return { net: shiftOld(normalizeNet(s.net)), done: s.done ?? {}, packs: withDeps({ ...packSet(sc.packs), ...s.packs }) };
+        if (s?.net?.devices && s.sig === scenarioSig(id, s.variant)) return { net: shiftOld(normalizeNet(s.net)), done: s.done ?? {}, packs: withDeps({ ...packSet(sc.packs), ...s.packs }), variant: s.variant };
       }
     } catch {
       /* brak dostępu do pamięci przeglądarki */
     }
   }
-  return { net: sc.build(), done: {}, packs: packSet(sc.packs) };
+  return fresh(sc.id, variant);
+}
+
+/** buduje scenariusz od nowa; błąd w pliku scenariusza nie wyłącza symulatora – zostaje pusta sieć i komunikat w konsoli */
+function fresh(id: string, variant?: string): Saved {
+  const sc = scenarioById(id);
+  try {
+    const v = variantOf(sc, variant)?.id;
+    return { net: buildScenario(sc.id, v), done: {}, packs: packSet(sc.packs), variant: v };
+  } catch (e) {
+    console.error(`[symulator] nie udało się zbudować scenariusza „${sc.id}”:`, e);
+    return { net: emptyNetwork(), done: {}, packs: packSet(sc.packs) };
+  }
 }
 
 function loadLayout() {
@@ -119,9 +139,10 @@ function loadLayout() {
   return { side: 360, bottom: 300, list: 0.55 };
 }
 
-export default function Simulator({ scenario = 'lan', scenarios, height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
+export default function Simulator({ scenario = 'lan', scenarios, variant: startVariant, height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
   const [scenarioId, setScenarioId] = useState(scenarioById(scenario).id);
-  const initial = useMemo(() => load(scenarioId, persist), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => load(scenarioId, persist, startVariant), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [variant, setVariant] = useState<string | undefined>(initial.variant);
   const netRef = useRef<Network>(initial.net);
   const net = netRef.current;
   const [ver, bump] = useReducer((x: number) => x + 1, 0);
@@ -141,6 +162,8 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
   const [outputs, setOutputs] = useState<OutputLine[]>([]);
   const [runLabels, setRunLabels] = useState<Record<number, string>>({});
   const [seqRun, setSeqRun] = useState<number | null>(null);
+  /** prawy dolny panel: diagram sekwencji (wszystkie urządzenia) albo widok warstwy transportowej */
+  const [diagTab, setDiagTab] = useState<'seq' | 'transport'>(initial.packs.transport ? 'transport' : 'seq');
   const [mode, setMode] = useState<'sim' | 'realtime'>('sim');
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -232,13 +255,13 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
     if (!persist) return;
     const h = window.setTimeout(() => {
       try {
-        window.localStorage.setItem(STORE + scenarioId, JSON.stringify({ net: netRef.current, done, packs }));
+        window.localStorage.setItem(STORE + scenarioId, JSON.stringify({ net: netRef.current, done, packs, variant, sig: scenarioSig(scenarioId, variant) }));
       } catch {
         /* pamięć niedostępna */
       }
     }, 400);
     return () => window.clearTimeout(h);
-  }, [ver, done, scenarioId, persist, packs]);
+  }, [ver, done, scenarioId, persist, packs, variant]);
 
   useEffect(() => {
     try {
@@ -337,6 +360,8 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
       mailCheck: (x) => jobs.push((s) => startMailCheck(s, x)),
       ntp: (x, h) => jobs.push((s) => s.startNtp(x, h)),
       print: (x, h, doc, v) => jobs.push((s) => startPrint(s, x, h, doc, v)),
+      tcpSend: (x, h, port, size, v) => jobs.push((s) => s.startTcpSend(x, h, port, size, v)),
+      udpSend: (x, h, port, size, v) => jobs.push((s) => s.startUdpSend(x, h, port, size, v)),
     };
     const pr = prompt(d);
     const r = runCommand(netRef.current, d, line, act, packsRef.current);
@@ -367,14 +392,17 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
     seek(0);
   };
 
-  const loadScenario = (id: string, fresh: boolean) => {
-    const s = fresh ? { net: scenarioById(id).build(), done: {}, packs: packSet(scenarioById(id).packs) } : load(id, persist);
+  /** `fresh` – zbuduj od nowa (Reset, zmiana wariantu); `v` – wariant stanu początkowego */
+  const loadScenario = (id: string, isFresh: boolean, v?: string) => {
+    const s: Saved = isFresh ? fresh(id, v) : load(id, persist);
     netRef.current = s.net;
+    setVariant(s.variant);
     setSelNote(null);
     setEditNote(null);
     setDraft(null);
     setDone(s.done);
     setPacksState(s.packs);
+    setDiagTab(s.packs.transport ? 'transport' : 'seq');
     setScenarioId(id);
     setWins([]);
     setOutputs([]);
@@ -895,7 +923,7 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
           return;
         }
         setArmReset(false);
-        loadScenario(scenarioId, true);
+        loadScenario(scenarioId, true, variant);
       }}
       title="Przywraca scenariusz do stanu początkowego"
     >
@@ -1016,7 +1044,7 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
           <span className={styles.sep} />
           <span className={styles.barLabel}>Narzędzie</span>
           <div className={styles.group} role="group" aria-label="Narzędzie">
-            {([['select', '↖', 'Wskaż'], ['link', '⌇', 'Kabel'], ['delete', '🗑', 'Usuń']] as [Tool, string, string][]).map(([t, ic, l]) => (
+            {([['select', 'pointer', 'Wskaż'], ['link', 'cable', 'Kabel'], ['delete', 'trash', 'Usuń']] as [Tool, UiIconName, string][]).map(([t, ic, l]) => (
               <button
                 type="button"
                 key={t}
@@ -1027,7 +1055,7 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
                   setPortPick(null);
                 }}
               >
-                <span aria-hidden="true">{ic}</span>
+                <UiIcon name={ic} />
                 <span className={styles.tlabel}>{l}</span>
               </button>
             ))}
@@ -1136,11 +1164,18 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
                     }}
                   >
                     <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14} />
-                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={styles.link} style={hot ? { stroke: hot, strokeWidth: 4 } : undefined} strokeDasharray={sa === 'up' && sb === 'up' ? undefined : '6 5'} />
+                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`${styles.link} ${l.loss ? styles.linkLossy : ''}`} style={hot ? { stroke: hot, strokeWidth: 4 } : undefined} strokeDasharray={sa === 'up' && sb === 'up' ? (l.loss ? '10 3 2 3' : undefined) : '6 5'} />
                     <circle cx={pa.x} cy={pa.y} r={5} fill={col(sa)} />
                     <circle cx={pb.x} cy={pb.y} r={5} fill={col(sb)} />
                     <text x={la.x + nx} y={la.y + ny} className={styles.portLabel} textAnchor="middle">{l.a.iface}</text>
                     <text x={lb.x + nx} y={lb.y + ny} className={styles.portLabel} textAnchor="middle">{l.b.iface}</text>
+                    {!!l.loss && (
+                      <g className={styles.lossTag} transform={`translate(${(a.x + b.x) / 2 - nx * 1.6} ${(a.y + b.y) / 2 - ny * 1.6 + 4})`}>
+                        <title>{`Na tym kablu ginie średnio ${l.loss}% ramek`}</title>
+                        <rect x={-38} y={-10} width={76} height={19} rx={9.5} />
+                        <text x={0} y={4} textAnchor="middle">{`utrata ${l.loss}%`}</text>
+                      </g>
+                    )}
                   </g>
                 );
               })}
@@ -1356,6 +1391,23 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
                   <h3>{sc.title}</h3>
                   <p className={styles.muted}>{showTasks ? `Poziom: ${sc.level} · ` : ''}pakiety: {PACKS.filter((p) => packs[p.id]).map((p) => p.name).join(', ')}</p>
                   <p>{sc.description}</p>
+                  {(sc.variants?.length ?? 0) > 1 && (
+                    <div className={styles.variantBox}>
+                      <label className={styles.variantLabel}>
+                        <span>Stan początkowy</span>
+                        <select value={variant ?? ''} onChange={(e) => loadScenario(scenarioId, true, e.target.value)}>
+                          {sc.variants!.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.name}
+                              {v.id === (sc.start ?? sc.variants![0].id) ? ' (domyślny)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {variantOf(sc, variant)?.description && <p className={styles.muted}>{variantOf(sc, variant)!.description}</p>}
+                      <p className={styles.muted}>Zmiana wariantu wczytuje scenariusz od nowa.</p>
+                    </div>
+                  )}
                   {showTasks && (
                   <ol>
                     {sc.tasks.map((t, i) => (
@@ -1407,13 +1459,13 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
               Czas rzeczywisty
             </button>
           </div>
-            <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(0); }} title="Na początek">⏮</button>
-            <button type="button" className={styles.tbtn} onClick={() => step(-1)} title="Krok wstecz">◀</button>
-            <button type="button" className={`${styles.tbtn} ${styles.play}`} onClick={togglePlay} disabled={!events.length} title={playing ? 'Pauza' : 'Odtwórz'}>
-              {playing ? '❚❚' : '▶'}
+            <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(0); }} title="Na początek" aria-label="Na początek"><UiIcon name="first" /></button>
+            <button type="button" className={styles.tbtn} onClick={() => step(-1)} title="Krok wstecz" aria-label="Krok wstecz"><UiIcon name="back" /></button>
+            <button type="button" className={`${styles.tbtn} ${styles.play}`} onClick={togglePlay} disabled={!events.length} title={playing ? 'Pauza' : 'Odtwórz'} aria-label={playing ? 'Pauza' : 'Odtwórz'}>
+              <UiIcon name={playing ? 'pause' : 'play'} />
             </button>
-            <button type="button" className={styles.tbtn} onClick={() => step(1)} title="Krok naprzód">▶|</button>
-            <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(endRef.current); }} title="Na koniec">⏭</button>
+            <button type="button" className={styles.tbtn} onClick={() => step(1)} title="Krok naprzód" aria-label="Krok naprzód"><UiIcon name="step" /></button>
+            <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(endRef.current); }} title="Na koniec" aria-label="Na koniec"><UiIcon name="last" /></button>
             <label className={styles.speed}>
               tempo
               <input type="range" min={0.25} max={4} step={0.25} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
@@ -1469,16 +1521,26 @@ export default function Simulator({ scenario = 'lan', scenarios, height = 860, l
             <div className={styles.vsplit} onPointerDown={startSplit('list')} role="separator" aria-orientation="vertical" aria-label="Zmień proporcje listy i diagramu" />
             <div className={styles.pane} style={{ flexGrow: 1 - layout.list, flexBasis: 0 }}>
               <div className={styles.paneHead}>
-                Diagram sekwencji
+                <div className={styles.paneTabs} role="tablist" aria-label="Rodzaj diagramu">
+                  {([['seq', 'Diagram sekwencji'], ['transport', 'TCP / UDP']] as const).map(([k, l]) => (
+                    <button key={k} type="button" role="tab" aria-selected={diagTab === k} className={diagTab === k ? styles.paneTabOn : undefined} onClick={() => setDiagTab(k)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
                 <span className={styles.spacer} />
-                {runs.length > 0 && (
+                {diagTab === 'seq' && runs.length > 0 && (
                   <select className={styles.runSel} value={seqRun ?? runs[runs.length - 1]} onChange={(e) => setSeqRun(Number(e.target.value))} aria-label="Przebieg na diagramie">
                     {runs.map((r) => <option key={r} value={r}>{runLabels[r]}</option>)}
                   </select>
                 )}
               </div>
               <div className={styles.events}>
-                <SequenceDiagram events={seqEvents} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
+                {diagTab === 'seq' ? (
+                  <SequenceDiagram events={seqEvents} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
+                ) : (
+                  <TransportView events={events} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
+                )}
               </div>
             </div>
           </div>

@@ -3,6 +3,7 @@
 // Są tylko rysunkiem dla ucznia – silnik symulacji ich nie widzi.
 import React, { useEffect, useRef, useState } from 'react';
 import type { Network, Note, NoteColor } from './model';
+import { UiIcon } from './icons';
 import styles from './styles.module.css';
 
 export const NOTE_COLORS: { id: NoteColor; label: string }[] = [
@@ -270,7 +271,7 @@ export function NoteToolbar({ note, zoom, onChange, onEdit, onDelete, onOrder }:
       )}
       <span className={styles.barSep} />
       <button type="button" title={note.kind === 'zone' ? 'Zmień etykietę (Enter)' : 'Edytuj tekst (Enter)'} onClick={onEdit}>✎</button>
-      <button type="button" title="Usuń (Delete)" onClick={onDelete}>🗑</button>
+      <button type="button" title="Usuń (Delete)" aria-label="Usuń" onClick={onDelete}><UiIcon name="trash" size={13} /></button>
     </div>
   );
 }

@@ -255,7 +255,27 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
 
       {p?.udp && (
         <Layer n="4" title="Warstwa transportowa – UDP (RFC 768)" color={L4}>
-          <Fields rows={[['Port źródłowy', String(p.udp.srcPort)], ['Port docelowy', String(p.udp.dstPort), { 67: 'serwer DHCP', 68: 'klient DHCP', 53: 'DNS', 123: 'NTP' }[p.udp.dstPort]]]} />
+          <Fields
+            rows={[
+              ['Port źródłowy', String(p.udp.srcPort), p.udp.srcPort > 49151 ? 'port efemeryczny' : undefined],
+              ['Port docelowy', String(p.udp.dstPort), { 67: 'serwer DHCP', 68: 'klient DHCP', 53: 'DNS', 123: 'NTP', 9: 'Discard (RFC 863)' }[p.udp.dstPort]],
+              ...(p.udp.data ? ([['Długość', `${8 + p.udp.data.len} B`, '8 B nagłówka + dane']] as Row[]) : []),
+              ['Suma kontrolna', 'obecna'],
+            ]}
+          />
+          <p className={styles.muted}>
+            Nagłówek UDP ma tylko 8 B i cztery pola. Nie ma w nim numerów sekwencyjnych, potwierdzeń ani okna – datagram, który zginie, przepada.
+          </p>
+        </Layer>
+      )}
+      {p?.udp?.data && (
+        <Layer n="7" title="Dane testowe – Discard (RFC 863)" color={L7}>
+          <Fields
+            rows={[
+              ['Dane', `${p.udp.data.len} B`],
+              ['Część', `${p.udp.data.part} z ${p.udp.data.total}`, 'numer zna tylko aplikacja – w nagłówku UDP go nie ma'],
+            ]}
+          />
         </Layer>
       )}
       {p?.udp?.dhcp && (
@@ -315,17 +335,19 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
           <Fields
             rows={[
               ['Port źródłowy', String(p.tcp.srcPort), portProto(p.tcp.srcPort) ? PROTO_LABEL[portProto(p.tcp.srcPort)!] : p.tcp.srcPort > 49151 ? 'port efemeryczny' : undefined],
-              ['Port docelowy', String(p.tcp.dstPort), portProto(p.tcp.dstPort) ? PROTO_LABEL[portProto(p.tcp.dstPort)!] : p.tcp.dstPort === IPP_PORT ? 'IPP' : undefined],
+              ['Port docelowy', String(p.tcp.dstPort), portProto(p.tcp.dstPort) ? PROTO_LABEL[portProto(p.tcp.dstPort)!] : p.tcp.dstPort === IPP_PORT ? 'IPP' : p.tcp.dstPort === 9 ? 'Discard (RFC 863)' : undefined],
               ['Flagi', p.tcp.flags.join(', ')],
               ['Numer sekwencyjny', String(p.tcp.seq)],
-              ['Numer potwierdzenia', p.tcp.flags.includes('ACK') ? String(p.tcp.ack) : '—'],
-              ['Długość danych', `${p.tcp.len} B`],
+              ['Numer potwierdzenia', p.tcp.flags.includes('ACK') ? String(p.tcp.ack) : '—', p.tcp.flags.includes('ACK') ? 'następny bajt, którego oczekuję' : undefined],
+              ['Okno (Window)', `${p.tcp.win ?? 4000} B`, 'tyle bajtów nadawca może wysłać bez czekania na ACK'],
+              ['Długość danych', `${p.tcp.len} B`, 'nagłówek TCP: 20 B'],
+              ...(p.tcp.retx ? ([['Retransmisja', `próba ${p.tcp.retx + 1}`, 'ten sam numer sekwencyjny co wcześniej – to adnotacja symulatora, nie pole nagłówka']] as Row[]) : []),
             ]}
           />
         </Layer>
       )}
       {app && (
-        <Layer n="7" title={app.tls ? `TLS 1.3 (RFC 8446) – ${app.tls}` : `Warstwa aplikacji – ${PROTO_INFO[app.proto].name.split(' – ')[0]}`} color={app.tls ? PROTO_COLORS.HTTPS : L7}>
+        <Layer n="7" title={app.tls ? `TLS 1.3 (RFC 8446) – ${app.tls}` : app.proto === 'TCP' ? 'Dane testowe – Discard (RFC 863)' : `Warstwa aplikacji – ${PROTO_INFO[app.proto].name.split(' – ')[0]}`} color={app.tls ? PROTO_COLORS.HTTPS : L7}>
           {app.enc ? (
             <>
               <pre className={`${styles.payload} ${styles.cipher}`}>{cipherText(app.len)}</pre>

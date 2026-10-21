@@ -79,3 +79,54 @@ export function DeviceIcon({ type, size = 22 }: { type: DeviceType; size?: numbe
     </svg>
   );
 }
+
+/** Ikony przycisków. Rysowane w SVG, bo znaki ▶ ⏮ 🗑 itp. część systemów pokazuje jako kolorowe emoji. */
+export type UiIconName = 'first' | 'back' | 'play' | 'pause' | 'step' | 'last' | 'pointer' | 'cable' | 'trash';
+
+const UI_PATHS: Record<UiIconName, React.ReactNode> = {
+  first: (
+    <>
+      <rect x="1.8" y="3" width="1.8" height="10" rx="0.5" />
+      <path d="M9 3.8v8.4a.5.5 0 0 1-.8.4L3.8 8.4a.5.5 0 0 1 0-.8l4.4-4.2a.5.5 0 0 1 .8.4Z" />
+      <path d="M14 3.8v8.4a.5.5 0 0 1-.8.4L8.8 8.4a.5.5 0 0 1 0-.8l4.4-4.2a.5.5 0 0 1 .8.4Z" />
+    </>
+  ),
+  back: <path d="M11.5 3.6v8.8a.6.6 0 0 1-.92.5L5.1 8.5a.6.6 0 0 1 0-1l5.48-4.4a.6.6 0 0 1 .92.5Z" />,
+  play: <path d="M5 3.1v9.8a.6.6 0 0 0 .92.5l7.3-4.9a.6.6 0 0 0 0-1L5.92 2.6A.6.6 0 0 0 5 3.1Z" />,
+  pause: (
+    <>
+      <rect x="4" y="3" width="3" height="10" rx="0.8" />
+      <rect x="9" y="3" width="3" height="10" rx="0.8" />
+    </>
+  ),
+  step: (
+    <>
+      <path d="M3 3.6v8.8a.6.6 0 0 0 .92.5L9.4 8.5a.6.6 0 0 0 0-1L3.92 3.1A.6.6 0 0 0 3 3.6Z" />
+      <rect x="11" y="3" width="2" height="10" rx="0.5" />
+    </>
+  ),
+  last: (
+    <>
+      <path d="M2 3.8v8.4a.5.5 0 0 0 .8.4L7.2 8.4a.5.5 0 0 0 0-.8L2.8 3.4a.5.5 0 0 0-.8.4Z" />
+      <path d="M7 3.8v8.4a.5.5 0 0 0 .8.4l4.4-4.2a.5.5 0 0 0 0-.8L7.8 3.4a.5.5 0 0 0-.8.4Z" />
+      <rect x="12.4" y="3" width="1.8" height="10" rx="0.5" />
+    </>
+  ),
+  pointer: <path d="M4 2.5v10.2l2.7-2.5 1.9 4.1 1.8-.8-1.9-4.1 3.6-.2L4 2.5Z" />,
+  cable: <path d="M3 13c3.5 0 3-10 6.5-10S13 6 13 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />,
+  trash: (
+    <>
+      <path d="M2.5 4h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M6 4V2.8h4V4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M4 5.5h8l-.6 7.6a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9L4 5.5Z" />
+    </>
+  ),
+};
+
+export function UiIcon({ name, size = 14 }: { name: UiIconName; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false" style={{ display: 'block', flex: 'none' }}>
+      {UI_PATHS[name]}
+    </svg>
+  );
+}

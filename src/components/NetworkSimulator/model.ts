@@ -6,8 +6,8 @@ import { fmt6, inPrefix6, isIp6, isLinkLocal6, linkLocal, net6, norm6, parse6 } 
 
 export type DeviceType = 'pc' | 'server' | 'router' | 'switch' | 'printer';
 
-export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'TUNNEL' | 'EAP' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP';
-export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'TUNNEL', 'EAP', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP'];
+export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'TUNNEL' | 'EAP' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP' | 'UDP';
+export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'TUNNEL', 'EAP', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP', 'UDP'];
 
 export const PROTO_COLORS: Record<Protocol, string> = {
   ARP: '#d97706',
@@ -24,6 +24,7 @@ export const PROTO_COLORS: Record<Protocol, string> = {
   EMAIL: '#9a3412',
   IPP: '#4f46e5',
   TCP: '#6b7280',
+  UDP: '#c2410c',
 };
 
 export const PROTO_LABEL: Record<Protocol, string> = {
@@ -41,6 +42,7 @@ export const PROTO_LABEL: Record<Protocol, string> = {
   EMAIL: 'E-mail',
   IPP: 'Druk',
   TCP: 'TCP',
+  UDP: 'UDP',
 };
 
 export interface StdRef {
@@ -179,11 +181,28 @@ export const PROTO_INFO: Record<Protocol, { name: string; layer: string; text: s
   TCP: {
     name: 'TCP – Transmission Control Protocol',
     layer: 'warstwa 4 (transportowa)',
-    text: 'Niezawodny transport z połączeniem: uzgadnianie SYN → SYN-ACK → ACK, numery sekwencyjne i potwierdzenia, zamknięcie FIN/ACK. Segment RST oznacza, że na porcie nic nie nasłuchuje.',
-    refs: [{ id: 'RFC 9293', title: 'Transmission Control Protocol' }],
+    text: 'Niezawodny transport z połączeniem: uzgadnianie SYN → SYN-ACK → ACK, numery sekwencyjne i skumulowane potwierdzenia, okno odbiorcy, retransmisja zgubionych segmentów (po upływie RTO albo po trzech duplikatach ACK), zamknięcie FIN/ACK i TIME-WAIT. Segment RST oznacza, że na porcie nic nie nasłuchuje.',
+    refs: [
+      { id: 'RFC 9293', title: 'Transmission Control Protocol' },
+      { id: 'RFC 6298', title: "Computing TCP's Retransmission Timer" },
+      { id: 'RFC 5681', title: 'TCP Congestion Control (fast retransmit)' },
+      { id: 'RFC 863', title: 'Discard Protocol' },
+    ],
+  },
+  UDP: {
+    name: 'UDP – User Datagram Protocol',
+    layer: 'warstwa 4 (transportowa)',
+    text: 'Transport bez połączenia: każdy datagram idzie osobno, z 8-bajtowym nagłówkiem (porty, długość, suma kontrolna). Nie ma uzgadniania, numerów sekwencyjnych, potwierdzeń ani retransmisji – zgubiony datagram po prostu przepada, a o kolejność i powtórki musi zadbać aplikacja. W zamian UDP jest szybki i lekki: używają go DNS, DHCP, NTP, transmisje głosu i obrazu. Zamknięty port sygnalizuje komunikat ICMP Port Unreachable.',
+    refs: [
+      { id: 'RFC 768', title: 'User Datagram Protocol' },
+      { id: 'RFC 8085', title: 'UDP Usage Guidelines' },
+      { id: 'RFC 863', title: 'Discard Protocol' },
+    ],
   },
 };
 
+/** port usługi Discard (RFC 863) – odbiornik danych testowych TCP i UDP */
+export const DISCARD_PORT = 9;
 export const BCAST_MAC = 'FF:FF:FF:FF:FF:FF';
 export const DEFAULT_TTL = 64;
 
@@ -269,8 +288,8 @@ export interface PrintJob {
   t: number;
 }
 
-export type ServiceName = 'dhcp' | 'dns' | 'http' | 'https' | 'ftp' | 'mail' | 'ntp';
-export const SERVICES: ServiceName[] = ['dhcp', 'dns', 'http', 'https', 'ftp', 'mail', 'ntp'];
+export type ServiceName = 'dhcp' | 'dns' | 'http' | 'https' | 'ftp' | 'mail' | 'ntp' | 'discard';
+export const SERVICES: ServiceName[] = ['dhcp', 'dns', 'http', 'https', 'ftp', 'mail', 'ntp', 'discard'];
 export const SERVICE_LABEL: Record<ServiceName, string> = {
   dhcp: 'DHCP (UDP 67)',
   dns: 'DNS (UDP 53)',
@@ -279,6 +298,7 @@ export const SERVICE_LABEL: Record<ServiceName, string> = {
   ftp: 'FTP (TCP 21)',
   mail: 'Poczta: SMTP 25 / POP3 110',
   ntp: 'NTP (UDP 123)',
+  discard: 'Discard (TCP i UDP 9)',
 };
 
 export type RecordType = 'A' | 'AAAA' | 'MX';
@@ -393,6 +413,8 @@ export interface Link {
   id: string;
   a: LinkEnd;
   b: LinkEnd;
+  /** utrata ramek na kablu w procentach (0 – brak) */
+  loss?: number;
 }
 
 export type NoteColor = 'ink' | 'blue' | 'green' | 'amber' | 'red' | 'violet';
@@ -569,7 +591,7 @@ function defaultName(net: Network, type: DeviceType) {
   return NAME_PREFIX[type] + i;
 }
 
-export const noServices = (): Record<ServiceName, boolean> => ({ dhcp: false, dns: false, http: false, https: false, ftp: false, mail: false, ntp: false });
+export const noServices = (): Record<ServiceName, boolean> => ({ dhcp: false, dns: false, http: false, https: false, ftp: false, mail: false, ntp: false, discard: false });
 
 export function newIface(name: string, up: boolean, l3: boolean): Iface {
   const mac = newMac();
@@ -609,7 +631,7 @@ export function createDevice(net: Network, type: DeviceType, x: number, y: numbe
     dns64: null,
     security: { dhcpGuard: false, savi: false, raGuard: false, users: [] },
     bindings: [],
-    services: server ? { dhcp: false, dns: true, http: true, https: true, ftp: true, mail: true, ntp: true } : noServices(),
+    services: server ? { dhcp: false, dns: true, http: true, https: true, ftp: true, mail: true, ntp: true, discard: true } : noServices(),
     records: [],
     web: server
       ? [
