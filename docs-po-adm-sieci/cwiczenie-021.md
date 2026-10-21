@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2.1
+sidebar_position: 10
 title: "Dokumentacja 2.1: Wstep do pracy z urządzeniami Cisco i Cheat Sheet"
 ---
 

@@ -4,6 +4,7 @@ title: "Ćwiczenie 1: Adresacja IPv4 i IPv6"
 ---
 
 <!--- import bibliotek -->
+
 import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
@@ -15,6 +16,7 @@ import Checklist from '@site/src/components/Checklist';
 import EditableTable from '@site/src/components/EditableTable';
 import KeywordAnswer from '@site/src/components/KeywordAnswer';
 import OpenQuestion from '@site/src/components/OpenQuestion';
+
 
 # Ćwiczenie 1: Adresacja IPv4 i IPv6
 
@@ -40,6 +42,7 @@ import OpenQuestion from '@site/src/components/OpenQuestion';
 **Adres IPv4** to 32-bitowa liczba, zapisywana w notacji dziesiętnej kropkowanej (cztery oktety po 8 bitów, np. 192.168.1.10) [^RFC791]. Każdy adres logicznie dzieli się na dwie części: **część sieciową** (identyfikującą sieć, do której należy urządzenie) i **część hosta** (identyfikującą konkretne urządzenie w tej sieci). To, gdzie dokładnie przebiega granica między tymi częściami, określa **maska podsieci**.
 
 Nagłówek protokołu IP przedstawiono na Rysunku 1 i składa się m.in. z bloków (więcej informacji [^RFC791] rozdział 3.1):
+
 - **Version** - wersja protokołu IP, czyli 4.
 - **IHL (Internet Header Length)** - wskazuje, gdzie kończy sie nagłowek i zaczynają dane. wartosc 5 = 20B (bez opcji), a 15 = max 60B nagłówek.
 - **Total Length** - długość całego pakietu (nagłówek i dane) w bajtach, maksymalnie 65 535 B.
@@ -47,6 +50,7 @@ Nagłówek protokołu IP przedstawiono na Rysunku 1 i składa się m.in. z blok�
 - **Source/Destination Address** - adres IP nadawacy oraz odbiorcy.
 
 ![Rys1](/img/po-adm-sieci-1/naglowek_ipv4.png)
+
 <div className="text-center">
 Rys.1 Nagłówek IPv4 (RFC 791)[^claude]
 </div>
@@ -54,6 +58,7 @@ Rys.1 Nagłówek IPv4 (RFC 791)[^claude]
 **Klasy adresów** (adresacja klasowa). Historycznie, w pierwszej wersji protokołu IP, granica między częścią sieciową a hostową była sztywno przypisana do jednej z pięciu klas, rozpoznawanych po najstarszych bitach pierwszego oktetu (Rysunek 2)[^RFC791][^tanen]:
 
 ![Rys2](/img/3/ipv4.png)
+
 <div className="text-center">
 Rys.2 Klasy adresów [^comer][^claude]
 </div>
@@ -61,6 +66,7 @@ Rys.2 Klasy adresów [^comer][^claude]
 **Maska podsieci** to 32-bitowa wartość, w której jedynki oznaczają bity części sieciowej, a zera bity części hosta (np. 255.255.255.0 = 24 jedynki, 8 zer). Adres i maska zestawione operacją logiczną AND wskazują adres sieci, do której należy dany host.
 
 **Adresy docelowe**:
+
 - **unicast** - połącznie do jednego hosta.
 - **broadcast** - adres rozgłoszeniowy do wszystkich w sieci, ale domyślnie nie przekazywany przez router.
 
@@ -71,6 +77,7 @@ Gdy datagram jest większy niż MTU łącza wyjściowego, router IPv4 może go p
 Adresy publiczne są globalnie unikalne i przydzielane hierarchicznie, a strutkura zaczyna się od IANA [^iana], która pełni role globalnego zarządcy. Dla Europy i części Azji regionalnym zarządcą jest RIPE NCC, która przydziela adresy dla ISP (Internet Service Provider) oraz dużych firm regionalnych. Pula IANA wyczerpała się 3 lutego 2011 r., a RIPE NCC przydzielił ostatni blok /22 25 listopada 2019 r. Adresy prywatne można stosować dowolnie wewnątrz organizacji, ale nie są routowane w Internecie, więc wymagany jest NAT [^RFC1918]. Adresy prywatne to: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`. Występują również adresy specjalnego przeznaczenia jak: adres pętli zwrotnej `127.0.0.0/8`, czy adres nieogreślony 0.0.0.0/8.
 
 Protokoły wspierające lub pracujące na adresacji IPv4:
+
 - **ICMP** [^RFC792] - przesyła komunikaty o błedach i służy do diagnostyki. Na ICMP działa: `ping`, `traceroute`, Path MTU Discovery [^RFC1191].
 - **ARP** [^RFC826] - odwzorowanie adresu IPv4 na MAC: zapytanie rozgłoszeniowe, odpowiedź unicast, pamięć podręczna z czasem życia. ARP nie ma uwierzytelniania, co umożliwia ARP spoofing.
 - **DHCP** [^RFC3927] - automatyczny przydział adresu IP, maski, bramy i DNS (Domain Name Service) w czterech krokach DORA.
@@ -83,6 +90,7 @@ Protokoły wspierające lub pracujące na adresacji IPv4:
 **Adres IPv6** to 128-bitowa liczba (czterokrotnie dłuższa niż w IPv4) zapisywana w notacji szesnastkowej, w ośmiu grupach po 16 bitów rozdzielonych dwukropkiem (np. `2001:0db8:0000:0000:0000:ff00:0042:8329`) [^RFC8200][^RFC4291].
 
 Nagłówek IPv6 jest **uproszczony** względem IPv4 ma stałą długość 40 bajtów i mniej pól, co ułatwia szybkie przetwarzanie przez routery [^RFC8200][^kurose]. Poniżej wypisano niektore pola z nagłówka IPv6:
+
 - **Version** - wersja protokołu IP, czyli 6.
 - **Payload Length** - długość całego pakietu (nagłówek i dane) w bajtach, maksymalnie 65 535 B.
 - **Hop Limit** - maksymalna liczba przeskoków (routerów)(IPv4 - pola TTL), jaką może jeszcze wykonać pakiet, zanim zostanie usunięty z sieci,
@@ -90,6 +98,7 @@ Nagłówek IPv6 jest **uproszczony** względem IPv4 ma stałą długość 40 baj
 </div>
 
 ![Rys3](/img/po-adm-sieci-1/naglowek_ipv6.png)
+
 <div className="text-center">
 Rys.3 Nagłówek IPv6 (RFC 791)[^claude]
 </div>
@@ -113,9 +122,11 @@ W IPv6 **nie występuje maska podsieci** w postaci znanej z IPv4 (np. `255.255.2
 
 Skracanie adresu
 Dla czytelności dopuszczone są dwa uproszczenia zapisu: **pominięcie zer początkowych** w każdej grupie (`0db8` -> `db8`) oraz **zastąpienie jednej, kolejnej sekwencji grup samych zer** podwójnym dwukropkiem `::`. Taką operację można wykonać tylko **raz** w całym adresie, bo inaczej nie byłoby wiadomo, ile grup zer reprezentuje [^RFC5952]. Powyższy adres można więc zapisać skrócenie jako `2001:db8::ff00:42:8329`.
+
 </div>
 
 Protokoły wspierające lub pracujące na adresacji IPv6:
+
 - **ICMPv6** - przejął funkcje ICMP, ARP i IGMP.
 - **NDP (Neighbor Discovery Protocol)** - r ozwiązuje adresy w sieci czy zamiana IPv6 na MAC. Wykrywanie routerów oraz parametrów sieci. NUD (Neighbour Unreachability Detection) - sprawdza czy host jest osiągalny w sieci. DAD (Duplicate Address Detection) - sprawdza czy w sieci występują duplikaty adresacji.
 - **SLAAC (Stateless Address Autoconfiguration)** - pozwala na automatyczne zbudowanie swoje adresu z Link-Local FE80::/10 adresu i adresu otrzymanego przez router dostarcza Router Advertisment. Host tworzy adres z prefiksu + host ID. Następnie DAD weryfikuje unikalność adresu w sieci.
@@ -147,21 +158,24 @@ Oba te protokoły będą jeszcze wspołistnieć w sieciach. Przez co opracowano 
 
 :::warning
 **Ogółne**
+
 - **IPv6 działa w sieci IPv4** - IPv6 włączony domyślnie, więc fałszywy router wysyłający RA (skrót od jednego ze stanów NDP) może przejąć ruch nawet tam, gdzie administrator „nie wdrażał IPv6”.
 - **NDP, podobnie jak ARP, nie ma uwierzytelniania** - możliwe jest podszywanie się pod sąsiada i ataki na DAD.
 - **zapora musi objąć IPv6** - osobne reguły, z przepuszczeniem niezbędnych komunikatów ICMPv6.
 
 **IPv4**
+
 - **Fałszywy serwer DHCP i wyczerpanie puli** - nieautoryzowany serwer DHCP (na PC atakującego; DHCP działa na zasadzie kto pierwszy ten lepszy) może rozdawać hostom własną bramę i DNS. Zalew żądań może natomiast wyczerpać pulę adresów.
 - **Logi NAT i synchronizacja czasu** - za PAT wiele hostów korzysta z jednego adresu publicznego. Bez zapisów translacji i dokładnego czasu (NTP) nie da się po incydencie ustalić, który komputer wysłał podejrzany ruch.
 - **Fałszowanie adresu źródłowego (spoofing)** - pakiet może mieć wpisany dowolny adres nadawcy, przez co atakujący może podmieniać adres IP na swoj i przechwytywać cały ruch początkowego nadawacy (man-in-the-middle).
 
 **IPv6**
+
 - **ICMPv6 jest częścią działającej sieci** - w przeciwieństwie do ICMPv4, który można częściowo blokować, ICMPv6 jest niezbędny do poprawnego funkcjonowania sieci (PMTUD - Path MTU Discovery, NDP - Neighbor Discovery Protocol)
 - **NDP/RA** - fałszywy Router Advertisement i "shadow IPv6" w LAN - Atakujący może wysłać fałszywe komunikaty Router Advertisement (RA), podszywając się pod legalny router. To pozwala na przekierowanie ruchu IPv6 przez komputer atakującego (man-in-the-middle), stworzenie "cichej" sieci IPv6 równolegle do oficjalnej infrastruktury, lub całkowite zablokowanie komunikacji IPv6 w segmencie sieci.
 - **Mechanizmy tunelowe obchodzą punkty egzekucji polityk** - tunele takie jak Teredo, 6to4 czy ISATAP enkapsulują ruch IPv6 w pakietach IPv4/UDP, co sprawia, że tradycyjne firewalle i systemy IDS/IPS mogą nie widzieć faktycznej zawartości komunikacji. Atakujący może wykorzystać te mechanizmy do exfiltracji danych lub uzyskania dostępu do zasobów wewnętrznych, omijając polityki bezpieczeństwa zaprojektowane tylko dla IPv4.
 - **Rozszerzone nagłówki a co za tym idzie różna obsługa przez urządzenia** - IPv6 wykorzystuje rozszerzone nagłówki (Extension Headers), które różne urządzenia bezpieczeństwa obsługują w odmienny sposób lub wcale. Atakujący może tworzyć długie łańcuchy nagłówków rozszerzeń, fragmentować pakiety lub używać nieoczekiwanych kombinacji, które omijają mechanizmy inspekcji niektórych urządzeń.
-:::
+  :::
 
 ## II. Zadania do wykonania
 
@@ -187,6 +201,7 @@ Filtr wyświetlania: icmp
 ![Rys5](/img/2/zad1_2.png)
 
 Rys.5 Fitrowanie w Wireshark [^wireshark]
+
 </div>
 </Step>
 
@@ -199,6 +214,7 @@ ping -4 <IP>
 ![Rys6](/img/po-adm-sieci-1/pingv4.png)
 
 Rys.6 Komenda ping w wersji 4 [^wireshark]
+
 </div>
 </Step>
 
@@ -221,6 +237,7 @@ ping -6 <IP>
 ![Rys8](/img/po-adm-sieci-1/pingv6.png)
 
 Rys.8 Komenda ping w wersji 6 [^wireshark]
+
 </div>
 
 Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 5). Zwróć uwagę na segment **Internet Protocol Version 6**, po rowzinięciu można sprawdzić dokładną budowę nagłówka dla IPv6.
@@ -229,16 +246,17 @@ Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym z
 </Step>
 </StepByStep>
 
-
 ### IPv4 i IPv6 w szkolnej pracowni
 
 Cisco Packet tracer 2 sieci do zrobienia + testy działania
+
+<!-- <NetworkSimulator scenarios={['ipv6']} /> -->
 
 [^RFC791]: IETF, [RFC 791](https://www.rfc-editor.org/info/rfc791/) — Internet Protocol.
 
 [^tanen]: A. S. Tanenbaum, D. J. Wetherall, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Tanenbaum+Wetherall+Helion+wydanie+V), wyd. V, Helion, Gliwice 2012.
 
-[^comer]: D. E. Comer, [Sieci komputerowe i intersieci]((https://www.google.com/search?q=%22Sieci+komputerowe+i+intersieci%22+Comer+Helion+wydanie+V)), wyd. V, Helion, Gliwice 2012.
+[^comer]: D. E. Comer, [Sieci komputerowe i intersieci](<(https://www.google.com/search?q=%22Sieci+komputerowe+i+intersieci%22+Comer+Helion+wydanie+V)>), wyd. V, Helion, Gliwice 2012.
 
 [^claude]: Grafika wygenerowana przy pomocy – [Claude](https://claude.ai) (Anthropic).
 

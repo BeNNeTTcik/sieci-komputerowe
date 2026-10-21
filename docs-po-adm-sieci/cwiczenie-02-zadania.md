@@ -47,9 +47,9 @@ We wszystkich adresach zamień **X** na numer swojej pary (np. para 5: `172.16.5
 Otwórz Wiersz polecenia (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i wykonaj kolejno:
 
 ```bash
-ipconfig /all          # pełna konfiguracja kart sieciowych
-route print            # tablica routingu hosta
-arp -a                 # pamięć podręczna ARP
+ipconfig /all          
+route print            
+arp -a                 
 ```
 
 Odszukaj kartę, przez którą komputer łączy się z siecią pracowni, i uzupełnij Tabelę 1.

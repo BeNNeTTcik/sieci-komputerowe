@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2.4
+sidebar_position: 13
 title: "Dokumentacja 2.4: Wstęp do pracy z urządzeniami Dell i Cheat Sheet"
 ---
 

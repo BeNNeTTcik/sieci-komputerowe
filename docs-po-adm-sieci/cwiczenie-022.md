@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2.2
+sidebar_position: 11
 title: "Dokumentacja 2.2: Wstęp do pracy z urządzeniami MikroTik i Cheat Sheet"
 ---
 
