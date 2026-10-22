@@ -223,6 +223,57 @@ ping -f -l 1473 1.1.1.1
 </Step>
 </StepByStep>
 
+### Połączenia i porty: netstat
+
+<StepByStep>
+<Step title="Porty nasłuchujące i procesy">
+```bash
+netstat -ano
+tasklist /fi "PID eq <numer>"
+```
+
+Wybierz trzy porty w stanie **LISTENING** i uzupełnij Tabelę 4.
+
+<EditableTable
+title="Tab. 4 Porty nasłuchujące"
+storageKey="cw2_zad3-porty"
+columns={[
+{ key: 'protokol', label: 'Protokół' },
+{ key: 'adres', label: 'Adres lokalny:port' },
+{ key: 'pid', label: 'PID' },
+{ key: 'proces', label: 'Proces' },
+{ key: 'usluga', label: 'Do czego służy' },
+]}
+initialRows={[{}, {}, {}]}
+allowAddRows={false}
+allowRemoveRows={false}
+/>
+</Step>
+
+<Step title="Połączenie HTTPS">
+Otwórz w przeglądarce dowolną stronę, a następnie:
+
+```bash
+netstat -an | findstr :443         # połączenia na porcie 443
+```
+
+Zamknij kartę przeglądarki i powtórz polecenie po kilku sekundach.
+
+<ScreenshotPaste label="Zrzut ekranu: netstat -an | findstr :443 przed zamknięciem karty" />
+
+<ScreenshotPaste label="Zrzut ekranu: netstat -an | findstr :443 po zamknięciu karty" />
+</Step>
+
+<Step title="Test portu bez pingu">
+Otwórz PowerShell i sprawdź dostępność usługi na porcie TCP:
+
+```bash
+Test-NetConnection wp.pl -Port 443
+```
+<ScreenshotPaste label="Zrzut ekranu: powyższego testu dostępności usługi TCP" />
+</Step>
+</StepByStep>
+
 ### Diagnostyka DNS: nslookup
 
 <StepByStep>
@@ -237,7 +288,7 @@ nslookup wp.pl 1.1.1.1             # zapytanie do wskazanego serwera DNS
 ```
 
 <EditableTable
-title="Tab. 4 Rekordy DNS"
+title="Tab. 5 Rekordy DNS"
 storageKey="cw2_zad4-dns"
 columns={[
 { key: 'typ', label: 'Typ rekordu', readOnly: true },
@@ -257,8 +308,8 @@ allowRemoveRows={false}
 
 <Step title="Pamięć podręczna DNS">
 ```bash
-ipconfig /displaydns               # zapamiętane odpowiedzi DNS
-ipconfig /flushdns                 # wyczyszczenie pamięci podręcznej
+ipconfig /displaydns
+ipconfig /flushdns
 ```
 
 <KeywordAnswer
@@ -270,6 +321,91 @@ ipconfig /flushdns                 # wyczyszczenie pamięci podręcznej
 />
 </Step>
 </StepByStep>
+
+### Konfiguracja statyczna i typowe błędy -- do poprawy
+
+<StepByStep>
+<Step title="Testy przy różnych ustawieniach PC1">
+Zmieniaj ustawienia PC1 (Panel sterowania -> Sieci i Internet -> Centrum Sieci i Udostępniania -> Zmień ustawienia karty sieciowej -> Właściwości -> IPv4) zgodnie z Tabelą 6. Po każdej zmianie wykonaj ping do PC2, do bramy i do serwera np. foka.wi.local, a potem przywróć poprawne ustawienia.
+
+<EditableTable
+title="Tab. 6 Skutki błędnej konfiguracji"
+storageKey="cw2_zad7-bledy"
+columns={[
+{ key: 'wariant', label: 'Ustawienia PC1', readOnly: true },
+{ key: 'pc2', label: 'Ping PC2' },
+{ key: 'brama', label: 'Ping brama' },
+{ key: 'serwer', label: 'Ping serwer' },
+{ key: 'dlaczego', label: 'Wyjaśnienie' },
+]}
+initialRows={[
+{ wariant: 'Poprawna konfiguracja' },
+{ wariant: 'Brak bramy domyślnej' },
+{ wariant: 'Brama 172.16.X.254 (nieistniejąca)' },
+{ wariant: 'Maska 255.255.255.252' },
+{ wariant: 'Adres taki sam jak PC2' },
+]}
+allowAddRows={false}
+allowRemoveRows={false}
+/>
+
+<OpenQuestion
+  title="Maska /30"
+  question="Dlaczego po ustawieniu maski 255.255.255.252 PC1 nadal pinguje PC2, ale nie pinguje serwera?"
+  modelAnswer="Z maską /30 PC1 (172.16.X.10) należy do podsieci 172.16.X.8/30, w której jest też PC2 (.11), więc komunikacja z nim zostaje lokalna. Brama 172.16.X.1 znalazła się poza tą podsiecią, więc host nie może z niej skorzystać i nie wyśle pakietów do innych sieci."
+  minLength={60}
+  storageKey="cw2_zad7-maska"
+/>
+</Step>
+</StepByStep>
+
+### Proces DORA i konfiguracja automatyczna
+
+<StepByStep>
+<Step title="Przechwycenie ruchu DHCP">
+W programie Wireshark rozpocznij przechwytywanie na karcie sieciowej i ustaw filtr wyświetlania:
+
+```
+Filtr wyświetlania: dhcp
+```
+
+W Wierszu polecenia wykonaj:
+
+```bash
+ipconfig /release
+ipconfig /renew
+```
+</Step>
+
+<Step title="Analiza komunikatów">
+Odszukaj cztery komunikaty procesu DORA i uzupełnij Tabelę 5.
+
+<EditableTable
+title="Tab. 5 Komunikaty DORA"
+storageKey="cw2_zad5-dora"
+columns={[
+{ key: 'komunikat', label: 'Komunikat', readOnly: true },
+{ key: 'srcip', label: 'IP źródłowy' },
+{ key: 'dstip', label: 'IP docelowy' },
+{ key: 'dstmac', label: 'MAC docelowy' },
+]}
+initialRows={[
+{ komunikat: 'Discover' },
+{ komunikat: 'Offer' },
+{ komunikat: 'Request' },
+{ komunikat: 'ACK' },
+]}
+allowAddRows={false}
+allowRemoveRows={false}
+/>
+
+<ScreenshotPaste label="Zrzut ekranu: przechwycone komunikaty DHCP w Wiresharku" />
+</Step>
+</StepByStep>
+
+### Znajdź usterkę
+
+Use case -> 2x
 
 [^RFC1122]: [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) - Requirements for Internet Hosts - Communication Layers, 1989.
 

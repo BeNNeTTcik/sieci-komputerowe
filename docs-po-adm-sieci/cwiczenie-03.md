@@ -3,6 +3,41 @@ sidebar_position: 3
 title: "Ćwiczenie 3: Podsieci, segmentacja i kontrola ruchu"
 ---
 
+<!--- import bibliotek -->
+import Checklist from '@site/src/components/Checklist';
+import DesignScenario from '@site/src/components/DesignScenario';
+import EditableTable from '@site/src/components/EditableTable';
+import KeywordAnswer from '@site/src/components/KeywordAnswer';
+import OpenQuestion from '@site/src/components/OpenQuestion';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';import StepByStep from '@site/src/components/StepByStep';
+import Step from '@site/src/components/Step';
+import SubnetTrainer from '@site/src/components/SubnetTrainer';
+import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
+import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+
+# Ćwiczenie 3: Podsieci, segmentacja i kontrola ruchu
+
+<SprawozdanieHeader
+  thema="Administrowanie sieciami"
+  exerciseTitle="Ćwiczenie 3: Podsieci, segmentacja i kontrola ruchu"
+  storageKey="cwiczenie-3"
+  solo
+/>
+
+<ProjectSaveLoad
+  title="Zapisz / wczytaj postęp projektu"
+  fileNamePrefix="cwiczenie-3"
+  storageKeys={[]}
+  sharedPrefix="cw3_"
+/>
+
+## I. Wprowadzenie
+
+Subnetting (2 sposoby)
+
+VLAN
+
+Kontrola dostepu acl + dostep do urzadzen sieciowych
 
 ### Obliczanie parametrów sieci
 
