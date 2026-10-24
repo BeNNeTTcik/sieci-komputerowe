@@ -5,6 +5,10 @@ title: "Dokumentacja 2.2: Wstęp do pracy z urządzeniami MikroTik i Cheat Sheet
 
 # Dokumentacja 2.2: Wstęp do pracy z urządzeniami MikroTik i Cheat Sheet
 
+:::warning
+MikroTik, RouterOS, RouterBOARD i WinBox są znakami towarowymi Mikrotīkls SIA. Materiał nie jest związany z tymi firmami ani przez nie wspierany.
+:::
+
 ## I. Wstęp do pracy z urządzeniami MikroTik
 <div className="justify">
 Urządzenia firmy **MikroTik** (routery RouterBOARD, przełączniki CRS, wersja wirtualna CHR) pracują pod kontrolą systemu **RouterOS** [^routeros]. W odróżnieniu od Cisco IOS nie ma tu trybów (`enable`, `configure terminal`) - CLI jest zbudowane jak **drzewo menu**, podobne do katalogów w systemie plików. Każde menu (np. `/ip address`) przechowuje listę wpisów, na których wykonuje się te same polecenia: `print`, `add`, `set`, `remove`, `enable`, `disable`. Zmiany działają **natychmiast i są zapisywane automatycznie**. Nie ma odpowiednika `write memory`. Urządzenie można konfigurować przez CLI (konsola, SSH, terminal w WinBox), program **WinBox** lub przeglądarkę (**WebFig**). W Tabeli 1 przedstawiono najważniejsze menu systemu RouterOS.

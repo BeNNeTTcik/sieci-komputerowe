@@ -33,11 +33,95 @@ import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 
 ## I. Wprowadzenie
 
-Subnetting (2 sposoby)
+### Subnetting
 
-VLAN
+<div className="justify">
+**Subnetting** (podział na podsieci) to podział jednej sieci IPv4 na kilka mniejszych podsieci przez „pożyczenie” bitów z części hosta adresu. Umożliwia to wydzielanie różnych podsieci sieci dla różnych funckji. Czyli zamiast jednej sici np. `192.168.0.0/24`, można podzielić na kilka niezależnych mniejszych podsieci. Dla pracowni (podsieć `192.168.0.0/25`), biuro (podsieć `192.168.0.128/27`) czy interfejs routera - router (podsieć `192.168.0.160/30`) można wykorzystać różne oddzielone sieć manipulując jedynie parametrem **maski sieciowej**. Istnieją dwa sposoby na wyliczanie parametrów podsieci, najprostsza metoda to ["Magic Number Method"](https://oneuptime.com/blog/post/2026-03-20-subnetting-magic-number-method/view) i [Metoda binarna oraz VLSM](https://www.cisco.com/c/en/us/support/docs/ip/routing-information-protocol-rip/13788-3.html).
+</div>
+
+<StepByStep>
+<Step title="IPv4">
+#### IPv4 - metoda "Magic Number Method"
+
+<div className="justify">
+Najszybciej liczy się bez zamiany na system dwójkowy: magiczna liczba = 256 − „ciekawy” oktet maski, a kolejne podsieci zaczynają się co tyle adresów. „Ciekawy” oktet to pierwszy oktet maski, który nie jest ani 255, ani 0. Zasada działa również na trzecim czy drugim oktecie (np. /20 → 255.255.240.0 -> blok 16 w trzecim oktecie). W ostatnim oktecie broadcastu jest 255.
+</div>
+
+1. Zapisz dane zadania - adres sieci z prefiksem (np. 192.168.0.0/24) i ile podsieci albo ile hostów potrzebujesz.
+2. Policz pożyczone bity n - najmniejsze n, dla którego 2^n ≥ liczba podsieci (np. 4 podsieci -> n = 2, bo 2² = 4). Jeśli zadanie podaje liczbę hostów: najmniejsze h, dla którego 2^h - 2 ≥ liczba hostów.
+3. Wyznacz nowy prefiks - stary prefiks + n (np. /24 + 2 = /26).
+4. Zamień prefiks na maskę - odczytaj z tabeli poniżej (/26 -> 255.255.255.192).
+5. Policz magiczną liczbę - 256 - ciekawy oktet (256 - 192 = 64).
+6. Wypisz adresy podsieci - 0, M, 2M, 3M… w ciekawym oktecie (0, 64, 128, 192).
+7. Dla każdej podsieci wyznacz resztę:
+      - broadcast = adres następnej podsieci - 1,
+      - pierwszy host = adres sieci + 1,
+      - ostatni host = broadcast - 1.
+
+**Przykład**
+
+W Tabeli 1 przedstawiono przykład subnettingu dla adresu `192.168.0.0` i maski `255.255.255.192` lub prefiks CIDR `/26`.
+
+Tab. 1 Podsieci dla adresu 192.168.0.0/26
+| Adres sieci | Pierwszy host | Ostatni host | Broadcast |
+|---|---|---|---|
+| 192.168.0.0/26 | 192.168.0.1 | 192.168.0.62 | 192.168.0.63 |
+| 192.168.0.64/26 | 192.168.0.65 | 192.168.0.126 | 192.168.0.127 |
+| 192.168.0.128/26 | 192.168.0.129 | 192.168.0.190 | 192.168.0.191 |
+| 192.168.0.192/26 | 192.168.0.193 | 192.168.0.254 | 192.168.0.255 |
+</Step>
+
+<Step title="IPv6">
+</Step>
+</StepByStep>
+
+Kalkulator dla [IPv4 i IPv6](https://www.calculator.net/ip-subnet-calculator.html) do weryfikacji.
+
+---
+
+### Segmentacja
+
+<div className="justify">
+**Segmentacja** to podział sieci na mniejsze, odseparowane części (segmenty), między którymi ruch przechodzi wyłącznie w kontrolowany sposób, np. przez router, przełącznik warstwy 3 lub zaporę. Przeciwieństwem **segmentacji** jest **płaska sieć**, w której wszystkie urządzenia należą do jednego segmentu (np. wszystkie urządzenia w sieci `192.168.0.0/24`). Taka sieć jest prosta w budowie, ale każdy host widzi rozgłoszenia wszystkich pozostałych. Czego skutkiem infekcja jednego z urządzeń może bez przeszkód rozporopagować się na całą sieć. Segmentacja ogranicza więc trzy rzeczy jednocześnie: **zasięg rozgłoszeń** (wydajność), **zasięg awarii i ataku** (bezpieczeństwo) oraz **zakres uprawnień**, gdzie np. reguły dostępu można zapisać dla całego segmentu zamiast dla pojedynczych adresów [^nist41][^cisco-seg]. W Tabeli 2 przedstawiono najczęściej stosowane rodzaje segmentacji.
+</div>
+
+Tab. 2 Rodzaje segmentacji
+| Typ | Opis | Zastosowanie |
+|---|---|---|
+| **Fizyczna** | Wykorzystanie oddzielnych switchy, routerów lub kabli do rozdzielenia sieci | Całkowite oddzielenie systemów, np. sieci domowej od firmowej, czy sal laboratoryjnych od pokojów pracowniczych |
+| **VLAN (warstwa 2)** | Podział w obrębie jednej infrastruktury fizycznej | Ekonomiczne rozwiązanie, ponieważ umożlwia separacje na poziomie logicznym na jedyn urządzeniu fizycznym |
+| **Podsieci IP (warstwa 3)** | Każdy segment ma własną podsieć i bramę | Stosowana razem z VLAN-ami, zasada „jeden VLAN = jedna podsieć”; pozwala filtrować ruch listami ACL po prefiksie |
+
+<div className="justify">
+**Segmetnacja fizyczna** polega na zbudowaniu dla każdej sieci osobnej infrastruktury: oddzielnych przełączników, routerów, punktów dostępowych i okablowania. Segmenty nie mają żadnego wspólnego urządzenia, przez które ruch mógłby przejść „na skróty”, dlatego ich rozdzielenie nie zależy od poprawności konfiguracji. Nawet błąd administratora czy luka w oprogramowaniu przełącznika nie połączy sieci, które fizycznie nie są ze sobą połączone.
+
+Główną zaletą segmentacji fizycznej jest najwyższy poziom izolacji, którego nie da się obejść atakami np. na warstwę 2 - VLAN. Zasada działania jest prosta i łatwa do sprawdzenia, ponieważ wystarczy prześledzić okablowanie. Awaria lub przeciążenie jednego segmentu nie wpływa na pozostałe, a brak wspólnych urządzeń oznacza brak pojedynczego punktu awarii dla wszystkich sieci. Ceną jest wysoki koszt, bo każdy segment wymaga własnego sprzętu, okablowania i miejsca w szafach. Rozwiązanie jest też mało elastyczne: przeniesienie stanowiska do innego segmentu wymaga zmiany okablowania, przełączniki często pracują z wieloma wolnymi portami, a większa liczba urządzeń oznacza więcej pracy przy aktualizacjach, monitorowaniu i dokumentacji.
+</div>
+
+<div className="justify">
+**VLAN (Virtual Local Area Network)** pozwala logicznie podzielić jedną fizyczną sieć lokalną na wiele wirtulanych sieci lokalnych (maksymalnie 4094). Hosty podłączone do przełącznika komunikują sie ze sobą tak jakby tylko one były podłączone do przełącznika. Każda grupa tworząca VLAN posiada swoją domenę rozgłoszeniową, co oznacza że dane rozgłoszenie trafia tylko do portów z danej grupy [^kurose]. Dwa komputery podłączone do tego samego przełącznika, ale przypisane do różnych VLAN-ów, są dla siebie nawzajem niewidoczne, jakby zostały podłączone do dwóch róznych urządzeń, a w rzeczywsitości dzielą ten sam jeden kabel i jeden port przełącznika.
+
+Każdy z portów może działać w jednym z dwóch trybów pracy (niektórzy producenci udostępniają trzeci tryb - *port general*):
+</div>
+- **port access (UNTAG)** - należy do jednego, konkretnego VLAN-u; podłącza się do niego urządzenia końcowe np. PC, serwer, drukarka. Urządzenia te nie wiedzą, że VLAN-y w ogóle istnieją.
+- **port trunk (TAG)** - przenosi ruch wielu VLAN-ów jednocześnie przez jeden fizyczny kabel; używany w relacji przełącznik -> przełącznik lub przełącznik -> router.
+
+Dobre praktyki: osobna VLAN zarządzania urządzeniami, zmiana VLAN natywnego z 1 na nieużywany, nieużywane porty w wyłączonym VLAN-ie „czarna dziura”.
+
+<div className="justify">
+**Segmentacja w warstwie 3** polega na przydzieleniu każdemu segmentowi własnej podsieci IP i własnej bramy domyślnej [^RFC950]. Host porównuje adres docelowy ze swoją maską: ruch do adresów z tej samej podsieci wysyła bezpośrednio, a do wszystkich pozostałych sieci przez bramę. Dzięki temu każdy pakiet przechodzący między segmentami musi trafić do routera lub przełącznika warstwy 3, który staje się naturalnym **punktem kontroli ruchu**. To właśnie na jego interfejsach stosuje się listy ACL, a ponieważ cały segment opisuje jeden prefiks, regułę dla setek hostów można zapisać jedną linią, np. `deny ip 10.1.40.0 0.0.0.255 10.1.0.0 0.0.255.255` zamiast osobnego wpisu dla każdego komputera.
+
+Segmentację warstwy 3 stosuje się zazwyczaj razem z VLAN-ami, zgodnie z zasadą **„jeden VLAN = jedna podsieć”**. VLAN wyznacza domenę rozgłoszeniową, a podsieć wyznacza zakres adresów, w którym hosty komunikują się bez routera. Jeśli obie granice się pokrywają, zapytania ARP i DHCP docierają dokładnie do tych urządzeń, do których powinny, a każda brama obsługuje dokładnie jeden segment.
+
+Skuteczność tej metody zależy od przemyślanego **planu adresacji**. Najwygodniej powiązać adres podsieci z numerem VLAN-u, np. VLAN 10 – `10.1.10.0/24` z bramą `10.1.10.1`, VLAN 20 – `10.1.20.0/24` z bramą `10.1.20.1`. Taki plan jest czytelny bez dokumentacji, a podsieci wyrównane do granic prefiksów można sumaryzować w tablicach routingu i listach ACL. W IPv6 zasada pozostaje ta sama, a każdy segment otrzymuje własny prefiks `/64`.
+</div>
+
+---
 
 Kontrola dostepu acl + dostep do urzadzen sieciowych
+
+
+## II. Zadania do wykonania
 
 ### Obliczanie parametrów sieci
 
@@ -234,3 +318,12 @@ sections={[
 </Step>
 </StepByStep>
 
+[^sekurak1]: Sekurak.Academy - Szkolenie: "Bezpieczna architektura sieci w małej firmie i mikroprzedsiębiorstwie.", 07.2025.
+
+[^nist41]: NIST SP 800-41 Rev. 1 – [Guidelines on Firewalls and Firewall Policy](https://csrc.nist.gov/pubs/sp/800/41/r1/final), NIST, 2009.
+
+[^cisco-seg]: Cisco Networking Academy – *Switching, Routing and Wireless Essentials v7*, moduł 3 (VLAN) i moduł 10 (bezpieczeństwo LAN).
+
+[^kurose]: J. F. Kurose, K. W. Ross, [Sieci komputerowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Kurose+Ross+Helion+wydanie+3), wyd. 7, Helion, Gliwice 2006. 
+
+[^RFC950]: [RFC 950](https://www.rfc-editor.org/rfc/rfc950) – Internet Standard Subnetting Procedure, 1985.

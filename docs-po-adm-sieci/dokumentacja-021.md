@@ -5,6 +5,10 @@ title: "Dokumentacja 2.1: Wstep do pracy z urządzeniami Cisco i Cheat Sheet"
 
 # Dokumentacja 2.1: Wstęp do pracy z urządzeniami Cisco i Cheat Sheet
 
+:::warning
+Cisco, Cisco IOS, Cisco IOS XE, Catalyst i Packet Tracer są znakami towarowymi Cisco Systems, Inc. Materiał nie jest związany z tą firmą ani przez nią wspierany.
+:::
+
 ## I. Wstęp do pracy z urządzeniami Cisco
 <div className="justify">
 Wszystkie urządzenia posiadaja swoj dedykowany system do obsługi, nie inaczej jest w przypadku urządzeń sieciowych. Pracujac na urządzeniach firmy **Cisco** do dyspozycji mam **Cisco IOS (Internetwork Operating System)**, który obslugiwany jest przez wiersz poleceń (**CLI**). Wiersz jest zorganizowany ierarchicznie co oznacza, że każdy tryb udsotepnia inny zestaw poleceń i zasieg wprowadzania zamin. W Tabeli 1 przedstawiono wszytskie tryby wstepujace w systemie Cisco IOS.

@@ -5,6 +5,10 @@ title: "Dokumentacja 2.3: Wstęp do pracy z urządzeniami Fortinet i Cheat Sheet
 
 # Dokumentacja 2.3: Wstęp do pracy z urządzeniami Fortinet i Cheat Sheet
 
+:::warning
+Fortinet, FortiGate, FortiOS i FortiSwitch są znakami towarowymi Fortinet, Inc. Materiał nie jest związany z tą firmą ani przez nią wspierany.
+:::
+
 ## I. Wstęp do pracy z urządzeniami Fortinet
 <div className="justify">
 Urządzenia **FortiGate** firmy **Fortinet** to zapory sieciowe nowej generacji (NGFW), które pełnią też rolę routera. Pracują pod kontrolą systemu **FortiOS** [^fortios]. Konfiguracja odbywa się przez przeglądarkę (GUI) lub wiersz poleceń (**CLI**) dostępny przez konsolę, SSH albo okno *CLI Console* w GUI. CLI jest zbudowane z **bloków konfiguracyjnych**: `config` otwiera sekcję, `edit` wybiera lub tworzy obiekt, `set` ustawia parametr, `next` zapisuje obiekt, a `end` zamyka sekcję. **Zmiany są zapisywane automatycznie** po `next` lub `end` – nie ma odpowiednika `write memory`. Najważniejsza różnica względem routera Cisco: **FortiGate domyślnie blokuje ruch między interfejsami** – sama trasa nie wystarczy, potrzebna jest **polityka zapory** (firewall policy). W Tabeli 1 przedstawiono poziomy i polecenia CLI.

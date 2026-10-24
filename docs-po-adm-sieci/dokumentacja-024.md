@@ -5,6 +5,10 @@ title: "Dokumentacja 2.4: Wstęp do pracy z urządzeniami Dell i Cheat Sheet"
 
 # Dokumentacja 2.4: Wstęp do pracy z urządzeniami Dell i Cheat Sheet
 
+:::warning
+Dell, PowerSwitch i SmartFabric OS10 są znakami towarowymi Dell Inc. lub jej spółek zależnych. Materiał nie jest związany z tą firmą ani przez nią wspierany.
+:::
+
 ## I. Wstęp do pracy z urządzeniami Dell
 <div className="justify">
 Przełączniki **Dell Networking** pracują pod kontrolą jednego z dwóch systemów. Starsze i mniejsze modele (seria **N**, np. N1100, N2200, N3200) mają system **OS6**, którego składnia jest niemal identyczna z Cisco IOS – do nich można stosować ściągę z [Dokumentacji 2.1](/docs-po-adm-sieci/cwiczenie-021.md) z niewielkimi zmianami. Przełączniki centrów danych (seria **S** i **Z**) pracują pod kontrolą **Dell SmartFabric OS10** [^os10], opisanego w tym dokumencie. OS10 ma tryby podobne do Cisco, ale różni się szczegółami: interfejsy nazywają się `ethernet 1/1/1`, maskę zapisuje się jako prefiks (`/24`), a zamiast `running-config` pisze się `running-configuration`. Po zalogowaniu administrator trafia od razu do trybu uprzywilejowanego `OS10#`. W Tabeli 1 przedstawiono tryby systemu OS10.
