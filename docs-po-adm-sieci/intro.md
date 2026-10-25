@@ -16,7 +16,7 @@ Witaj w materiałach do przedmiotu **Administrowanie sieciami**. Kurs składa si
 
 "..." [^sylabus]
 
-[^sylabus]: [Karty przedmiotów]() Wydział Informatyki, Studia podyplomowe, Niestacjonarne, s. X.
+[^sylabus]: [Karty przedmiotów](/) Wydział Informatyki, Studia podyplomowe, Niestacjonarne, s. X.
 
 ## Budowa sieci laboratoryjnej
 

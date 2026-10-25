@@ -17,7 +17,6 @@ import EditableTable from '@site/src/components/EditableTable';
 import KeywordAnswer from '@site/src/components/KeywordAnswer';
 import OpenQuestion from '@site/src/components/OpenQuestion';
 
-
 # Ćwiczenie 1: Adresacja IPv4 i IPv6
 
 <SprawozdanieHeader
@@ -183,64 +182,109 @@ Oba te protokoły będą jeszcze wspołistnieć w sieciach. Przez co opracowano 
 
 <StepByStep>
 <Step title="Przechwyć ruch sieciowy pochodzący z prostej komunikacji sieciowej">
-Weryfikacja karty sieciowej: (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i podajemy komendę ipconfig. Następnie wyszukujemy "Ethernet adapter Ethernet", który posiada adres IPv4 oraz IPv6 (Rysunek 4).
+Weryfikacja karty sieciowej: (Start ⇒ Wyszukaj programy i pliki ⇒ cmd) i podajemy komendę ipconfig. Następnie wyszukujemy "Ethernet adapter Ethernet", który posiada adres IPv4 oraz IPv6 (Listing 1).
+
+```text {8,9,10,16,17,18}
+C:\Users\student>ipconfig
+
+Windows IP Configuration
+
+Ethernet adapter Ethernet:
+  
+    Connection-specific DNS Suffix . :
+    Link-local IPv6 Address  . . . . : fe80::
+    IPv4 Address . . . . . . . . . . : 10.
+    Subnet Mask  . . . . . . . . . . : 255.255.255.0
+    Default Gateway  . . . . . . . . :
+
+Ethernet adapter Ethernet 2:
+
+    Connection-specific DNS Suffix . :
+    Link-local IPv6 Address  . . . . : fe80::
+    IPv4 Address . . . . . . . . . . : 
+    Subnet Mask  . . . . . . . . . . : 255.255.255.0
+    Default Gateway  . . . . . . . . :
+```
 <div className="text-center">
-![Rys4](/img/2/ipconfig.png)
-Rys.4 Komenda ipconfig
+Lis. 1 Wynik wykonania polecenia ipconfig w systemie Windows
 </div>
 Otwórz program **Wireshark** i rozpocznij przechwytywanie ruchu sieciowego na karcie.
 </Step>
 
 <Step title="Filtrowanie po ICMP">
-Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP (Rysunek 5).
+Włącz filtrowanie przechwyconego ruchu, tak, by widoczne były tylko ramki z pakietami protokołu ICMP (Rysunek 4).
 ```
 Filtr wyświetlania: icmp
 ```
 
 <div className="text-center">
-![Rys5](/img/2/zad1_2.png)
+![Rys4](/img/po-adm-sieci-1/zad1_2.png)
 
-Rys.5 Fitrowanie w Wireshark [^wireshark]
+Rys. 4 Fitrowanie w Wireshark [^wireshark]
 
 </div>
 </Step>
 
 <Step title="Wygeneruj ruch sieciowy - IPv4">
-Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Rysunek 6).
+Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Listing 2).
 ```bash
 ping -4 <IP>
 ```
+
+```text {1,4,5,6,7}
+C:\Users\student> ping -4 <ipv4_sąsiada>
+
+Pinging <ipv4_sąsiada> with 32 bytes of data:
+Reply from <ipv4_sąsiada>: bytes=32 time<lms TTL=128
+Reply from <ipv4_sąsiada>: bytes=32 time<lms TTL=128
+Reply from <ipv4_sąsiada>: bytes=32 time<lms TTL=128
+Reply from <ipv4_sąsiada>: bytes=32 time<lms TTL=128
+
+Ping statistics for <ipv4_sąsiada>:
+    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = Oms, Maximum = Oms, Average = Oms
+```
 <div className="text-center">
-![Rys6](/img/po-adm-sieci-1/pingv4.png)
-
-Rys.6 Komenda ping w wersji 4 [^wireshark]
-
+Lis. 2 Wynik wykonania polecenia ping w wersji 4 w systemie Windows
 </div>
 </Step>
 
 <Step title="Weryfikacja wyników">
-Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 7). Zwróć uwagę na segment **Internet Protocol Version 4**, po rowzinięciu można sprawdzić dokładną budowę nagłówka dla IPv4.
+Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 5). Zwróć uwagę na segment **Internet Protocol Version 4**, po rowzinięciu można sprawdzić dokładną budowę nagłówka dla IPv4.
 
 <div className="text-center">
-![Rys7](/img/2/zad1_4.png)
-Rys.7 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
+![Rys5](/img/po-adm-sieci-1/zad1_4.png)
+Rys. 5 Wyfiltrowane pakiety protkołu ICMP w Wireshark [^wireshark]
 </div>
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki" />
 </Step>
 
 <Step title="Wygeneruj ruch sieciowy - IPv6">
-Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Rysunek 8).
+Poproś sąsiada o adres IP jego komputera i za pomocą Wiersza polecenia systemu Windows wyślij na ten adres ping (Start ⇒ Wyszukaj programy i pliki ⇒ cmd ⇒ ping adres IP) (Listing 3).
 ```bash
 ping -6 <IP>
 ```
+
+```text {1,4,5,6,7}
+C:\Users\student> ping -6 <ipv6_sąsiada>
+
+Pinging <ipv6_sąsiada> with 32 bytes of data:
+Reply from <ipv6_sąsiada>: time<lms
+Reply from <ipv6_sąsiada>: time<lms
+Reply from <ipv6_sąsiada>: time<lms
+Reply from <ipv6_sąsiada>: time<lms
+
+Ping statistics for <ipv6_sąsiada>:
+    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = Oms, Maximum = Oms, Average = Oms
+```
 <div className="text-center">
-![Rys8](/img/po-adm-sieci-1/pingv6.png)
-
-Rys.8 Komenda ping w wersji 6 [^wireshark]
-
+Lis. 3 Wynik wykonania polecenia ping w wersji 6 w systemie Windows
 </div>
 
-Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych (Rysunek 5). Zwróć uwagę na segment **Internet Protocol Version 6**, po rowzinięciu można sprawdzić dokładną budowę nagłówka dla IPv6.
+Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym zatrzymaj przechwytywanie danych. Zwróć uwagę na segment **Internet Protocol Version 6**, po rowzinięciu można sprawdzić dokładną budowę nagłówka dla IPv6.
 
 <ScreenshotPaste label="Zrzut ekranu: przechwyconej ramki" />
 </Step>

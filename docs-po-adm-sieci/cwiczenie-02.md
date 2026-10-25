@@ -89,13 +89,13 @@ Zanim jeszcze urządzenie zacznie cokolwiek routować czy przełączać, powinno
 
 **Konfiguracja urządzeń**
 
-Na stronie [Dokumentacja 2.1](/docs-po-adm-sieci/cwiczenie-021.md) przedstawiono komendy do pracy z urządzeniami Cisco.
+Na stronie [Dokumentacja 2.1](/docs-po-adm-sieci/dokumentacja-021.md) przedstawiono komendy do pracy z urządzeniami Cisco.
 
-Na stronie [Dokumentacja 2.2](/docs-po-adm-sieci/cwiczenie-022.md) przedstawiono komendy do pracy z urządzeniami Mikrotik.
+Na stronie [Dokumentacja 2.2](/docs-po-adm-sieci/dokumentacja-022.md) przedstawiono komendy do pracy z urządzeniami Mikrotik.
 
-Na stronie [Dokumentacja 2.3](/docs-po-adm-sieci/cwiczenie-023.md) przedstawiono komendy do pracy z urządzeniami Fortinet.
+Na stronie [Dokumentacja 2.3](/docs-po-adm-sieci/dokumentacja-023.md) przedstawiono komendy do pracy z urządzeniami Fortinet.
 
-Na stronie [Dokumentacja 2.4](/docs-po-adm-sieci/cwiczenie-024.md) przedstawiono komendy do pracy z urządzeniami Dell.
+Na stronie [Dokumentacja 2.4](/docs-po-adm-sieci/dokumentacja-024.md) przedstawiono komendy do pracy z urządzeniami Dell.
 
 ## II. Zadania do wykonania
 

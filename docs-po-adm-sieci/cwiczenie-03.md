@@ -9,11 +9,14 @@ import DesignScenario from '@site/src/components/DesignScenario';
 import EditableTable from '@site/src/components/EditableTable';
 import KeywordAnswer from '@site/src/components/KeywordAnswer';
 import OpenQuestion from '@site/src/components/OpenQuestion';
-import ScreenshotPaste from '@site/src/components/ScreenshotPaste';import StepByStep from '@site/src/components/StepByStep';
+import ScreenshotPaste from '@site/src/components/ScreenshotPaste';
+import StepByStep from '@site/src/components/StepByStep';
 import Step from '@site/src/components/Step';
 import SubnetTrainer from '@site/src/components/SubnetTrainer';
 import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
+import CodeBlock from '@site/src/components/CodeBlock';
+import SharedValue from '@site/src/components/SharedValue';
 
 # Ćwiczenie 3: Podsieci, segmentacja i kontrola ruchu
 
@@ -36,7 +39,7 @@ import SprawozdanieHeader from '@site/src/components/SprawozdanieHeader';
 ### Subnetting
 
 <div className="justify">
-**Subnetting** (podział na podsieci) to podział jednej sieci IPv4 na kilka mniejszych podsieci przez „pożyczenie” bitów z części hosta adresu. Umożliwia to wydzielanie różnych podsieci sieci dla różnych funckji. Czyli zamiast jednej sici np. `192.168.0.0/24`, można podzielić na kilka niezależnych mniejszych podsieci. Dla pracowni (podsieć `192.168.0.0/25`), biuro (podsieć `192.168.0.128/27`) czy interfejs routera - router (podsieć `192.168.0.160/30`) można wykorzystać różne oddzielone sieć manipulując jedynie parametrem **maski sieciowej**. Istnieją dwa sposoby na wyliczanie parametrów podsieci, najprostsza metoda to ["Magic Number Method"](https://oneuptime.com/blog/post/2026-03-20-subnetting-magic-number-method/view) i [Metoda binarna oraz VLSM](https://www.cisco.com/c/en/us/support/docs/ip/routing-information-protocol-rip/13788-3.html).
+**Subnetting** (podział na podsieci) to podział jednej sieci IPv4 (lub IPv6) na kilka mniejszych podsieci przez „pożyczenie” bitów z części hosta adresu. Umożliwia to wydzielanie różnych podsieci sieci dla różnych funckji. Czyli zamiast jednej sici np. `192.168.0.0/24`, można podzielić na kilka niezależnych mniejszych podsieci. Dla pracowni (podsieć `192.168.0.0/25`), biuro (podsieć `192.168.0.128/27`) czy interfejs routera - router (podsieć `192.168.0.160/30`) można wykorzystać różne oddzielone sieć manipulując jedynie parametrem **maski sieciowej**. Istnieją dwa sposoby na wyliczanie parametrów podsieci dla IPv4, najprostsza metoda to ["Magic Number Method"](https://oneuptime.com/blog/post/2026-03-20-subnetting-magic-number-method/view) i [Metoda binarna oraz VLSM](https://www.cisco.com/c/en/us/support/docs/ip/routing-information-protocol-rip/13788-3.html). Dla IPv6 wykorzystuje się sposób opisany przez [Cisco - IPv6 Subnetting: Overview and Case Study](https://community.cisco.com/t5/networking-knowledge-base/ipv6-subnetting-overview-and-case-study/tac-p/3125703) oraz [APNIC - Calculating IPv6 subnets outside the nibble boundary](https://blog.apnic.net/2018/08/10/how-to-calculating-ipv6-subnets-outside-the-nibble-boundary/)
 </div>
 
 <StepByStep>
@@ -72,6 +75,45 @@ Tab. 1 Podsieci dla adresu 192.168.0.0/26
 </Step>
 
 <Step title="IPv6">
+#### IPv6 - podział po cyfrach szesnastkowych (nibble)
+<div className="justify">
+W IPv6 nie dobiera się rozmiaru podsieci do liczby hostów. Każda sieć z urządzeniami końcowymi ma prefiks **/64**, ponieważ ostatnie 64 bity adresu to identyfikator interfejsu, na którym opiera się m.in. autokonfiguracja SLAAC [^RFC4291][^RFC7421]. Subnetting sprowadza się więc do podzielenia prefiksu otrzymanego od operatora na odpowiednią liczbę podsieci /64. Firmy dostają zwykle prefiks /48, a klienci indywidualni /56 [^RFC6177][^ripe690]. Najprościej dzielić **po pełnych cyfrach szesnastkowych**: jedna cyfra to 4 bity (*nibble*), więc wydłużenie prefiksu o 4 bity zmienia dokładnie jedną cyfrę adresu. W przykładach używa się prefiksu dokumentacyjnego `2001:db8::/32` [^RFC3849].
+</div>
+
+1. Zapisz dane zadania - prefiks (np. `2001:db8:acad::/48`) i liczbę potrzebnych podsieci.
+2. Rozwiń skrócony zapis do pełnych grup po 4 cyfry (`2001:0db8:acad:0000::`) - łatwiej wtedy policzyć pozycję cyfry.
+3. Policz pożyczone bity n - najmniejsze n, dla którego 2^n ≥ liczba podsieci, zaokrąglone w górę do wielokrotności 4 (np. 10 podsieci -> 2⁴ = 16, więc n = 4).
+4. Wyznacz nowy prefiks - stary prefiks + n (/48 + 4 = /52).
+5. Znajdź „ciekawe” cyfry - są to cyfry od numeru (stary prefiks ÷ 4) + 1 do numeru (nowy prefiks ÷ 4), licząc od lewej. Dla /48 -> /52 jest to 13. cyfra, czyli pierwsza cyfra czwartej grupy.
+6. Wypisz podsieci - zwiększaj ciekawą cyfrę o 1: 0, 1, 2 … 9, a, b … f.
+7. Dla każdej podsieci wyznacz zakres:
+      - pierwszy adres = adres podsieci,
+      - ostatni adres = wszystkie cyfry za ciekawą cyfrą ustawione na `f`.
+
+<div className="justify">
+W IPv6 **nie ma adresu rozgłoszeniowego** (jego rolę przejął multicast), więc nie odejmuje się dwóch adresów jak w IPv4. Adres z samymi zerami w identyfikatorze interfejsu jest zarezerwowany jako *subnet-router anycast* [^RFC4291], dlatego bramie domyślnej nadaje się zwykle adres `::1`.
+</div>
+
+**Przykład**
+
+Szkoła otrzymała prefiks `2001:db8:acad::/48` i potrzebuje 10 podsieci dla budynków. Pożyczamy 4 bity, a nowy prefiks to `/52`. Kolejne podsieci przedstawiono w Tabeli 2.
+
+Tab. 2 Podsieci dla prefiksu 2001:db8:acad::/48 podzielonego na /52
+| Podsieć | Pierwszy adres | Ostatni adres |
+|---|---|---|
+| 2001:db8:acad::/52 | 2001:db8:acad:0000:: | 2001:db8:acad:0fff:ffff:ffff:ffff:ffff |
+| 2001:db8:acad:1000::/52 | 2001:db8:acad:1000:: | 2001:db8:acad:1fff:ffff:ffff:ffff:ffff |
+| 2001:db8:acad:2000::/52 | 2001:db8:acad:2000:: | 2001:db8:acad:2fff:ffff:ffff:ffff:ffff |
+| … | … | … |
+| 2001:db8:acad:f000::/52 | 2001:db8:acad:f000:: | 2001:db8:acad:ffff:ffff:ffff:ffff:ffff |
+
+<div className="justify">
+Każda podsieć /52 mieści 2¹² = 4096 sieci /64. Budynek A (`2001:db8:acad::/52`) może więc nadać VLAN-om prefiksy z numerem VLAN-u w czwartej grupie, np. VLAN 10 – `2001:db8:acad:10::/64` z bramą `2001:db8:acad:10::1`.
+</div>
+
+:::tip[Podział poza granicą cyfry]
+Gdy potrzebne są np. tylko 4 podsieci, wystarczy pożyczyć n = 2 bity (/48 -> /50). Ciekawa cyfra zmienia się wtedy co 2^(4−2) = 4, czyli tak jak „magiczna liczba” w IPv4: `2001:db8:acad::/50`, `2001:db8:acad:4000::/50`, `2001:db8:acad:8000::/50`, `2001:db8:acad:c000::/50`. Taki podział jest poprawny, ale trudniej go czytać, dlatego w praktyce zaleca się granice cyfr (/48, /52, /56, /60, /64).
+:::
 </Step>
 </StepByStep>
 
@@ -167,20 +209,6 @@ Rys. 2 Zapora sieciowa – strefy, polityka i inspekcja stanowa [^claude]
 Opracowano również zasady dla **Zapory nowej generacji (NGFW)** analizują dodatkowo zawartość ruchu: rozpoznają aplikacje niezależnie od portu, wykrywają i blokują ataki (IPS), filtrują adresy stron WWW, sprawdzają pliki pod kątem złośliwego oprogramowania i mogą wiązać reguły z użytkownikiem, a nie tylko z adresem IP. Zapora powinna obejmować zarówno IPv4, jak i IPv6, ponieważ reguły zapisane tylko dla jednego protokołu pozostawiają drugi bez kontroli.
 </div>
 
-#### Translacja adresów (NAT/PAT)
-
-<div className="justify">
-**NAT (Network Address Translation)** zmienia adresy IP w nagłówkach pakietów przechodzących przez router brzegowy [^RFC2663][^RFC3022]. Pozwala to hostom z adresami prywatnymi [^RFC1918], które nie są routowane w Internecie, korzystać z niego za pośrednictwem adresu publicznego. W Tabeli 4 wymieniono rodzaje NAT-ów, zasade działania oraz zastosowanie praktyczne.
-</div>
-Tab. 4 Odmiany translacji adresów
-
-| Odmiana | Odwzorowanie | Zasada działania | Zastosowanie |
-|---|---|---|---|
-| **NAT statyczny** | 1:1 | Stałe przypisanie jednego adresu prywatnego do jednego publicznego | Udostępnianie serwerów wewnętrznych, np. serwer strony WWW na widziany adres publiczny |
-| **NAT dynamiczny** | wiele : pula | Przydział adresu z puli adresów publicznych na czas połączenia; po wyczerpaniu puli kolejne hosty nie uzyskają dostępu | Sieci, które mają kilka adresów publicznych |
-| **PAT** (*Port Address Translation*, NAT overload) | wiele : 1 | Wiele hostów współdzieli jeden adres publiczny, a router rozróżnia ich połączenia po numerach portów źródłowych | Standard w sieciach domowych i firmowych |
-| **Przekierowanie portów** (odmiana PAT) | port publiczny -> host:port | Stałe powiązanie portu adresu publicznego z usługą na wybranym hoście wewnętrznym | Udostępnianie pojedynczej usługi (np. serwera WWW) przy jednym adresie publicznym |
-
 #### Jakość usług (QoS)
 
 <div className="justify">
@@ -204,7 +232,7 @@ Tab. 4 Odmiany translacji adresów
 
 ### Segmentacja
 
-## Etap 1. Segmentacja fizyczna
+#### Etap 1. Segmentacja fizyczna
 
 <div className="justify">
 Szkoła ma 4 pomieszczenia: 2x pracownia uczniów (U1.X i U2.X), pokój nauczycielski (N.X), w której stoi również serwer dziennika elektronicznego. W głównej serwerowni znajduje się przestrzeń na zebranie całej infrastruktury.
@@ -342,6 +370,275 @@ allowRemoveRows={false}
 />
 </Step>
 </StepByStep>
+
+## Etap 2. VLAN i dobór adresacji (35 min)
+
+<div className="justify">
+Zamiast kupować przełącznik dla każdej grupy, w każdym budynku stawiamy jeden przełącznik, a grupy rozdzielamy VLAN-ami. Operator przydzielił szkole na sieć wewnętrzną tylko pulę `172.16.X.0/24`, więc trzeba ją podzielić oszczędnie, metodą **VLSM** – zaczynając od największej grupy.
+</div>
+
+<StepByStep>
+<Step title="2.1 Plan adresacji (VLSM)">
+Dla każdego VLAN-u dobierz najmniejszy prefiks, który pomieści podaną liczbę hostów (razem z bramą), i przydzielaj podsieci po kolei od `172.16.X.0`. Maska odwrotna (wildcard) przyda się w etapie 3.
+
+<EditableTable
+title="Tab. 10 Plan adresacji 172.16.X.0/24"
+storageKey="cw3_e2_plan"
+columns={[
+{ key: 'vlan', label: 'VLAN', readOnly: true },
+{ key: 'hosty', label: 'Hostów', readOnly: true },
+{ key: 'siec', label: 'Adres sieci' },
+{ key: 'prefiks', label: 'Prefiks' },
+{ key: 'maska', label: 'Maska' },
+{ key: 'brama', label: 'Brama' },
+{ key: 'broadcast', label: 'Broadcast' },
+{ key: 'wc', label: 'Wildcard' },
+]}
+initialRows={[
+{ vlan: '10 – Uczniowie', hosty: '50', shared: { siec: 'cw3_v10_siec', maska: 'cw3_v10_maska', brama: 'cw3_v10_brama', wc: 'cw3_v10_wc' } },
+{ vlan: '20 – Nauczyciele', hosty: '20', shared: { siec: 'cw3_v20_siec', maska: 'cw3_v20_maska', brama: 'cw3_v20_brama', wc: 'cw3_v20_wc' } },
+{ vlan: '30 – Administracja', hosty: '10', shared: { siec: 'cw3_v30_siec', maska: 'cw3_v30_maska', brama: 'cw3_v30_brama', wc: 'cw3_v30_wc' } },
+{ vlan: '40 – Serwery', hosty: '4', shared: { siec: 'cw3_v40_siec', maska: 'cw3_v40_maska', brama: 'cw3_v40_brama', wc: 'cw3_v40_wc' } },
+{ vlan: '99 – Zarządzanie', hosty: '4', shared: { siec: 'cw3_v99_siec', maska: 'cw3_v99_maska', brama: 'cw3_v99_brama', wc: 'cw3_v99_wc' } },
+]}
+allowAddRows={false}
+allowRemoveRows={false}
+/>
+
+<KeywordAnswer
+  title="Zapas na rozbudowę"
+  question="Jaka część puli 172.16.X.0/24 została wolna po przydzieleniu wszystkich VLAN-ów? Podaj ją jako adres z prefiksem."
+  keywords={['.128/25']}
+  explanation="Pięć VLAN-ów zajmuje adresy .0–.127 (64 + 32 + 16 + 8 + 8 = 128 adresów). Wolna jest cała druga połowa puli: 172.16.X.128/25 – można z niej utworzyć kolejne podsieci, np. dla drugiej pracowni."
+  storageKey="cw3_e2_zapas"
+/>
+
+<details>
+<summary>Klucz do Tabeli 10 (dla prowadzącego)</summary>
+
+| VLAN | Adres sieci | Prefiks | Maska | Brama | Broadcast | Wildcard |
+|---|---|---|---|---|---|---|
+| 10 | 172.16.X.0 | /26 | 255.255.255.192 | 172.16.X.1 | 172.16.X.63 | 0.0.0.63 |
+| 20 | 172.16.X.64 | /27 | 255.255.255.224 | 172.16.X.65 | 172.16.X.95 | 0.0.0.31 |
+| 30 | 172.16.X.96 | /28 | 255.255.255.240 | 172.16.X.97 | 172.16.X.111 | 0.0.0.15 |
+| 40 | 172.16.X.112 | /29 | 255.255.255.248 | 172.16.X.113 | 172.16.X.119 | 0.0.0.7 |
+| 99 | 172.16.X.120 | /29 | 255.255.255.248 | 172.16.X.121 | 172.16.X.127 | 0.0.0.7 |
+</details>
+</Step>
+
+<Step title="2.2 Adresy urządzeń">
+Zasada: urządzenia dostają kolejne adresy zaraz po bramie, a PC-ADMIN – **ostatni** adres hosta w VLAN 99.
+
+<EditableTable
+title="Tab. 11 Adresy urządzeń"
+storageKey="cw3_e2_hosty"
+columns={[
+{ key: 'urzadzenie', label: 'Urządzenie', readOnly: true },
+{ key: 'vlan', label: 'VLAN', readOnly: true },
+{ key: 'port', label: 'Port', readOnly: true },
+{ key: 'adres', label: 'Adres IP', checkDuplicates: true },
+]}
+initialRows={[
+{ urzadzenie: 'PC-U1', vlan: '10', port: 'SW-1 Fa0/1' },
+{ urzadzenie: 'PC-U2', vlan: '10', port: 'SW-2 Fa0/1' },
+{ urzadzenie: 'PC-N1', vlan: '20', port: 'SW-1 Fa0/2' },
+{ urzadzenie: 'PC-N2', vlan: '20', port: 'SW-2 Fa0/2' },
+{ urzadzenie: 'PC-SEKR', vlan: '30', port: 'SW-2 Fa0/3' },
+{ urzadzenie: 'SRV-DZIENNIK', vlan: '40', port: 'SW-1 Fa0/3', shared: { adres: 'cw3_srv_ip' } },
+{ urzadzenie: 'SW-1 (interface vlan 99)', vlan: '99', port: '–', shared: { adres: 'cw3_sw1_ip' } },
+{ urzadzenie: 'SW-2 (interface vlan 99)', vlan: '99', port: '–', shared: { adres: 'cw3_sw2_ip' } },
+{ urzadzenie: 'PC-ADMIN', vlan: '99', port: 'SW-1 Fa0/4' },
+]}
+allowAddRows={false}
+allowRemoveRows={false}
+/>
+
+<details>
+<summary>Klucz do Tabeli 11 (dla prowadzącego)</summary>
+
+PC-U1 .2, PC-U2 .3, PC-N1 .66, PC-N2 .67, PC-SEKR .98, SRV-DZIENNIK .114, SW-1 .122, SW-2 .123, PC-ADMIN .126.
+</details>
+</Step>
+
+<Step title="2.3 Budowa topologii">
+Zapisz etap 1 i utwórz nowy plik `etap2-X.pkt`. Topologia ma dwa budynki połączone jednym kablem:
+
+```
+ BUDYNEK A                                           BUDYNEK B
+ PC-U1, PC-N1, SRV-DZIENNIK, PC-ADMIN                PC-U2, PC-N2, PC-SEKR
+          │                                                   │
+       [SW-1] G0/2 ══════════ trunk 802.1Q ══════════ G0/2 [SW-2]
+         G0/1
+          ║ trunk 802.1Q
+         G0/0
+       [R1-X] G0/2 ──── 203.0.113.0/29 ──── G0/1 [R2-X] G0/0 ──── 198.51.100.0/24
+                                                  „operator”        SRV-INTERNET .20
+                                                                    PC-RODZIC    .30
+```
+
+R1-X G0/1 zostaje wolny. Router R2-X, SRV-INTERNET i PC-RODZIC dodaj już teraz, ale skonfigurujesz je w etapie 3.
+
+**SW-1** (na SW-2 analogicznie – porty według Tabeli 11, trunk tylko na G0/2):
+```
+SW-1(config)# vlan 10
+SW-1(config-vlan)# name UCZNIOWIE
+SW-1(config-vlan)# vlan 20
+SW-1(config-vlan)# name NAUCZYCIELE
+SW-1(config-vlan)# vlan 30
+SW-1(config-vlan)# name ADMINISTRACJA
+SW-1(config-vlan)# vlan 40
+SW-1(config-vlan)# name SERWERY
+SW-1(config-vlan)# vlan 99
+SW-1(config-vlan)# name ZARZADZANIE
+SW-1(config-vlan)# exit
+SW-1(config)# interface fastEthernet 0/1
+SW-1(config-if)# switchport mode access
+SW-1(config-if)# switchport access vlan 10
+SW-1(config-if)# interface fastEthernet 0/2
+SW-1(config-if)# switchport mode access
+SW-1(config-if)# switchport access vlan 20
+SW-1(config-if)# interface fastEthernet 0/3
+SW-1(config-if)# switchport mode access
+SW-1(config-if)# switchport access vlan 40
+SW-1(config-if)# interface fastEthernet 0/4
+SW-1(config-if)# switchport mode access
+SW-1(config-if)# switchport access vlan 99
+SW-1(config-if)# interface range gigabitEthernet 0/1 - 2
+SW-1(config-if-range)# switchport mode trunk
+```
+
+Adres zarządzania przełącznika (wartości pobierane z Tabel 10 i 11):
+
+<CodeBlock lines={[
+'SW-1(config)# interface vlan 99',
+<>SW-1(config-if)# ip address <SharedValue shared="cw3_sw1_ip" fallback="adres SW-1" /> <SharedValue shared="cw3_v99_maska" fallback="maska VLAN 99" /></>,
+'SW-1(config-if)# no shutdown',
+'SW-1(config-if)# exit',
+<>SW-1(config)# ip default-gateway <SharedValue shared="cw3_v99_brama" fallback="brama VLAN 99" /></>,
+]} />
+
+**R1-X (router-on-a-stick)** – polecenia uzupełniają się wartościami z Tabeli 10:
+
+<CodeBlock lines={[
+'R1-X(config)# interface gigabitEthernet 0/0',
+'R1-X(config-if)# no shutdown',
+'R1-X(config-if)# interface gigabitEthernet 0/0.10',
+'R1-X(config-subif)# encapsulation dot1Q 10',
+<>R1-X(config-subif)# ip address <SharedValue shared="cw3_v10_brama" fallback="brama VLAN 10" /> <SharedValue shared="cw3_v10_maska" fallback="maska VLAN 10" /></>,
+'R1-X(config-subif)# interface gigabitEthernet 0/0.20',
+'R1-X(config-subif)# encapsulation dot1Q 20',
+<>R1-X(config-subif)# ip address <SharedValue shared="cw3_v20_brama" fallback="brama VLAN 20" /> <SharedValue shared="cw3_v20_maska" fallback="maska VLAN 20" /></>,
+'R1-X(config-subif)# interface gigabitEthernet 0/0.30',
+'R1-X(config-subif)# encapsulation dot1Q 30',
+<>R1-X(config-subif)# ip address <SharedValue shared="cw3_v30_brama" fallback="brama VLAN 30" /> <SharedValue shared="cw3_v30_maska" fallback="maska VLAN 30" /></>,
+'R1-X(config-subif)# interface gigabitEthernet 0/0.40',
+'R1-X(config-subif)# encapsulation dot1Q 40',
+<>R1-X(config-subif)# ip address <SharedValue shared="cw3_v40_brama" fallback="brama VLAN 40" /> <SharedValue shared="cw3_v40_maska" fallback="maska VLAN 40" /></>,
+'R1-X(config-subif)# interface gigabitEthernet 0/0.99',
+'R1-X(config-subif)# encapsulation dot1Q 99',
+<>R1-X(config-subif)# ip address <SharedValue shared="cw3_v99_brama" fallback="brama VLAN 99" /> <SharedValue shared="cw3_v99_maska" fallback="maska VLAN 99" /></>,
+]} />
+</Step>
+
+<Step title="2.4 Weryfikacja">
+<Checklist
+title="Etap 2 działa"
+storageKey="cw3_e2_testy"
+sections={[
+{ title: 'Przełączniki', items: [
+'show vlan brief – porty przypisane zgodnie z Tabelą 11',
+'show interfaces trunk – trunk na SW-1 G0/1, G0/2 i SW-2 G0/2',
+]},
+{ title: 'Ping', items: [
+'PC-U1 → PC-U2 – ten sam VLAN, różne budynki (bez routera)',
+'PC-U1 → PC-N1 – różne VLAN-y (przez R1-X)',
+'PC-SEKR → SRV-DZIENNIK',
+'PC-ADMIN → SW-2 (zarządzanie przez trunk)',
+]},
+]}
+/>
+
+W trybie **Simulation** wyślij ping z PC-U1 do PC-U2 i sprawdź, do których urządzeń dociera zapytanie ARP. Uzupełnij kolumnę „Etap 2” w Tabeli 8.
+
+<OpenQuestion
+  title="Fizyczna czy VLAN?"
+  question="Porównaj kolumny Tabeli 8. Co zyskała szkoła, przechodząc na VLAN-y, a co straciła w porównaniu z segmentacją fizyczną? Od czego teraz zależy izolacja grup?"
+  modelAnswer="Mniej przełączników i kabli, jeden kabel między budynkami, grupy mogą istnieć w obu budynkach, zmiana grupy to zmiana konfiguracji portu, a nie okablowania. Router potrzebuje jednego portu zamiast jednego na grupę. Izolacja zależy jednak od poprawnej konfiguracji przełączników – błąd lub atak na warstwę 2 (np. negocjacja trunku) może połączyć grupy, czego w segmentacji fizycznej nie da się zrobić."
+  minLength={80}
+  storageKey="cw3_e2_porownanie"
+/>
+</Step>
+
+<Step title="2.5 Atak przez wolne gniazdko i utwardzenie">
+:::warning
+Ćwiczenie wykonujemy **wyłącznie w Packet Tracerze**.
+:::
+
+Ktoś wpiął własny przełącznik w wolne gniazdko w budynku B. Dodaj **SW-INTRUZ** (2960) i połącz jego Fa0/24 z **Fa0/24** przełącznika SW-2. Do SW-INTRUZ Fa0/1 podłącz **PC-INTRUZ**.
+
+```
+SW-INTRUZ(config)# vlan 30
+SW-INTRUZ(config-vlan)# exit
+SW-INTRUZ(config)# interface fastEthernet 0/24
+SW-INTRUZ(config-if)# switchport mode dynamic desirable
+SW-INTRUZ(config-if)# interface fastEthernet 0/1
+SW-INTRUZ(config-if)# switchport mode access
+SW-INTRUZ(config-if)# switchport access vlan 30
+```
+
+PC-INTRUZ: `172.16.X.110/28`, brama `172.16.X.97`. Sprawdź, czy pinguje PC-SEKR, i wykonaj na SW-2 `show interfaces trunk`.
+
+<KeywordAnswer
+  title="Jak intruz dostał się do sekretariatu?"
+  question="Nikt nie konfigurował portu Fa0/24 na SW-2, a mimo to intruz ma dostęp do VLAN-u administracji. Dlaczego?"
+  keywords={['DTP', 'dynamic', 'negocj', 'trunk']}
+  explanation="Porty przełącznika 2960 domyślnie pracują w trybie dynamic auto i negocjują tryb pracy protokołem DTP. Obcy przełącznik zaproponował trunk (dynamic desirable), a SW-2 go przyjął – od tej chwili przez gniazdko przechodzą wszystkie VLAN-y."
+  storageKey="cw3_e2_atak"
+/>
+
+<Checklist
+title="Utwardzanie SW-1 i SW-2"
+storageKey="cw3_e2_obrona"
+sections={[
+{ title: 'Porty nieużywane', items: [
+'switchport mode access',
+'switchport access vlan 999 – VLAN „czarna dziura”',
+'shutdown',
+]},
+{ title: 'Porty użytkowników', items: [
+'switchport nonegotiate – wyłączenie DTP',
+]},
+{ title: 'Trunki', items: [
+'switchport trunk allowed vlan 10,20,30,40,99',
+'switchport trunk native vlan 999 – na wszystkich trunkach po obu stronach łącza między przełącznikami',
+]},
+]}
+/>
+
+Włącz Fa0/24 na SW-2 (`no shutdown`) i powtórz atak – trunk nie powinien się zestawić.
+</Step>
+
+<Step title="2.6 Dla chętnych: IPv6 w każdym VLAN-ie">
+Każdy VLAN dostaje własny prefiks `/64`, a numer VLAN-u zapisujemy w identyfikatorze podsieci, np. VLAN 10 → `2001:db8:X:10::/64`.
+
+```
+R1-X(config)# ipv6 unicast-routing
+R1-X(config)# interface gigabitEthernet 0/0.10
+R1-X(config-subif)# ipv6 address 2001:db8:X:10::1/64
+```
+
+Powtórz dla pozostałych podinterfejsów, a na komputerach wybierz *IPv6 Configuration ⇒ Automatic*. Sprawdź, czy PC-U1 pinguje PC-N1 po adresie IPv6.
+
+<KeywordAnswer
+  title="IPv6 a VLSM"
+  question="Dlaczego w IPv6 nie trzeba dobierać prefiksu do liczby hostów, tak jak zrobiliśmy to w Tabeli 10?"
+  keywords={['/64', '64', 'SLAAC', 'zawsze']}
+  explanation="W IPv6 każda sieć z hostami ma prefiks /64 niezależnie od liczby urządzeń (tego wymaga m.in. SLAAC), a adresów jest tyle, że oszczędzanie nie ma sensu. Planuje się tylko liczbę podsieci /64, a nie ich rozmiar."
+  storageKey="cw3_e2_ipv6"
+/>
+</Step>
+</StepByStep>
+
 1. fizyczna
 2. vlan
 3. adresacja
@@ -363,6 +660,16 @@ allowRemoveRows={false}
 
 [^RFC2827]: [RFC 2827](https://www.rfc-editor.org/rfc/rfc2827) (BCP 38) – Network Ingress Filtering, 2000.
 
+[^RFC4291]: [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291) – IP Version 6 Addressing Architecture, 2006, rozdz. 2.5.1 (identyfikator interfejsu 64 bity) i 2.6.1 (adres subnet-router anycast).
+
+[^RFC7421]: [RFC 7421](https://www.rfc-editor.org/rfc/rfc7421) – Analysis of the 64-bit Boundary in IPv6 Addressing, 2015, rozdz. 2 (zalety stałej długości identyfikatora) i rozdz. 4 (skutki prefiksów innych niż /64).
+
+[^RFC6177]: [RFC 6177](https://www.rfc-editor.org/rfc/rfc6177) (BCP 157) – IPv6 Address Assignment to End Sites, 2011, rozdz. 2 „On /48 Assignments to End Sites”.
+
+[^ripe690]: RIPE-690 – [Best Current Operational Practice for Operators: IPv6 prefix assignment for end-users](https://ripe.net/publications/docs/ripe-690), RIPE NCC, 2017, rozdz. 4.2 (warianty /48 i /56; podrozdz. 4.2.2 – /48 dla firm, /56 dla klientów indywidualnych).
+
+[^RFC3849]: [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849) – IPv6 Address Prefix Reserved for Documentation, 2004.
+
 <!-- ACL -->
 [^cisco-acl]: Cisco Systems, *Security Configuration Guide: Access Control Lists* (Cisco IOS XE), dokumentacja techniczna, cisco.com.
 
@@ -375,13 +682,17 @@ allowRemoveRows={false}
 [^nist41]: NIST SP 800-41 Rev. 1 – [Guidelines on Firewalls and Firewall Policy](https://csrc.nist.gov/pubs/sp/800/41/r1/final), NIST, 2009, rozdz. 2 (filtry pakietów a inspekcja stanowa).
 <!-- ---- -->
 
+
+
+
+
+
+
 [^nist41]: NIST SP 800-41 Rev. 1, Rozdział 2,4 – [Guidelines on Firewalls and Firewall Policy](https://csrc.nist.gov/pubs/sp/800/41/r1/final), NIST, 2009.
 
-[^RFC2663]: [RFC 2663](https://www.rfc-editor.org/rfc/rfc2663) – IP Network Address Translator (NAT) Terminology and Considerations, 1999.
 
-[^RFC3022]: [RFC 3022](https://www.rfc-editor.org/rfc/rfc3022) – Traditional IP Network Address Translator (Traditional NAT), 2001.
 
-[^RFC1918]: [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) – Address Allocation for Private Internets, 1996.
+
 
 [^RFC1633]: [RFC 1633](https://www.rfc-editor.org/rfc/rfc1633) – Integrated Services in the Internet Architecture, 1994.
 

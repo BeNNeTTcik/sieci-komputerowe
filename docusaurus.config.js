@@ -59,7 +59,6 @@ const config = {
       navbar: {
         title: 'Moje kursy',
         items: [
-          { to: '/', label: 'Start', position: 'left' },
           { type: 'docSidebar', docsPluginId: 'sieci', sidebarId: 'cwiczeniaSidebar', label: 'Sieci komputerowe', position: 'left' },
           { type: 'docSidebar', docsPluginId: 'administrowanie-sieciami', sidebarId: 'administrowanie-sieciamiSidebar', label: 'Administrowanie sieciami', position: 'left' },
         ],
