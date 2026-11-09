@@ -114,7 +114,7 @@ Ustaw statyczną adresację IP zgdnie z poniższym schematem:
 
 W Windows wejdź w "Panel sterowania" → "Centrum sieci" → "Zmień ustawienia karty" → właściwości "IPv4":
 - PC-A: <SharedValue shared="pca_ip" fallback="—" />, maska <SharedValue shared="maska" fallback="—" />
-- PC-A: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
+- PC-B: <SharedValue shared="pcb_ip" fallback="—" />, maska <SharedValue shared="maskb" fallback="—" />
 
 Zweryfikuj łączność w Wierszu poleceń:
 
@@ -140,7 +140,7 @@ Urządzenie prosto "z pudełka" (albo po `erase startup-config` + `reload`) **ni
 Podłącz **kabel konsolowy** (typu rollover, RJ-45 na jednym końcu do portu `CONSOLE` routera/przełącznika, na drugim — RJ-45-na-USB albo RJ-45-na-DB9, w zależności od laptopa) między komputerem a urządzeniem Cisco.
 
 1. Sprawdź w **Menedżerze urządzeń** (Windows: Start → wpisz "Menedżer urządzeń" → rozwiń "Porty (COM i LPT)") numer przydzielonego portu, np. `COM1`.
-2. Uruchom **PuTTY** i skonfiguruj połączenie (Rysunek 1):
+2. Uruchom **PuTTY** i skonfiguruj połączenie (Connection -> Serial) (Rysunek 1):
 
 <div className="text-center">
 ![Rys1](/img/6/putty.png)
@@ -148,13 +148,16 @@ Podłącz **kabel konsolowy** (typu rollover, RJ-45 na jednym końcu do portu `C
 Rys.1 Konfiguracja połączenia szeregowego [^putty]
 </div>
 
-3. Kliknij **Open** — powinieneś zobaczyć znak zachęty urządzenia (np. `Switch` albo `Router` zakończone znakiem większości), bez logowania (fabrycznie brak hasła na konsoli).
+4. Przejdz do zakładki "Session" -> wybierz Serial -> wprowadz port COM zgodny z tym z **Menedżer urządzeń** i następnie kliknij "Open"
+3. Aby zaobserwaować komunikacje kilknij **Enter**.
 </Step>
 
 <Step title="Nazwa hosta i baner ostrzegawczy">
 Pierwsze polecenia na dowolnym urządzeniu Cisco to nadanie mu unikalnej nazwy oraz banera wyświetlanego **przed** logowaniem:
 
 ```
+Switch>enable
+Switch#configure terminal
 Switch(config)# hostname SW-X
 SW-X(config)# banner motd #
 To urządzenie jest wlasnoscia laboratorium sieci komputerowych.
