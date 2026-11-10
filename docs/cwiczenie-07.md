@@ -51,10 +51,6 @@ Rys. 1 Ramka Ethernet ze znacznikiem IEEE 802.1Q [^claude]
 
 ## II. Zadania do wykonania
 
-:::info Sprzęt
-Całe ćwiczenie wykonaj na **przełączniku warstwy 3** (w Packet Tracerze: **Cisco 3560-24PS**). Część z portami access zadziała także na 2960, ale część z SVI — nie: przełącznik 2960 nie obsługuje polecenia `ip routing`, więc nie przekaże ruchu między VLAN-ami.
-:::
-
 ### Konfiguracja port access - UNTAG
 
 <StepByStep>
@@ -82,7 +78,7 @@ Całe ćwiczenie wykonaj na **przełączniku warstwy 3** (w Packet Tracerze: **C
         ],
       },
       {
-        node: { icon: '🔀', label: 'SW-X', sublabel: '3560-24PS' },
+        node: { icon: '🔀', label: 'SW-X' },
         fields: [
           { key: 'swMgmt', label: 'adr. zarządz.', placeholder: (x) => `172.16.${x}.253`, type: 'address' },
         ],
@@ -99,7 +95,7 @@ W tej części ustaw na wszystkich komputerach adresy z **tej samej sieci** (zgo
 Na **SW-X** utwórz dwa VLAN-y i przypisz do każdego po dwa porty:
 
 ```
-# Etap tworzenia VLAN-ów
+# Etap tworzenie VLAN-ów
 
 Switch(config)# vlan 10
 Switch(config-vlan)# name Studenci
@@ -108,14 +104,14 @@ Switch(config)# vlan 20
 Switch(config-vlan)# name Pracownicy
 Switch(config-vlan)# exit
 
-# Etap przypisania portów do VLAN-u
+# Etap przypisanie portów do VLAN-u
 
-Switch(config)# interface range fastEthernet 0/1 - 2
+Switch(config)# interface range GigabiteEthernet 1/0/1 - 2
 Switch(config-if-range)# switchport mode access
 Switch(config-if-range)# switchport access vlan 10
 Switch(config-if-range)# exit
 
-Switch(config)# interface range fastEthernet 0/3 - 4
+Switch(config)# interface range GigabiteEthernet 1/0/3 - 4
 Switch(config-if-range)# switchport mode access
 Switch(config-if-range)# switchport access vlan 20
 Switch(config-if-range)# exit
@@ -139,10 +135,10 @@ Sprawdź **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty są 
     {key: 'wyjasnienie', label: 'Dlaczego?'},
   ]}
   initialRows={[
-    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/2 (VLAN 10)'},
-    {zrodlo: 'Fa0/3 (VLAN 20)', cel: 'Fa0/4 (VLAN 20)'},
-    {zrodlo: 'Fa0/1 (VLAN 10)', cel: 'Fa0/3 (VLAN 20)'},
-    {zrodlo: 'Fa0/2 (VLAN 10)', cel: 'Fa0/4 (VLAN 20)'},
+    {zrodlo: 'Gig1/0/1 (VLAN 10)', cel: 'Gig1/0/2 (VLAN 10)'},
+    {zrodlo: 'Gig1/0/3 (VLAN 20)', cel: 'Gig1/0/4 (VLAN 20)'},
+    {zrodlo: 'Gig1/0/1 (VLAN 10)', cel: 'Gig1/0/3 (VLAN 20)'},
+    {zrodlo: 'Gig1/0/2 (VLAN 10)', cel: 'Gig1/0/4 (VLAN 20)'},
   ]}
   allowAddRows={false}
   allowRemoveRows={false}
@@ -160,12 +156,6 @@ Sprawdź **na żywo**, jak VLAN-y izolują ruch, mimo że wszystkie 4 porty są 
 W przełącznikach **pracujących tylko w warstwie 2** do komunikacji między VLAN-ami potrzebny jest mechanizm **router-on-a-stick**, który wymaga dodatkowego urządzenia — routera.
 </div>
 
-:::warning Trzy warunki działania SVI
-1. **Każdy VLAN to osobna sieć IP.** Hosty z VLAN 10 i VLAN 20 muszą mieć adresy z różnych podsieci — inaczej host uzna drugi komputer za sąsiada, wyśle zapytanie ARP zamiast pakietu do bramy, a ARP nie przejdzie między VLAN-ami.
-2. **Brama domyślna hosta = adres SVI jego VLAN-u.**
-3. **SVI jest aktywny (`up/up`) tylko wtedy, gdy VLAN istnieje i ma co najmniej jeden działający port** z podłączonym urządzeniem (mechanizm *autostate*).
-:::
-
 <StepByStep>
 <Step title="Topologia i nowa adresacja">
 <TopologyBuilder
@@ -177,14 +167,14 @@ W przełącznikach **pracujących tylko w warstwie 2** do komunikacji między VL
       {
         stacked: [
           {
-            icon: '🖥️', label: 'PC1', sublabel: 'Fa0/1 · VLAN 10',
+            icon: '🖥️', label: 'PC1', sublabel: 'Gig1/0/1 · VLAN 10',
             fields: [
-              { key: 'pc1_ip', label: 'adres IP', placeholder: () => `10.1.10.10/24`, type: 'address' },
-              { key: 'pc1_gw', label: 'brama', placeholder: () => `10.1.10.1`, type: 'address' },
+              { key: 'pc1_ip', label: 'adres IP', placeholder: () => `10.1.10.10/24`, type: 'address', shared: 'pca_ip' },
+              { key: 'pc1_gw', label: 'brama', placeholder: () => `10.1.10.1`, type: 'address', shared: 'pcb_ip' },
             ],
           },
           {
-            icon: '🖥️', label: 'PC2', sublabel: 'Fa0/3 · VLAN 20',
+            icon: '🖥️', label: 'PC2', sublabel: 'Gig1/0/3 · VLAN 20',
             fields: [
               { key: 'pc2_ip', label: 'adres IP', placeholder: () => `10.1.20.10/24`, type: 'address' },
               { key: 'pc2_gw', label: 'brama', placeholder: () => `10.1.20.1`, type: 'address' },
@@ -193,7 +183,7 @@ W przełącznikach **pracujących tylko w warstwie 2** do komunikacji między VL
         ],
       },
       {
-        node: { icon: '🔀', label: 'SW-X', sublabel: '3560-24PS' },
+        node: { icon: '🔀', label: 'SW-X'},
         fields: [
           { key: 'svi10', label: 'SVI VLAN 10', placeholder: () => `10.1.10.1/24`, type: 'address' },
           { key: 'svi20', label: 'SVI VLAN 20', placeholder: () => `10.1.20.1/24`, type: 'address' },
@@ -203,12 +193,12 @@ W przełącznikach **pracujących tylko w warstwie 2** do komunikacji między VL
   }}
 />
 
-**Zmień adresację komputerów** — adresy z części I (wspólna sieć) tutaj nie zadziałają. W Packet Tracerze: *PC → Desktop → IP Configuration*.
+**Zmień adresację komputerów** — adresy z części I (wspólna sieć) tutaj nie zadziałają.
 
 | Host | Port | VLAN | Adres IP | Maska | Brama domyślna |
 |---|---|---|---|---|---|
-| PC1 | Fa0/1 | 10 | 10.1.10.10 | 255.255.255.0 | 10.1.10.1 |
-| PC2 | Fa0/3 | 20 | 10.1.20.10 | 255.255.255.0 | 10.1.20.1 |
+| PC1 | Gig1/0/1 | 10 | 10.1.10.10 | 255.255.255.0 | 10.1.10.1 |
+| PC2 | Gig1/0/3 | 20 | 10.1.20.10 | 255.255.255.0 | 10.1.20.1 |
 
 Sprawdź na każdym komputerze poleceniem `ipconfig`, czy adres i brama są ustawione poprawnie.
 </Step>
@@ -224,18 +214,18 @@ Switch(config)# vlan 20
 Switch(config-vlan)# name Pracownicy
 Switch(config-vlan)# exit
 
-Switch(config)# interface range fastEthernet 0/1 - 2
+Switch(config)# Gig1/0 range GigabiteEthernet 1/0/1 - 2
 Switch(config-if-range)# switchport mode access
 Switch(config-if-range)# switchport access vlan 10
 Switch(config-if-range)# exit
 
-Switch(config)# interface range fastEthernet 0/3 - 4
+Switch(config)# interface range GigabiteEthernet 1/0/3 - 4
 Switch(config-if-range)# switchport mode access
 Switch(config-if-range)# switchport access vlan 20
 Switch(config-if-range)# exit
 ```
 
-Podłącz **PC1 do Fa0/1** (VLAN 10), a **PC2 do Fa0/3** (VLAN 20). Jeśli oba komputery trafią do portów tego samego VLAN-u, SVI drugiego VLAN-u pozostanie nieaktywny.
+Podłącz **PC1 do Gig1/0/1** (VLAN 10), a **PC2 do Gig1/0/3** (VLAN 20). Jeśli oba komputery trafią do portów tego samego VLAN-u, SVI drugiego VLAN-u pozostanie nieaktywny.
 </Step>
 
 <Step title="Konfiguracja SVI i routingu">
@@ -303,10 +293,10 @@ Wykonaj kolejno pingi z PC1 i zapisz wyniki w Tabeli 2. W wierszu 4 przepnij PC1
     {key: 'wyjasnienie', label: 'Dlaczego?'},
   ]}
   initialRows={[
-    {zrodlo: 'PC1 – Fa0/1 (VLAN 10)', cel: '10.1.10.1 – SVI VLAN 10 (brama)'},
-    {zrodlo: 'PC1 – Fa0/1 (VLAN 10)', cel: '10.1.20.1 – SVI VLAN 20'},
-    {zrodlo: 'PC1 – Fa0/1 (VLAN 10)', cel: 'PC2 – Fa0/3 (VLAN 20)'},
-    {zrodlo: 'PC1 – Fa0/2 (VLAN 10)', cel: 'PC2 – Fa0/4 (VLAN 20)'},
+    {zrodlo: 'PC1 – Gig1/0/1 (VLAN 10)', cel: '10.1.10.1 – SVI VLAN 10 (brama)'},
+    {zrodlo: 'PC1 – Gig1/0/1 (VLAN 10)', cel: '10.1.20.1 – SVI VLAN 20'},
+    {zrodlo: 'PC1 – Gig1/0/1 (VLAN 10)', cel: 'PC2 – Gig1/0/3 (VLAN 20)'},
+    {zrodlo: 'PC1 – Gig1/0/2 (VLAN 10)', cel: 'PC2 – Gig1/0/4 (VLAN 20)'},
     {zrodlo: 'PC1 (VLAN 10), po no ip routing', cel: 'PC2 (VLAN 20)'},
   ]}
   allowAddRows={false}
