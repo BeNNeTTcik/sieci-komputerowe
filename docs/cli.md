@@ -1,12 +1,13 @@
 ---
 title: Polecenia CLI symulatora
 sidebar_label: Polecenia CLI
-sidebar_position: 20
+sidebar_position: 21
 ---
 
 Symulator ma własny, prosty język poleceń – **taki sam na każdym urządzeniu**. Widoczne są tylko polecenia z włączonych
 **pakietów protokołów** (menu „Pakiety”). Słowa kluczowe można skracać (np. `sh int` = `show interfaces`),
-a `help <polecenie>` pokazuje składnię i przykłady. Adresy podaje się w notacji adres/prefiks:
+a `help <polecenie>` pokazuje składnię i przykłady. Klawisz **Tab** uzupełnia polecenie, słowo kluczowe albo nazwę interfejsu;
+gdy pasuje kilka możliwości, pokazuje ich listę (np. `show ` + Tab). Strzałki ↑/↓ przywołują poprzednie polecenia. Adresy podaje się w notacji adres/prefiks:
 `192.168.1.10/24` ([RFC 4632](https://www.rfc-editor.org/rfc/rfc4632)) albo `2001:db8:1::10/64` ([RFC 4291](https://www.rfc-editor.org/rfc/rfc4291)).
 
 ## Wszystkie urządzenia
@@ -17,6 +18,7 @@ a `help <polecenie>` pokazuje składnię i przykłady. Adresy podaje się w nota
 | `show interfaces \| ip \| routes \| arp \| neighbors \| mac \| vlans \| dhcp \| dns \| services \| clock \| mail \| files \| jobs \| config` | stan urządzenia; `show config` wypisuje polecenia odtwarzające konfigurację |
 | `set hostname <nazwa>` | zmiana nazwy |
 | `interface <if> up` / `down` | włączenie / wyłączenie interfejsu |
+| `interface <if> loss <0–100>` | utrata ramek (%) na kablu podłączonym do interfejsu, w obie strony (pakiet TCP i UDP) |
 | `clear` | czyszczenie ekranu |
 
 ## Adresy i routing (pakiety IPv4 / IPv6)
@@ -52,12 +54,14 @@ a `help <polecenie>` pokazuje składnię i przykłady. Adresy podaje się w nota
 | `mail account <adres> pass <hasło>` / `mail send <adres> <temat…>` / `mail check` | Poczta | konto, wysyłka SMTP, odbiór POP3 |
 | `ntp sync <host>` | NTP | synchronizacja zegara |
 | `print <adres> [doc <nazwa>]` | Drukowanie | zadanie IPP |
+| `tcp-send <host> [port <n>] [size <bajty>] [-6]` | TCP i UDP | dane testowe przez TCP (domyślnie 4000 B na port 9): uzgadnianie, segmenty po 1000 B, okno, potwierdzenia, retransmisje, zamknięcie |
+| `udp-send <host> [port <n>] [size <bajty>] [-6]` | TCP i UDP | te same dane przez UDP: datagramy po 1000 B bez potwierdzeń; zamknięty port – ICMP Port Unreachable |
 
 ## Usługi – serwer
 
 | Polecenie | Opis |
 |---|---|
-| `service list` / `service <dhcp\|dns\|http\|https\|ftp\|mail\|ntp> on\|off` | włączanie usług |
+| `service list` / `service <dhcp\|dns\|http\|https\|ftp\|mail\|ntp\|discard> on\|off` | włączanie usług (discard – odbiornik danych testowych TCP i UDP na porcie 9, RFC 863) |
 | `dns-record add <nazwa> A\|AAAA\|MX <wartość>` / `dns-record del <nazwa> [typ]` | strefa DNS |
 | `web set <ścieżka> <treść…>` / `web del <ścieżka>` | strony WWW |
 | `ftp-file add <nazwa> <treść…>` / `ftp-file del <nazwa>` | pliki FTP |

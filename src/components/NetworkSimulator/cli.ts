@@ -6,6 +6,7 @@
 import {
   Device,
   Network,
+  OSPF_COST,
   RecordType,
   SERVICES,
   SERVICE_LABEL,
@@ -58,6 +59,8 @@ export interface CliActions {
   print(d: Device, host: string, doc: string, v: 4 | 6): void;
   tcpSend(d: Device, host: string, port: number, size: number, v: 4 | 6): void;
   udpSend(d: Device, host: string, port: number, size: number, v: 4 | 6): void;
+  /** zmiana, po której routery z RIP/OSPF wymieniają informacje (konfiguracja protokołu, interfejsu, adresu) */
+  routing?(d: Device): void;
 }
 
 export interface CliLine {
@@ -157,6 +160,14 @@ export const COMMANDS: CmdDoc[] = [
   },
   { verb: 'dhcp-client', for: ['pc', 'printer'], pack: 'dhcp', syntax: ['dhcp-client start', 'dhcp-client release'], text: 'Pobiera konfigurację z serwera DHCP albo ją zwalnia.', examples: ['dhcp-client start'] },
   { verb: 'dns', for: HOSTS, pack: 'dns', syntax: ['dns set <adres serwera>', 'dns flush'], text: 'Ustawia serwer DNS albo czyści pamięć podręczną nazw.', examples: ['dns set 192.168.1.10'] },
+  {
+    verb: 'hosts',
+    for: HOSTS,
+    pack: 'dns',
+    syntax: ['hosts add <nazwa> <adres>', 'hosts del <nazwa>', 'hosts list'],
+    text: 'Plik hosts: nazwy przypisane na stałe na tym urządzeniu. Mają pierwszeństwo przed serwerem DNS (ping, http i inne), ale nslookup ich nie czyta.',
+    examples: ['hosts list', 'hosts add intranet.szkola.lab 192.168.2.80', 'hosts del intranet.szkola.lab'],
+  },
   { verb: 'nslookup', for: L3, pack: 'dns', syntax: ['nslookup <nazwa> [A | AAAA | MX]'], text: 'Zapytanie do serwera DNS (RFC 1035).', examples: ['nslookup www.szkola.lab', 'nslookup szkola.lab MX'] },
   { verb: 'vlan', for: ['switch'], pack: 'vlan', syntax: ['vlan add <id> [name <nazwa>]', 'vlan del <id>'], text: 'Tworzy lub usuwa VLAN (1–4094).', examples: ['vlan add 10 name BIURO'] },
   { verb: 'arp', for: L3, pack: 'ipv4', syntax: ['arp flush'], text: 'Czyści tablicę ARP – przy następnym połączeniu zobaczysz znowu zapytania ARP.', examples: ['arp flush'] },
@@ -200,11 +211,47 @@ export const COMMANDS: CmdDoc[] = [
   },
   { verb: 'ntp', for: L3, pack: 'ntp', syntax: ['ntp sync <host>'], text: 'Synchronizuje zegar z serwerem czasu (RFC 5905).', examples: ['ntp sync ntp.szkola.lab'] },
   { verb: 'print', for: ['pc'], pack: 'print', syntax: ['print <adres drukarki> [doc <nazwa>]'], text: 'Zadanie drukowania przez IPP (TCP 631, RFC 8011).', examples: ['print 192.168.1.50 doc referat.pdf'] },
-  { verb: 'service', for: ['server'], syntax: ['service list', 'service <dhcp|dns|http|https|ftp|mail|ntp> on | off'], text: 'Włącza lub wyłącza usługi serwera.', examples: ['service list', 'service ftp off'] },
+  { verb: 'service', for: ['server'], syntax: ['service list', 'service <dhcp|dns|http|https|ftp|mail|ntp|discard> on | off'], text: 'Włącza lub wyłącza usługi serwera.', examples: ['service list', 'service ftp off'] },
   { verb: 'dns-record', for: ['server'], pack: 'dns', syntax: ['dns-record add <nazwa> A | AAAA | MX <wartość>', 'dns-record del <nazwa> [typ]'], text: 'Rekordy strefy DNS.', examples: ['dns-record add www.szkola.lab A 192.168.1.10', 'dns-record add szkola.lab MX mail.szkola.lab'] },
   { verb: 'web', for: ['server'], pack: 'web', syntax: ['web set <ścieżka> <treść…>', 'web del <ścieżka>'], text: 'Strony serwera WWW.', examples: ['web set /kontakt Sekretariat: pokój 12'] },
   { verb: 'ftp-file', for: ['server'], pack: 'ftp', syntax: ['ftp-file add <nazwa> <treść…>', 'ftp-file del <nazwa>'], text: 'Pliki udostępniane przez FTP.', examples: ['ftp-file add notatki.txt Adresacja IPv6 – powtórka'] },
   { verb: 'user', for: ['server'], pack: ['ftp', 'mail'], syntax: ['user add <login> <hasło>', 'user del <login>'], text: 'Konta użytkowników (logowanie FTP i skrzynki pocztowe).', examples: ['user add nauczyciel tajne1'] },
+  {
+    verb: 'rip',
+    for: ['router'],
+    pack: 'routing',
+    syntax: ['rip network <sieć>/<prefiks>', 'rip network del <sieć>/<prefiks>', 'rip update', 'rip disable'],
+    text: 'RIP v2 (RFC 2453): włącza RIP na interfejsach z adresem z podanej sieci i ogłasza ich sieci sąsiadom. Metryka to liczba skoków (16 = nieosiągalna).',
+    examples: ['rip network 192.168.1.0/24', 'rip network 10.0.0.0/8', 'show rip'],
+  },
+  {
+    verb: 'ospf',
+    for: ['router'],
+    pack: 'routing',
+    syntax: ['ospf network <sieć>/<prefiks> area <nr>', 'ospf network del <sieć>/<prefiks>', 'ospf router-id <adres>', 'ospf cost <if> <koszt>', 'ospf disable'],
+    text: 'OSPF v2 (RFC 2328): włącza OSPF na interfejsach z adresem z podanej sieci. Routery nawiązują sąsiedztwo (Hello), wymieniają LSA i liczą najkrótsze ścieżki (Dijkstra). Koszt domyślny interfejsu: 10.',
+    examples: ['ospf network 10.0.0.0/8 area 0', 'ospf network 192.168.1.0/24 area 0', 'ospf cost eth2 50', 'show ospf'],
+  },
+  {
+    verb: 'nat',
+    for: ['router'],
+    pack: 'nat',
+    syntax: [
+      'nat inside <if>',
+      'nat outside <if>',
+      'nat static <adres lokalny> <adres globalny>',
+      'nat pool <nazwa> <od>-<do>',
+      'nat source <sieć>/<prefiks> pool <nazwa> [overload]',
+      'nat source <sieć>/<prefiks> interface <if> overload',
+      'nat del inside|outside <if>',
+      'nat del static <adres lokalny>',
+      'nat del pool <nazwa>',
+      'nat del source <sieć>/<prefiks>',
+      'nat flush',
+    ],
+    text: 'NAT dla IPv4 (RFC 3022): statyczny (1:1, serwer widoczny z zewnątrz), dynamiczny (adres z puli dla każdego hosta) i PAT/overload (wiele hostów pod jednym adresem, rozróżnianych portem).',
+    examples: ['nat inside eth0', 'nat outside eth1', 'nat static 192.168.10.100 203.0.113.100', 'nat pool PULA 203.0.113.10-203.0.113.11', 'nat source 192.168.10.0/24 pool PULA', 'nat source 192.168.10.0/24 interface eth1 overload', 'show nat'],
+  },
   {
     verb: 'tunnel',
     for: ['router'],
@@ -344,14 +391,15 @@ function showInterfaces(net: Network, d: Device, packs: PackSet): string[] {
 function showRoutes(net: Network, d: Device, packs: PackSet): string[] {
   const rt = routingTable(net, d).filter((e) => (e.fam === 4 ? packs.ipv4 : packs.ipv6));
   if (!rt.length) return ['(tablica routingu jest pusta)'];
-  const kind = { connected: 'C', static: 'S', default: 'S*', nat64: 'N' } as const;
+  const kind = { connected: 'C', static: 'S', default: 'S*', nat64: 'N', rip: 'R', ospf: 'O' } as const;
+  const dyn = rt.some((e) => e.kind === 'rip' || e.kind === 'ospf');
   return [
     ...table(
-      ['Typ', 'Sieć docelowa', 'Następny skok', 'Interfejs', 'Stan'],
-      rt.map((e) => [kind[e.kind], `${e.network}/${e.prefix}`, e.nextHop || 'bezpośrednio', e.iface || '?', e.active ? 'aktywna' : 'nieaktywna']),
+      ['Typ', 'Sieć docelowa', 'Następny skok', 'Interfejs', ...(dyn ? ['Metryka'] : []), 'Stan'],
+      rt.map((e) => [kind[e.kind], `${e.network}/${e.prefix}`, e.nextHop || 'bezpośrednio', e.iface || '?', ...(dyn ? [e.metric !== undefined ? String(e.metric) : '-'] : []), e.active ? 'aktywna' : 'nieaktywna']),
     ),
     '',
-    'C – sieć podłączona bezpośrednio, S – statyczna, S* – domyślna, N – prefiks NAT64',
+    `C – sieć podłączona bezpośrednio, S – statyczna, S* – domyślna, N – prefiks NAT64${dyn ? ', R – RIP (metryka: skoki), O – OSPF (metryka: koszt)' : ''}`,
   ];
 }
 
@@ -395,12 +443,26 @@ function configBody(d: Device, packs: PackSet): string[] {
   if (d.type === 'router') {
     for (const r of d.routes) if (fam(r.nextHop) === 4 ? packs.ipv4 : packs.ipv6) c.push(`route add ${r.prefix === 0 ? 'default' : `${r.network}/${r.prefix}`} via ${r.nextHop}`);
     if (packs.transition && d.nat64) c.push(`nat64 enable prefix ${d.nat64.prefix}/${d.nat64.len} pool ${d.nat64.pool}`);
+    if (packs.routing && d.rip) for (const n of d.rip.networks) c.push(`rip network ${n.network}/${n.prefix}`);
+    if (packs.routing && d.ospf) {
+      if (d.ospf.rid) c.push(`ospf router-id ${d.ospf.rid}`);
+      for (const [i, cost] of Object.entries(d.ospf.costs)) c.push(`ospf cost ${i} ${cost}`);
+      for (const n of d.ospf.networks) c.push(`ospf network ${n.network}/${n.prefix} area ${n.area}`);
+    }
+    if (packs.nat) {
+      for (const i of d.nat.inside) c.push(`nat inside ${i}`);
+      for (const i of d.nat.outside) c.push(`nat outside ${i}`);
+      for (const x of d.nat.statics) c.push(`nat static ${x.local} ${x.global}`);
+      for (const x of d.nat.pools) c.push(`nat pool ${x.name} ${x.from}-${x.to}`);
+      for (const r of d.nat.rules) c.push(`nat source ${r.network}/${r.prefix} ${r.iface ? `interface ${r.iface}` : `pool ${r.pool}`}${r.overload ? ' overload' : ''}`);
+    }
   } else {
     if (packs.dhcp && dyn) c.push('dhcp-client start');
     else if (packs.ipv4 && d.gateway) c.push(`route add default via ${d.gateway}`);
     if (packs.ipv6 && d.slaac) c.push('ipv6 autoconf');
     else if (packs.ipv6 && d.gateway6) c.push(`route add default via ${d.gateway6}`);
     if (packs.dns && d.dns && !dyn) c.push(`dns set ${d.dns}`);
+    if (packs.dns) for (const h of d.hosts) c.push(`hosts add ${h.name} ${h.ip}`);
   }
   if (packs.dhcp) for (const p of d.pools) c.push(`dhcp-server add ${p.name} net ${cidr(p.network, p.mask)} gw ${p.gateway} range ${p.start}-${p.end}${p.dns ? ` dns ${p.dns}` : ''}`);
   if (d.type === 'server') {
@@ -419,9 +481,10 @@ function configBody(d: Device, packs: PackSet): string[] {
   return c;
 }
 
-function show(net: Network, d: Device, args: string[], packs: PackSet): CliResult {
+/** tematy „show” dostępne na urządzeniu przy włączonych pakietach */
+function showTopics(d: Device, packs: PackSet): string[] {
   const l3 = d.type !== 'switch';
-  const topics = [
+  return [
     'interfaces',
     ...(l3 ? ['ip', 'routes', 'clock'] : ['mac']),
     ...(l3 && packs.ipv4 ? ['arp'] : []),
@@ -434,9 +497,15 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
     ...(packs.ftp && (d.type === 'server' || d.type === 'pc') ? ['files'] : []),
     ...(d.type === 'printer' ? ['jobs'] : []),
     ...(d.type === 'router' && packs.transition ? ['tunnels', 'nat64'] : []),
+    ...(d.type === 'router' && packs.routing ? ['rip', 'ospf'] : []),
+    ...(d.type === 'router' && packs.nat ? ['nat'] : []),
     ...(d.type === 'switch' && packs.security ? ['security'] : []),
     'config',
   ];
+}
+
+function show(net: Network, d: Device, args: string[], packs: PackSet): CliResult {
+  const topics = showTopics(d, packs);
   const t = pick(args[0], topics);
   if (!t) return fail('podaj, co pokazać', `show ${topics.join(' | ')}`);
   if (t === 'ambiguous') return fail(`niejednoznaczne „${args[0]}”`, `show ${topics.join(' | ')}`);
@@ -459,6 +528,12 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
     }
     case 'routes':
       return ok(...showRoutes(net, d, packs));
+    case 'rip':
+      return ok(...showRip(net, d));
+    case 'ospf':
+      return ok(...showOspf(net, d));
+    case 'nat':
+      return ok(...showNat(d));
     case 'arp':
       return ok(...(d.arp.length ? table(['Adres IP', 'Adres MAC', 'Interfejs'], d.arp.map((a) => [a.ip, a.mac, a.iface])) : ['(tablica ARP jest pusta)']));
     case 'neighbors':
@@ -480,7 +555,7 @@ function show(net: Network, d: Device, args: string[], packs: PackSet): CliResul
       }
       return ok(`Klient DHCP: ${d.dhcp ? 'włączony' : 'wyłączony (adres statyczny)'}`, `Adres: ${hasIp(d.ifaces[0]) ? cidr(d.ifaces[0].ip, d.ifaces[0].mask) : '-'}`, `Brama: ${d.gateway || '-'}`);
     case 'dns': {
-      const lines = [`Serwer DNS: ${d.dns || '-'}`, 'Pamięć podręczna:', ...(d.dnsCache.length ? table(['Nazwa', 'Typ', 'Wartość'], d.dnsCache.map((r) => [r.name, r.type, r.value])) : ['  (pusta)'])];
+      const lines = [`Serwer DNS: ${d.dns || '-'}`, ...(d.hosts.length ? ['Plik hosts (pierwszeństwo przed DNS):', ...d.hosts.map((h) => `  ${h.name} → ${h.ip}`)] : []), 'Pamięć podręczna:', ...(d.dnsCache.length ? table(['Nazwa', 'Typ', 'Wartość'], d.dnsCache.map((r) => [r.name, r.type, r.value])) : ['  (pusta)'])];
       if (d.type === 'server') lines.push('', 'Strefa (rekordy serwera):', ...(d.records.length ? table(['Nazwa', 'Typ', 'Wartość'], d.records.map((r) => [r.name, r.type, r.value])) : ['  (brak rekordów)']));
       return ok(...lines);
     }
@@ -1024,6 +1099,239 @@ function cmdSecurity(d: Device, a: string[]): CliResult {
 
 // ---------- wejście ----------
 
+// ---------- routing dynamiczny i NAT ----------
+
+function netArg(arg: string | undefined): { network: string; prefix: number } | null {
+  const c = parseAddr(arg);
+  if (!c || c.fam !== 4) return null;
+  return { network: netOf(c.ip, c.prefix), prefix: c.prefix };
+}
+
+function coveredIfaces(d: Device, n: { network: string; prefix: number }) {
+  return d.ifaces.filter((i) => hasIp(i) && inPrefix(i.ip, n.network, n.prefix)).map((i) => i.name);
+}
+
+function cmdRip(d: Device, a: string[]): CliResult {
+  const syntax = 'rip network <sieć>/<prefiks>  |  rip network del <sieć>/<prefiks>  |  rip update  |  rip disable';
+  const op = pick(a[0], ['network', 'update', 'disable']);
+  if (!op || op === 'ambiguous') return fail('brak akcji', syntax);
+  if (op === 'disable') {
+    d.rip = null;
+    return ok('RIP wyłączony – trasy RIP usunięte z tablicy.', 'W prawdziwej sieci sąsiedzi usuną trasy przez ten router dopiero po 180 s bez aktualizacji; symulator robi to od razu.');
+  }
+  if (op === 'update') {
+    if (!d.rip) return fail('RIP nie jest włączony', 'rip network <sieć>/<prefiks>');
+    return ok('Wysyłam aktualizację RIP na wszystkie interfejsy RIP.');
+  }
+  const del = a[1]?.toLowerCase() === 'del';
+  const n = netArg(a[del ? 2 : 1]);
+  if (!n) return fail('podaj sieć IPv4 z prefiksem', 'np. rip network 192.168.1.0/24');
+  if (del) {
+    if (!d.rip?.networks.some((x) => x.network === n.network && x.prefix === n.prefix)) return fail(`sieci ${n.network}/${n.prefix} nie ma w konfiguracji RIP`);
+    d.rip.networks = d.rip.networks.filter((x) => !(x.network === n.network && x.prefix === n.prefix));
+    return ok(`RIP: usunięto sieć ${n.network}/${n.prefix}.`);
+  }
+  if (!d.rip) d.rip = { networks: [], routes: [] };
+  if (!d.rip.networks.some((x) => x.network === n.network && x.prefix === n.prefix)) d.rip.networks.push(n);
+  const ifs = coveredIfaces(d, n);
+  return {
+    lines: [
+      ...out(`RIP: sieć ${n.network}/${n.prefix} – interfejsy: ${ifs.length ? ifs.join(', ') : '(żaden – nie ma interfejsu z adresem z tej sieci)'}`),
+      ...(ifs.length ? [] : [{ text: 'Podaj sieć, do której należy adres interfejsu, np. sieć z „show ip”.', kind: 'hint' as const }]),
+    ],
+  };
+}
+
+function cmdOspf(d: Device, a: string[]): CliResult {
+  const syntax = 'ospf network <sieć>/<prefiks> area <nr>  |  ospf network del <sieć>/<prefiks>  |  ospf router-id <adres>  |  ospf cost <if> <koszt>  |  ospf disable';
+  const op = pick(a[0], ['network', 'router-id', 'cost', 'disable']);
+  if (!op || op === 'ambiguous') return fail('brak akcji', syntax);
+  if (op === 'disable') {
+    d.ospf = null;
+    return ok('OSPF wyłączony – sąsiedztwa zerwane, trasy OSPF usunięte.');
+  }
+  const cfg = () => (d.ospf ??= { rid: '', networks: [], costs: {}, neighbors: [], lsdb: [], seq: 0, routes: [] });
+  if (op === 'router-id') {
+    if (!a[1] || !isIp(a[1])) return fail('Router ID zapisuje się jak adres IPv4', 'np. ospf router-id 1.1.1.1');
+    const c = cfg();
+    c.rid = a[1];
+    c.neighbors = [];
+    c.lsdb = [];
+    c.routes = [];
+    return ok(`OSPF: Router ID ${a[1]}. Sąsiedztwa nawiązują się od nowa.`);
+  }
+  if (op === 'cost') {
+    const i = findIface(d, a[1]);
+    const cost = Number(a[2]);
+    if (!i) return fail(`nie ma interfejsu „${a[1] ?? ''}”`, 'ospf cost <if> <koszt>');
+    if (!Number.isInteger(cost) || cost < 1 || cost > 65535) return fail('koszt to liczba 1–65535', 'np. ospf cost eth2 50');
+    cfg().costs[i.name] = cost;
+    return ok(`OSPF: koszt ${i.name} = ${cost}. Im wyższy koszt, tym mniej chętnie łącze jest wybierane.`);
+  }
+  const del = a[1]?.toLowerCase() === 'del';
+  const n = netArg(a[del ? 2 : 1]);
+  if (!n) return fail('podaj sieć IPv4 z prefiksem', 'np. ospf network 10.0.0.0/8 area 0');
+  if (del) {
+    if (!d.ospf?.networks.some((x) => x.network === n.network && x.prefix === n.prefix)) return fail(`sieci ${n.network}/${n.prefix} nie ma w konfiguracji OSPF`);
+    d.ospf.networks = d.ospf.networks.filter((x) => !(x.network === n.network && x.prefix === n.prefix));
+    return ok(`OSPF: usunięto sieć ${n.network}/${n.prefix}.`);
+  }
+  const o = kv(a.slice(2), ['area']);
+  const area = Number(o.area ?? 'x');
+  if (!Number.isInteger(area) || area < 0) return fail('podaj numer obszaru: area <nr>', 'np. ospf network 10.0.0.0/8 area 0');
+  if (area !== 0) return fail('symulator obsługuje jeden obszar – area 0 (szkielet)');
+  const c = cfg();
+  const cur = c.networks.find((x) => x.network === n.network && x.prefix === n.prefix);
+  if (cur) cur.area = area;
+  else c.networks.push({ ...n, area });
+  const ifs = coveredIfaces(d, n);
+  return {
+    lines: [
+      ...out(`OSPF: sieć ${n.network}/${n.prefix} w obszarze ${area} – interfejsy: ${ifs.length ? ifs.join(', ') : '(żaden – nie ma interfejsu z adresem z tej sieci)'}`),
+      ...(ifs.length ? [] : [{ text: 'Podaj sieć, do której należy adres interfejsu, np. sieć z „show ip”.', kind: 'hint' as const }]),
+    ],
+  };
+}
+
+function cmdNat(d: Device, a: string[]): CliResult {
+  const nat = d.nat;
+  const op = pick(a[0], ['inside', 'outside', 'static', 'pool', 'source', 'del', 'flush']);
+  if (!op || op === 'ambiguous') return fail('brak akcji', 'nat inside | outside | static | pool | source | del | flush  (help nat)');
+  if (op === 'flush') {
+    const n = nat.table.length;
+    nat.table = [];
+    return ok(`Tablica translacji wyczyszczona (${n} wpisów). Wpisy statyczne zostają w konfiguracji.`);
+  }
+  if (op === 'inside' || op === 'outside') {
+    const i = findIface(d, a[1]);
+    if (!i) return fail(`nie ma interfejsu „${a[1] ?? ''}”`, `nat ${op} <if>`);
+    const other = op === 'inside' ? 'outside' : 'inside';
+    nat[other] = nat[other].filter((x) => x !== i.name);
+    if (!nat[op].includes(i.name)) nat[op].push(i.name);
+    return ok(`${i.name}: interfejs ${op === 'inside' ? 'wewnętrzny (sieć prywatna)' : 'zewnętrzny (Internet)'} NAT.`);
+  }
+  if (op === 'static') {
+    const [local, global] = [a[1], a[2]];
+    if (!isIp(local ?? '') || !isIp(global ?? '')) return fail('składnia: nat static <adres lokalny> <adres globalny>', 'np. nat static 192.168.10.100 203.0.113.100');
+    nat.statics = nat.statics.filter((x) => x.local !== local && x.global !== global);
+    nat.statics.push({ local, global });
+    return ok(`NAT statyczny: ${local} ↔ ${global} (w obie strony – także połączenia z zewnątrz).`);
+  }
+  if (op === 'pool') {
+    const m = /^(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)$/.exec(a[2] ?? '');
+    if (!a[1] || !m) return fail('składnia: nat pool <nazwa> <od>-<do>', 'np. nat pool PULA 203.0.113.10-203.0.113.11');
+    if (ipToInt(m[1])! > ipToInt(m[2])!) return fail('początek puli musi być mniejszy od końca');
+    nat.pools = nat.pools.filter((x) => x.name !== a[1]);
+    nat.pools.push({ name: a[1], from: m[1], to: m[2] });
+    return ok(`Pula NAT ${a[1]}: ${m[1]} – ${m[2]} (${ipToInt(m[2])! - ipToInt(m[1])! + 1} adres(y) publiczne).`);
+  }
+  if (op === 'source') {
+    const n = netArg(a[1]);
+    if (!n) return fail('podaj sieć wewnętrzną z prefiksem', 'np. nat source 192.168.10.0/24 pool PULA');
+    const o = kv(a.slice(2), ['pool', 'interface']);
+    const overload = a.slice(2).some((x) => x.toLowerCase() === 'overload');
+    if (o.interface) {
+      const i = findIface(d, o.interface);
+      if (!i) return fail(`nie ma interfejsu „${o.interface}”`);
+      if (!overload) return fail('translacja na adres interfejsu działa tylko z overload (PAT)', `nat source ${a[1]} interface ${i.name} overload`);
+      nat.rules = nat.rules.filter((r) => !(r.network === n.network && r.prefix === n.prefix));
+      nat.rules.push({ ...n, iface: i.name, overload: true });
+      return ok(`PAT: hosty z ${n.network}/${n.prefix} wychodzą pod adresem interfejsu ${i.name}${i.ip ? ` (${i.ip})` : ''}, rozróżniane numerem portu.`);
+    }
+    if (!o.pool) return fail('podaj pulę albo interfejs', 'nat source <sieć> pool <nazwa> [overload]  |  nat source <sieć> interface <if> overload');
+    if (!nat.pools.some((x) => x.name === o.pool)) return fail(`nie ma puli „${o.pool}”`, 'Najpierw: nat pool <nazwa> <od>-<do>');
+    nat.rules = nat.rules.filter((r) => !(r.network === n.network && r.prefix === n.prefix));
+    nat.rules.push({ ...n, pool: o.pool, overload });
+    return ok(overload ? `PAT: hosty z ${n.network}/${n.prefix} wychodzą pod pierwszym adresem puli ${o.pool}, rozróżniane portem.` : `NAT dynamiczny: każdy host z ${n.network}/${n.prefix} dostaje przy pierwszym pakiecie osobny adres z puli ${o.pool}.`);
+  }
+  // del
+  const what = pick(a[1], ['inside', 'outside', 'static', 'pool', 'source']);
+  if (!what || what === 'ambiguous') return fail('składnia: nat del inside|outside <if>  |  nat del static <lokalny>  |  nat del pool <nazwa>  |  nat del source <sieć>/<prefiks>');
+  if (what === 'inside' || what === 'outside') {
+    const i = findIface(d, a[2]);
+    if (!i) return fail(`nie ma interfejsu „${a[2] ?? ''}”`);
+    nat[what] = nat[what].filter((x) => x !== i.name);
+    return ok(`${i.name}: usunięto oznaczenie ${what}.`);
+  }
+  if (what === 'static') {
+    nat.statics = nat.statics.filter((x) => x.local !== a[2]);
+    return ok(`Usunięto NAT statyczny dla ${a[2] ?? ''}.`);
+  }
+  if (what === 'pool') {
+    nat.pools = nat.pools.filter((x) => x.name !== a[2]);
+    return ok(`Usunięto pulę ${a[2] ?? ''}.`);
+  }
+  const n = netArg(a[2]);
+  if (!n) return fail('podaj sieć: nat del source <sieć>/<prefiks>');
+  nat.rules = nat.rules.filter((r) => !(r.network === n.network && r.prefix === n.prefix));
+  return ok(`Usunięto regułę NAT dla ${n.network}/${n.prefix}.`);
+}
+
+function showRip(net: Network, d: Device): string[] {
+  if (!d.rip) return ['RIP wyłączony. Włącz: rip network <sieć>/<prefiks>'];
+  const ifs = d.ifaces.filter((i) => hasIp(i) && d.rip!.networks.some((n) => inPrefix(i.ip, n.network, n.prefix)));
+  return [
+    `RIP v2 – sieci: ${d.rip.networks.map((n) => `${n.network}/${n.prefix}`).join(', ') || '-'}`,
+    `Interfejsy RIP: ${ifs.map((i) => `${i.name} (${STATUS_LABEL[ifaceStatus(net, d, i)]})`).join(', ') || '-'}`,
+    '',
+    ...(d.rip.routes.length
+      ? table(['Sieć', 'Metryka (skoki)', 'Następny skok', 'Interfejs'], d.rip.routes.map((r) => [`${r.network}/${r.prefix}`, String(r.metric), r.nextHop, r.iface]))
+      : ['(brak tras nauczonych od sąsiadów)']),
+  ];
+}
+
+function showOspf(net: Network, d: Device): string[] {
+  const o = d.ospf;
+  if (!o) return ['OSPF wyłączony. Włącz: ospf network <sieć>/<prefiks> area 0'];
+  let rid = o.rid;
+  if (!rid) for (const i of d.ifaces) if (hasIp(i) && (!rid || ipToInt(i.ip)! > ipToInt(rid)!)) rid = i.ip;
+  const ifs = d.ifaces.filter((i) => hasIp(i) && o.networks.some((n) => inPrefix(i.ip, n.network, n.prefix)));
+  return [
+    `OSPF v2 – Router ID ${rid || '0.0.0.0'}${o.rid ? '' : ' (najwyższy adres interfejsu)'}, obszar 0`,
+    `Interfejsy OSPF: ${ifs.map((i) => `${i.name} koszt ${o.costs[i.name] ?? OSPF_COST}${ifaceStatus(net, d, i) === 'up' ? '' : ' (nieaktywny)'}`).join(', ') || '-'}`,
+    '',
+    'Sąsiedzi:',
+    ...(o.neighbors.length ? table(['Router ID', 'Adres', 'Interfejs', 'Stan'], o.neighbors.map((n) => [n.rid, n.ip, n.iface, n.state])) : ['  (brak – sąsiedzi pojawią się po wymianie Hello)']),
+    '',
+    'Baza stanu łączy (LSDB):',
+    ...(o.lsdb.length
+      ? table(['Router', 'Numer', 'Łącza'], o.lsdb.map((l) => [l.rid, `#${l.seq}`, l.links.map((k) => (k.kind === 'router' ? `→${k.rid} (${k.cost})` : `${k.network}/${k.prefix} (${k.cost})`)).join(', ')]))
+      : ['  (pusta)']),
+    '',
+    'Trasy z SPF:',
+    ...(o.routes.length ? table(['Sieć', 'Koszt', 'Następny skok', 'Interfejs'], o.routes.map((r) => [`${r.network}/${r.prefix}`, String(r.cost), r.nextHop, r.iface])) : ['  (brak)']),
+  ];
+}
+
+function showNat(d: Device): string[] {
+  const n = d.nat;
+  const cfg = [
+    `Wewnętrzne (inside): ${n.inside.join(', ') || '-'}    zewnętrzne (outside): ${n.outside.join(', ') || '-'}`,
+    ...n.statics.map((s) => `Statyczny: ${s.local} ↔ ${s.global}`),
+    ...n.pools.map((p) => `Pula ${p.name}: ${p.from} – ${p.to}`),
+    ...n.rules.map((r) => `Reguła: ${r.network}/${r.prefix} → ${r.iface ? `adres ${r.iface}` : `pula ${r.pool}`}${r.overload ? ' (PAT/overload)' : ' (dynamiczny)'}`),
+  ];
+  const rows = [
+    ...n.statics.map((s) => ['statyczny', '-', s.local, s.global, '-']),
+    ...n.table.map((x) => [
+      x.kind === 'pat' ? 'PAT' : 'dynamiczny',
+      x.proto === '*' ? '-' : x.proto,
+      x.proto === '*' ? x.inLocal : `${x.inLocal}:${x.inLocalPort}`,
+      x.proto === '*' ? x.inGlobal : `${x.inGlobal}:${x.inGlobalPort}`,
+      x.outside ? (x.proto === 'ICMP' ? x.outside : `${x.outside}:${x.outsidePort}`) : '-',
+    ]),
+  ];
+  return [
+    ...cfg,
+    '',
+    'Tablica translacji:',
+    ...(rows.length
+      ? [...table(['Rodzaj', 'Proto', 'Lokalny', 'Globalny', 'Zewnętrzny'], rows), 'Lokalny – adres hosta w sieci prywatnej, globalny – adres po translacji (widziany w Internecie).']
+      : ['  (pusta – wpisy powstają przy pierwszym pakiecie ze środka)']),
+    ...(n.inside.length && n.outside.length ? [] : ['', 'Wskazówka: oznacz interfejsy – nat inside <if> i nat outside <if> – bez tego NAT nie działa.']),
+  ];
+}
+
 export function runCommand(net: Network, d: Device, line: string, act: CliActions, packs: PackSet = ALL_PACKS): CliResult {
   const tk = line.trim().split(/\s+/).filter(Boolean);
   if (!tk.length) return { lines: [] };
@@ -1068,9 +1376,11 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       return ok(`Nazwa urządzenia: ${d.name}`);
     }
     case 'interface':
-      return cmdInterface(net, d, a, packs);
-    case 'ip':
-      return cmdIp(d, a, packs);
+    case 'ip': {
+      const r = v === 'interface' ? cmdInterface(net, d, a, packs) : cmdIp(d, a, packs);
+      if (!r.error && d.type === 'router' && (d.rip || d.ospf)) act.routing?.(d);
+      return r;
+    }
     case 'ipv6': {
       if (pick(a[0], ['autoconf']) !== 'autoconf') return fail('składnia: ipv6 autoconf [off]');
       if (a[1]?.toLowerCase() === 'off') {
@@ -1122,6 +1432,19 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       if (op !== 'set' || !a[1] || !fam(a[1])) return fail('składnia: dns set <adres serwera>  |  dns flush');
       d.dns = fam(a[1]) === 6 ? norm6(a[1]) : a[1];
       return ok(`Serwer DNS: ${d.dns}`);
+    }
+    case 'hosts': {
+      const op = pick(a[0] ?? 'list', ['add', 'del', 'list']);
+      if (op === 'list') return ok(...(d.hosts.length ? table(['Nazwa', 'Adres'], d.hosts.map((h) => [h.name, h.ip])) : ['(plik hosts jest pusty)']));
+      const name = a[1]?.toLowerCase().replace(/\.$/, '');
+      if (op === 'del') {
+        if (!name || !d.hosts.some((h) => h.name === name)) return fail(`w pliku hosts nie ma nazwy „${a[1] ?? ''}”`, 'hosts list');
+        d.hosts = d.hosts.filter((h) => h.name !== name);
+        return ok(`Usunięto ${name} z pliku hosts – nazwa będzie znowu rozwiązywana przez DNS.`);
+      }
+      if (op !== 'add' || !name || !a[2] || !fam(a[2])) return fail('składnia: hosts add <nazwa> <adres>  |  hosts del <nazwa>  |  hosts list');
+      d.hosts = [...d.hosts.filter((h) => !(h.name === name && fam(h.ip) === fam(a[2]))), { name, ip: fam(a[2]) === 6 ? norm6(a[2]) : a[2] }];
+      return ok(`Plik hosts: ${name} → ${a[2]} (ma pierwszeństwo przed DNS).`);
     }
     case 'nslookup': {
       if (!a[0]) return fail('podaj nazwę', 'nslookup <nazwa> [A|AAAA|MX]');
@@ -1218,6 +1541,13 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       act.print(d, args[0], o.doc ?? 'dokument.pdf', want);
       return { lines: [] };
     }
+    case 'rip':
+    case 'ospf':
+    case 'nat': {
+      const r = v === 'rip' ? cmdRip(d, a) : v === 'ospf' ? cmdOspf(d, a) : cmdNat(d, a);
+      if (!r.error && v !== 'nat') act.routing?.(d);
+      return r;
+    }
     case 'tunnel':
       return cmdTunnel(d, a);
     case 'nat64':
@@ -1245,4 +1575,157 @@ export function runCommand(net: Network, d: Device, line: string, act: CliAction
       return cmdServer(d, v, a, packs);
   }
   return fail('nieobsłużone polecenie');
+}
+
+// ---------- uzupełnianie poleceń (klawisz Tab) ----------
+
+interface Slot {
+  /** słowa kluczowe do wyboru (puste, gdy w tym miejscu jest wartość, np. adres) */
+  alts: string[];
+  /** opis wartości, np. „<if>” */
+  ph?: string;
+  /** początek grupy opcjonalnej [ … ]: indeks miejsca tuż za grupą */
+  skipTo?: number;
+}
+
+/** słowa w nawiasach [ ], które opisują wartość, a nie są słowami kluczowymi */
+const PH_WORDS = new Set(['polecenie', 'ścieżka', 'typ']);
+
+/** Zamienia wzór składni z COMMANDS (np. „interface <if> up | down”) na kolejne miejsca na słowa. */
+function slotsOf(syntax: string): Slot[] {
+  const toks: string[] = [];
+  let cur = '';
+  let depth = 0;
+  const push = () => {
+    if (cur) toks.push(cur);
+    cur = '';
+  };
+  for (const ch of syntax) {
+    if (ch === '<') depth++;
+    if (ch === '>') depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/.test(ch)) push();
+    else if (depth === 0 && (ch === '[' || ch === ']')) {
+      push();
+      toks.push(ch);
+    } else cur += ch;
+  }
+  push();
+  const slots: Slot[] = [];
+  const open: number[] = [];
+  let join = false;
+  for (const t of toks.slice(1)) {
+    if (t.startsWith('(')) break; // komentarz, np. „(serwer)”
+    if (t === '[') {
+      open.push(slots.length);
+      continue;
+    }
+    if (t === ']') {
+      const st = open.pop();
+      // grupę opcjonalną pomija się w całości
+      if (st !== undefined && slots[st]) slots[st].skipTo = Math.max(slots[st].skipTo ?? 0, slots.length);
+      continue;
+    }
+    if (t === '|') {
+      join = true;
+      continue;
+    }
+    const isPh = t.includes('<') || PH_WORDS.has(t);
+    const words = isPh ? (t.startsWith('<') && t.endsWith('>') && t.includes('|') && !t.includes(' ') ? t.slice(1, -1).split('|') : []) : t.split('|').filter(Boolean);
+    const ph = isPh && !words.length ? t : undefined;
+    if (join && slots.length && !ph && !slots[slots.length - 1].ph) slots[slots.length - 1].alts.push(...words);
+    else slots.push({ alts: words, ph });
+    join = false;
+  }
+  return slots;
+}
+
+/** Podpowiedzi dla kolejnego słowa polecenia `verb` po już wpisanych argumentach `args`:
+ *  słowa do wstawienia (`words`) i opisy wartości do wpisania samemu (`hints`, np. „<adres>”). */
+function argCandidates(net: Network, d: Device, verb: string, args: string[], packs: PackSet): { words: string[]; hints: string[] } {
+  const only = (words: string[]) => ({ words, hints: [] as string[] });
+  if (verb === 'help') return only(args.length ? [] : commandsFor(d, packs).map((c) => c.verb));
+  if (verb === 'show') return only(args.length ? [] : showTopics(d, packs));
+  if (verb === 'service' && args.length === 0) return only(['list', ...SERVICES.filter((x) => serviceEnabled(packs, x))]);
+  const cmd = COMMANDS.find((c) => c.verb === verb);
+  if (!cmd) return only([]);
+  const ifNames = d.ifaces.map((i) => i.name);
+  const out: string[] = [];
+  const hints: string[] = [];
+  for (const syn of cmd.syntax) {
+    const slots = slotsOf(syn);
+    // pozycje we wzorze, do których mogą prowadzić wpisane słowa (miejsca opcjonalne można pominąć)
+    const close = (ps: number[]) => {
+      const set = new Set(ps);
+      const todo = [...set];
+      while (todo.length) {
+        const p = todo.pop()!;
+        const k = slots[p]?.skipTo;
+        if (k !== undefined && !set.has(k)) {
+          set.add(k);
+          todo.push(k);
+        }
+      }
+      return [...set];
+    };
+    let pos = close([0]);
+    for (const a of args) {
+      const next: number[] = [];
+      for (const p of pos) {
+        const sl = slots[p];
+        if (!sl) continue;
+        const lw = a.toLowerCase();
+        if (sl.ph || sl.alts.some((w) => w.toLowerCase() === lw || w.toLowerCase().startsWith(lw))) next.push(p + 1);
+      }
+      pos = close(next);
+      if (!pos.length) break;
+    }
+    for (const p of pos) {
+      const sl = slots[p];
+      if (!sl) continue;
+      if (sl.alts.length) out.push(...sl.alts);
+      else if (sl.ph && /^<(if|port|interfejs)>$/.test(sl.ph)) out.push(...ifNames);
+      else if (sl.ph) hints.push(sl.ph.startsWith('<') ? sl.ph : `<${sl.ph}>`);
+    }
+  }
+  return { words: [...new Set(out)], hints: [...new Set(hints)] };
+}
+
+export interface Completion {
+  /** wiersz po uzupełnieniu */
+  line: string;
+  /** możliwości do pokazania, gdy uzupełnienie nie jest jednoznaczne */
+  options: string[];
+}
+
+/**
+ * Uzupełnia ostatnie słowo polecenia (klawisz Tab): nazwy poleceń, słowa kluczowe ze wzorów składni
+ * i nazwy interfejsów urządzenia. Jedna możliwość – dopisuje ją ze spacją; kilka – wspólny początek albo lista.
+ */
+export function completeCommand(net: Network, d: Device, line: string, packs: PackSet = ALL_PACKS): Completion {
+  const endsSpace = /\s$/.test(line) || !line;
+  const tk = line.trim().split(/\s+/).filter(Boolean);
+  const curTok = endsSpace ? '' : tk[tk.length - 1] ?? '';
+  const before = endsSpace ? tk : tk.slice(0, -1);
+  let cands: string[];
+  let hints: string[] = [];
+  if (!before.length) cands = commandsFor(d, packs).map((c) => c.verb);
+  else {
+    const verbs = commandsFor(d, packs).map((c) => c.verb);
+    const v = pick(before[0], verbs);
+    if (!v || v === 'ambiguous') return { line, options: [] };
+    const r = argCandidates(net, d, v, before.slice(1).filter((x) => x !== '-6' && x !== '-4'), packs);
+    cands = r.words;
+    hints = r.hints;
+  }
+  const lc = curTok.toLowerCase();
+  const m = cands.filter((c) => c.toLowerCase().startsWith(lc));
+  const head = before.length ? `${before.join(' ')} ` : '';
+  // nic jeszcze nie wpisano: gdy możliwe jest też dowolne słowo (adres, nazwa), tylko pokaż, co pasuje
+  if (!curTok && (m.length > 1 || hints.length)) return { line, options: [...m, ...hints] };
+  if (!m.length) return { line, options: curTok ? [] : hints };
+  if (m.length === 1) return { line: `${head}${m[0]} `, options: [] };
+  let pre = m[0];
+  for (const w of m) while (!w.toLowerCase().startsWith(pre.toLowerCase())) pre = pre.slice(0, -1);
+  if (pre.length > curTok.length) return { line: `${head}${pre}`, options: [] };
+  return { line, options: m };
 }

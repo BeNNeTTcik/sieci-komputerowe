@@ -5,6 +5,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Network, Note, NoteColor } from './model';
 import { UiIcon } from './icons';
 import styles from './styles.module.css';
+import { notesOf } from './noteData';
+
+export { notesOf, newNote, nextZoneName } from './noteData';
 
 export const NOTE_COLORS: { id: NoteColor; label: string }[] = [
   { id: 'ink', label: 'Domyślny' },
@@ -20,45 +23,6 @@ export const ZONE_LABEL = 14;
 const LINE = 1.25;
 
 export const colorClass = (c: NoteColor) => styles[`nc_${c}`] ?? '';
-
-export function notesOf(net: Network): Note[] {
-  if (!net.notes) net.notes = [];
-  return net.notes;
-}
-
-export function newNote(net: Network, kind: Note['kind'], x: number, y: number, extra: Partial<Note> = {}): Note {
-  const n: Note = {
-    id: 'n' + net.nextId++,
-    kind,
-    x: Math.round(x),
-    y: Math.round(y),
-    w: kind === 'zone' ? 360 : 0,
-    h: kind === 'zone' ? 240 : 0,
-    text: kind === 'zone' ? nextZoneName(net) : 'Tekst',
-    color: kind === 'zone' ? zoneColor(net) : 'ink',
-    size: 18,
-    bold: kind === 'zone',
-    dashed: true,
-    ...extra,
-  };
-  notesOf(net).push(n);
-  return n;
-}
-
-/** Kolejna nazwa: Sieć A, Sieć B, … */
-export function nextZoneName(net: Network): string {
-  const used = new Set(notesOf(net).filter((n) => n.kind === 'zone').map((n) => n.text));
-  for (let i = 0; i < 26; i++) {
-    const name = `Sieć ${String.fromCharCode(65 + i)}`;
-    if (![...used].some((u) => u === name || u.startsWith(name + ' '))) return name;
-  }
-  return 'Sieć';
-}
-
-function zoneColor(net: Network): NoteColor {
-  const cycle: NoteColor[] = ['blue', 'green', 'amber', 'violet', 'red'];
-  return cycle[notesOf(net).filter((n) => n.kind === 'zone').length % cycle.length];
-}
 
 // ---------- pomiar tekstu ----------
 

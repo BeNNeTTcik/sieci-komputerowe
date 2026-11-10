@@ -11,7 +11,10 @@ import {
   DnsRecord,
   Iface,
   NatEntry as NatEntryT,
+  NatXlate,
   Network,
+  OSPF_COST,
+  OspfLsa,
   PROTO_LABEL,
   Protocol,
   RecordType,
@@ -35,6 +38,8 @@ import {
   networkOf,
   peerOf,
   routingTable,
+  ifaceStatus,
+  prefixToMask,
   sameIp,
   DISCARD_PORT,
 } from './model';
@@ -98,9 +103,27 @@ export interface NtpPdu {
   t3?: number;
   ref?: string;
 }
+/** RIP v2 (RFC 2453): Request – „przyślij mi swoją tablicę”, Response – lista sieci z metrykami */
+export interface RipPdu {
+  cmd: 'request' | 'response';
+  entries: { network: string; prefix: number; metric: number }[];
+  /** aktualizacja wyzwalana zmianą (adnotacja symulatora) */
+  triggered?: boolean;
+}
+/** OSPF v2 (RFC 2328): Hello, Link State Update, Link State Acknowledgment */
+export interface OspfPdu {
+  type: 'Hello' | 'LSU' | 'LSAck';
+  rid: string;
+  area: number;
+  mask?: string;
+  neighbors?: string[];
+  lsas?: OspfLsa[];
+  acks?: { rid: string; seq: number }[];
+}
 export interface UdpPdu {
   srcPort: number;
   dstPort: number;
+  rip?: RipPdu;
   dhcp?: DhcpPdu;
   dns?: DnsPdu;
   ntp?: NtpPdu;
@@ -136,8 +159,9 @@ export interface IpPacket {
   ttl: number;
   id: number;
   /** ENCAP – pakiet tunelu: w `inner` siedzi cały pakiet drugiej rodziny */
-  proto: 'ICMP' | 'UDP' | 'TCP' | 'ENCAP';
+  proto: 'ICMP' | 'UDP' | 'TCP' | 'ENCAP' | 'OSPF';
   inner?: IpPacket;
+  ospf?: OspfPdu;
   icmp?: IcmpPdu;
   udp?: UdpPdu;
   tcp?: TcpPdu;
@@ -232,8 +256,10 @@ export function protocolOf(f: Frame): Protocol {
   if (f.etherType === 'EAPOL') return 'EAP';
   const p = f.ip!;
   if (p.proto === 'ENCAP') return 'TUNNEL';
+  if (p.proto === 'OSPF') return 'OSPF';
   if (p.icmp) return isNdp(p) ? 'NDP' : 'ICMP';
   if (p.udp) {
+    if (p.udp.rip) return 'RIP';
     if (p.udp.dhcp) return 'DHCP';
     if (p.udp.dns) return 'DNS';
     if (p.udp.ntp) return 'NTP';
@@ -241,6 +267,24 @@ export function protocolOf(f: Frame): Protocol {
   }
   if (p.tcp) return p.tcp.app?.proto ?? portProto(p.tcp.dstPort) ?? portProto(p.tcp.srcPort) ?? 'TCP';
   return 'TCP';
+}
+
+/** Protokół warstwy 4, którym jedzie ramka (dla tunelu – pakietu wewnętrznego). */
+export function transportOf(f: Frame): 'TCP' | 'UDP' | null {
+  const p = f.ip?.proto === 'ENCAP' ? f.ip.inner : f.ip;
+  return p?.tcp ? 'TCP' : p?.udp ? 'UDP' : null;
+}
+
+/** Krótki opis nagłówka TCP / UDP do listy zdarzeń. `ports` – dodaj porty i flagi (gdy opis główny ich nie zawiera). */
+export function l4Info(f: Frame, ports: boolean): string {
+  const p = f.ip?.proto === 'ENCAP' ? f.ip.inner : f.ip;
+  if (p?.tcp) {
+    const t = p.tcp;
+    const head = ports ? `${t.srcPort} → ${t.dstPort} [${t.flags.join(', ')}] · ` : '';
+    return `${head}seq ${t.seq}${t.flags.includes('ACK') ? ` · ack ${t.ack}` : ''} · okno ${t.win ?? 4000} · ${t.len} B${t.retx ? ' · retransmisja' : ''}`;
+  }
+  if (p?.udp) return ports ? `${p.udp.srcPort} → ${p.udp.dstPort}` : '';
+  return '';
 }
 
 export function fmtClock(ms: number): string {
@@ -281,6 +325,18 @@ export function summarizeIp(p: IpPacket): string {
     const echo = ic.type === T.echoReq[p.v] || ic.type === T.echoRep[p.v];
     return `${p.v === 6 ? 'ICMPv6 ' : ''}${n}${echo ? ` seq=${ic.seq}` : ''} (${p.src} → ${p.dst})`;
   }
+  if (p.udp?.rip) {
+    const r = p.udp.rip;
+    if (r.cmd === 'request') return 'RIP Request: przyślijcie mi swoje tablice';
+    const list = r.entries.map((e) => `${e.network}/${e.prefix} (${e.metric >= 16 ? 'nieosiągalna' : e.metric})`);
+    return `RIP Response${r.triggered ? ' (wyzwalana)' : ''}: ${list.length ? list.slice(0, 3).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '') : 'brak tras'}`;
+  }
+  if (p.ospf) {
+    const o = p.ospf;
+    if (o.type === 'Hello') return `OSPF Hello od ${o.rid}${o.neighbors?.length ? ` (widzę: ${o.neighbors.join(', ')})` : ' (nie znam jeszcze sąsiadów)'}`;
+    if (o.type === 'LSU') return `OSPF LSU: ${(o.lsas ?? []).map((l) => `Router-LSA ${l.rid} #${l.seq}`).join(', ')}`;
+    return `OSPF LSAck: ${(o.acks ?? []).map((a) => `${a.rid} #${a.seq}`).join(', ')}`;
+  }
   if (p.udp?.dhcp) {
     const d = p.udp.dhcp;
     const addr = d.yiaddr !== '0.0.0.0' ? d.yiaddr : d.requested;
@@ -293,7 +349,7 @@ export function summarizeIp(p: IpPacket): string {
   }
   if (p.udp?.data) {
     const x = p.udp.data;
-    return `UDP ${p.udp.srcPort} → ${p.udp.dstPort}: datagram ${x.part}/${x.total} (${x.len} B)`;
+    return `UDP datagram ${x.part}/${x.total} (${x.len} B) → port ${p.udp.dstPort}`;
   }
   if (p.udp?.ntp) {
     const n = p.udp.ntp;
@@ -313,6 +369,20 @@ export function summarizeIp(p: IpPacket): string {
 }
 
 // ---------- silnik ----------
+
+/** grupy multicast protokołów routingu (RFC 2453, RFC 2328) */
+export const RIP_GROUP = '224.0.0.9';
+export const OSPF_GROUP = '224.0.0.5';
+const RIP_INF = 16;
+
+/** MAC dla adresu multicast IPv4: 01:00:5E + młodsze 23 bity adresu (RFC 1112) */
+export function mcast4Mac(ip: string): string {
+  const n = ipToInt(ip) ?? 0;
+  const b = [0x01, 0x00, 0x5e, (n >>> 16) & 0x7f, (n >>> 8) & 255, n & 255];
+  return b.map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(':');
+}
+const isMcast4Mac = (mac: string) => mac.toUpperCase().startsWith('01:00:5E');
+const sameNet = (a: { network: string; prefix: number }, b: { network: string; prefix: number }) => a.network === b.network && a.prefix === b.prefix;
 
 const ARP_TIMEOUT = 24;
 const PING_TIMEOUT = 40;
@@ -436,6 +506,9 @@ export class Sim {
   /** generatory strat na łączach – powtarzalne w obrębie jednego polecenia */
   private lossRng = new Map<string, () => number>();
   private rsWait = new Map<string, boolean>();
+  /** RIP: oczekujące aktualizacje wyzwalane i ostatnio ogłaszane sieci podłączone */
+  private ripQueued = new Map<string, { network: string; prefix: number }[]>();
+  private ripLast = new Map<string, { network: string; prefix: number }[]>();
   conns: Conn[] = [];
   /** włączone pakiety protokołów */
   packs: PackSet = ALL_PACKS;
@@ -453,21 +526,68 @@ export class Sim {
 
   // ----- harmonogram -----
 
+  /** Planuje działanie za `dt` kroków. Numer polecenia (`run`) jest zapamiętywany, więc dalsze ramki tej wymiany
+   *  trafiają do właściwego przebiegu, nawet gdy w międzyczasie ruszyło inne polecenie. */
   at(dt: number, fn: () => void) {
-    this.q.push({ t: this.t + dt, s: this.seqNo++, fn });
+    const run = this.run;
+    this.q.push({
+      t: this.t + dt,
+      s: this.seqNo++,
+      fn: () => {
+        this.run = run;
+        fn();
+      },
+    });
   }
 
-  runAll(maxSteps = 20000) {
+  private nextIndex() {
+    let bi = 0;
+    for (let i = 1; i < this.q.length; i++) {
+      const a = this.q[i];
+      const b = this.q[bi];
+      if (a.t < b.t || (a.t === b.t && a.s < b.s)) bi = i;
+    }
+    return bi;
+  }
+
+  /** Czy w kolejce czekają jeszcze działania (np. ramka w drodze, licznik czasu)? */
+  get busy() {
+    return this.q.length > 0;
+  }
+
+  /** Wykonuje najbliższe działanie z kolejki (także gdy leży dalej w czasie). */
+  step() {
+    if (!this.q.length) return;
+    const it = this.q.splice(this.nextIndex(), 1)[0];
+    if (it.t > this.t) this.t = it.t;
+    it.fn();
+  }
+
+  /** Tryb na żywo: wykonuje wszystko, co przypada najpóźniej na chwilę `t`. Zmiany w sieci (odłączony kabel,
+   *  wyłączony port) wprowadzone przed tą chwilą wpływają na dalszy ruch. */
+  runUntil(t: number, maxSteps = 20000) {
     let n = 0;
     while (this.q.length && n++ < maxSteps) {
-      let bi = 0;
-      for (let i = 1; i < this.q.length; i++) {
-        const a = this.q[i];
-        const b = this.q[bi];
-        if (a.t < b.t || (a.t === b.t && a.s < b.s)) bi = i;
-      }
+      const bi = this.nextIndex();
+      if (this.q[bi].t > t + 1e-9) break;
       const it = this.q.splice(bi, 1)[0];
-      if (it.t - this.start > 4000) break;
+      if (it.t > this.t) this.t = it.t;
+      it.fn();
+    }
+  }
+
+  /** Nowe polecenie startuje w chwili `t` (zegar silnika nigdy nie cofa się). */
+  setNow(t: number) {
+    if (t > this.t) this.t = t;
+  }
+
+  /** Liczy wszystko do końca (tryb „Czas rzeczywisty”, testy, budowanie scenariuszy). */
+  runAll(maxSteps = 20000) {
+    let n = 0;
+    const t0 = this.t;
+    while (this.q.length && n++ < maxSteps) {
+      const it = this.q.splice(this.nextIndex(), 1)[0];
+      if (it.t - t0 > 4000) break;
       if (it.t > this.t) this.t = it.t;
       it.fn();
     }
@@ -570,18 +690,23 @@ export class Sim {
 
   /** Czy karta sieciowa przyjmuje ramkę wysłaną na ten adres multicast? */
   private listens(d: Device, ifc: Iface, mac: string) {
+    if (mac === mcast4Mac(RIP_GROUP)) return d.type === 'router' && !!d.rip && this.ripOn(d, ifc);
+    if (mac === mcast4Mac(OSPF_GROUP)) return d.type === 'router' && !!d.ospf && this.ospfOn(d, ifc);
     if (mac === mcastMac(ALL_NODES)) return true;
     if (d.type === 'router' && mac === mcastMac(ALL_ROUTERS)) return true;
     return ifc.ip6.some((a) => mcastMac(solicitedNode(a.addr)) === mac);
   }
 
   private receive(d: Device, ifName: string, f: Frame, ev: SimEvent) {
-    if (!getDev(this.net, d.id)) return;
+    if (!getDev(this.net, d.id)) return this.drop(ev, 'Urządzenie usunięto, zanim ramka do niego dotarła.');
+    // zmiany w trakcie przesyłu: ramka, która jest jeszcze na kablu, przepada
+    if (ev.linkId && !this.net.links.some((l) => l.id === ev.linkId)) return this.drop(ev, 'Kabel odłączono, zanim ramka dotarła na drugi koniec – ramka przepadła.');
+    if (getIface(d, ifName) && !getIface(d, ifName)!.up) return this.drop(ev, `Interfejs ${ifName} na ${d.name} wyłączono, zanim ramka dotarła – ramka przepadła.`);
     if (d.type === 'switch') return this.switchRx(d, ifName, f, ev);
     const ifc = getIface(d, ifName)!;
     if ((f.arp || f.ip?.v === 4) && !this.has('ipv4')) return this.drop(ev, 'Stos IPv4 jest wyłączony (pakiet IPv4 nieaktywny w tym projekcie) – ramka ignorowana.');
     if (f.ip?.v === 6 && !this.has('ipv6')) return this.drop(ev, 'Stos IPv6 jest wyłączony (pakiet IPv6 nieaktywny w tym projekcie) – ramka ignorowana.');
-    const mc = isMcastMac(f.dst);
+    const mc = isMcastMac(f.dst) || isMcast4Mac(f.dst);
     if (f.dst !== ifc.mac && f.dst !== BCAST_MAC && !(mc && this.listens(d, ifc, f.dst))) {
       return this.drop(
         ev,
@@ -602,6 +727,8 @@ export class Sim {
     if (f.ip) {
       if (f.ip.v === 6 && isNdp(f.ip)) return this.ndpRx(d, ifc, f.ip, ev);
       if (f.ip.proto === 'UDP' && f.ip.udp?.dstPort === 68 && f.ip.udp.dhcp && d.type !== 'router') return this.dhcpClientRx(d, ifc, f.ip.udp.dhcp, ev);
+      if (d.type === 'router' && f.ip.v === 4 && f.ip.udp?.rip && f.ip.udp.dstPort === 520) return this.ripRx(d, ifc, f.ip, ev);
+      if (d.type === 'router' && f.ip.v === 4 && f.ip.ospf) return this.ospfRx(d, ifc, f.ip, ev);
       return d.type === 'router' ? this.routerIpRx(d, ifc, f.ip, ev) : this.hostIpRx(d, ifc, f.ip, ev);
     }
   }
@@ -657,6 +784,7 @@ export class Sim {
     };
     if (f.dst === BCAST_MAC) return flood('Adres docelowy to broadcast');
     if (isMcastMac(f.dst)) return flood(`Adres docelowy ${f.dst} to multicast IPv6 – przełącznik bez MLD snooping traktuje go jak broadcast`);
+    if (isMcast4Mac(f.dst)) return flood(`Adres docelowy ${f.dst} to multicast IPv4 – przełącznik bez IGMP snooping traktuje go jak broadcast`);
     const dst = sw.macTable.find((m) => m.mac === f.dst && m.vlan === vlan);
     if (!dst) return flood(`Adresu ${f.dst} nie ma w tablicy MAC (nieznany unicast)`);
     const outP = getIface(sw, dst.port);
@@ -837,6 +965,17 @@ export class Sim {
 
   private arpRx(d: Device, ifc: Iface, a: ArpPdu, ev: SimEvent) {
     if (a.op === 'request') {
+      if (d.type === 'router' && hasIp(ifc) && a.targetIp !== ifc.ip && this.has('nat') && d.nat.outside.includes(ifc.name) && this.natGlobals(d).includes(a.targetIp)) {
+        this.learn('arp', d, a.senderIp, a.senderMac, ifc.name, ev);
+        ev.notes.push(`${a.targetIp} to adres globalny NAT tego routera – odpowiadam w jego imieniu swoim MAC-iem, żeby ruch do tego adresu trafiał do mnie.`);
+        this.transmit(
+          d,
+          ifc.name,
+          { src: ifc.mac, dst: a.senderMac, etherType: 'ARP', arp: { op: 'reply', senderMac: ifc.mac, senderIp: a.targetIp, targetMac: a.senderMac, targetIp: a.senderIp } },
+          [`Odpowiedź ARP za adres NAT ${a.targetIp}: „to ja, mój MAC to ${ifc.mac}”.`],
+        );
+        return;
+      }
       if (!hasIp(ifc) || a.targetIp !== ifc.ip) {
         return this.drop(ev, `Zapytanie dotyczy ${a.targetIp}, a mój adres to ${ifc.ip || '(brak)'} – nie odpowiadam.`);
       }
@@ -1009,7 +1148,11 @@ export class Sim {
         ? `sieć bezpośrednio podłączona ${e.network}/${e.prefix}`
         : e.kind === 'default'
           ? `trasa domyślna ${v === 6 ? '::/0' : '0.0.0.0/0'} przez ${e.nextHop}`
-          : `trasa statyczna ${e.network}/${e.prefix} przez ${e.nextHop}`;
+          : e.kind === 'rip'
+            ? `trasa RIP ${e.network}/${e.prefix} przez ${e.nextHop} (metryka ${e.metric} – liczba skoków)`
+            : e.kind === 'ospf'
+              ? `trasa OSPF ${e.network}/${e.prefix} przez ${e.nextHop} (koszt ${e.metric})`
+              : `trasa statyczna ${e.network}/${e.prefix} przez ${e.nextHop}`;
     return {
       ok: true,
       iface: e.iface,
@@ -1112,6 +1255,7 @@ export class Sim {
 
   private routerIpRx(d: Device, ifc: Iface, p: IpPacket, ev: SimEvent) {
     if (p.proto === 'UDP' && p.udp?.dhcp && p.udp.dstPort === 67) return this.routerDhcp(d, ifc, p, ev);
+    if (p.v === 4 && this.has('nat') && d.nat.outside.includes(ifc.name) && !this.natIn(d, p, ev)) return;
     const own = p.v === 4 ? d.ifaces.some((i) => hasIp(i) && i.ip === p.dst) : this.ownsIp6(d, p.dst) || sameIp(p.dst, ALL_NODES);
     if (own && p.v === 4 && d.nat64 && p.dst === d.nat64.pool && this.has('transition') && this.natFind46(d, p)) return this.translate46(d, ifc, p, ev);
     if (own) {
@@ -1148,6 +1292,12 @@ export class Sim {
     }
     ev.notes.push(...r.notes);
     const out = getIface(d, r.iface)!;
+    const before = p.src;
+    if (p.v === 4 && this.has('nat') && d.nat.inside.includes(ifc.name) && d.nat.outside.includes(out.name) && !this.natOut(d, p, ev)) return;
+    if (p.src !== before) {
+      this.toNextHop(d, out, r.nextHop, p, [`Router ${d.name} przekazuje pakiet po translacji NAT: źródło ${before} → ${p.src}. Nowa ramka z MAC ${out.mac} (${out.name}).`]);
+      return;
+    }
     this.toNextHop(d, out, r.nextHop, p, [
       out.tunnel
         ? `Router ${d.name} przekazuje pakiet ${p.src} → ${p.dst} do interfejsu tunelu ${out.name}; adresy IP pakietu się nie zmieniają.`
@@ -1264,6 +1414,469 @@ export class Sim {
     const out = getIface(d, r.iface)!;
     this.toNextHop(d, out, r.nextHop, q, [`NAT64 na ${d.name}: odpowiedź od ${p.src} przetłumaczona na IPv6.`, ...r.notes]);
     void inIfc;
+  }
+
+  // ----- routing dynamiczny: RIP v2 (RFC 2453) -----
+
+  /** Czy interfejs należy do sieci, w której działa RIP? */
+  ripOn(d: Device, i: Iface) {
+    return !!d.rip && !i.tunnel && hasIp(i) && d.rip.networks.some((n) => inPrefix(i.ip, n.network, n.prefix));
+  }
+
+  private ripIfaces(d: Device) {
+    return d.ifaces.filter((i) => this.ripOn(d, i) && ifaceStatus(this.net, d, i) === 'up');
+  }
+
+  /** Czy sieć jest podłączona bezpośrednio do routera? */
+  private connectedNet(d: Device, network: string, prefix: number) {
+    return d.ifaces.some((i) => hasIp(i) && networkOf(i.ip, i.mask) === network && maskToPrefix(i.mask) === prefix);
+  }
+
+  /** Trasy ogłaszane przez interfejs `out`: sieci podłączone (metryka 1) i nauczone – z podziałem horyzontu. */
+  private ripAdvert(d: Device, out: Iface, poison: { network: string; prefix: number }[] = []) {
+    const list: { network: string; prefix: number; metric: number }[] = [];
+    const add = (network: string, prefix: number, metric: number) => {
+      if (!list.some((x) => x.network === network && x.prefix === prefix)) list.push({ network, prefix, metric: Math.min(metric, RIP_INF) });
+    };
+    for (const i of this.ripIfaces(d)) if (i !== out) add(networkOf(i.ip, i.mask)!, maskToPrefix(i.mask)!, 1);
+    for (const r of d.rip!.routes) if (r.iface !== out.name) add(r.network, r.prefix, r.metric + 1);
+    for (const x of poison) add(x.network, x.prefix, RIP_INF);
+    return list;
+  }
+
+  private ripSend(d: Device, ifc: Iface, cmd: 'request' | 'response', why: string, poison: { network: string; prefix: number }[] = [], triggered = false) {
+    const entries = cmd === 'request' ? [] : this.ripAdvert(d, ifc, poison);
+    const p: IpPacket = { v: 4, src: ifc.ip, dst: RIP_GROUP, ttl: 1, id: ipId++, proto: 'UDP', udp: { srcPort: 520, dstPort: 520, rip: { cmd, entries, triggered } } };
+    this.transmit(d, ifc.name, { src: ifc.mac, dst: mcast4Mac(RIP_GROUP), etherType: 'IPv4', ip: p }, [
+      why,
+      `Adres docelowy ${RIP_GROUP} – grupa wszystkich routerów RIP v2; TTL 1, więc pakiet nie wyjdzie poza to łącze.`,
+    ]);
+  }
+
+  /** Aktualizacja wyzwalana (RFC 2453 §3.10.1) – po zmianie w tablicy, raz na krok. */
+  private ripTrigger(d: Device, poison: { network: string; prefix: number }[], except?: string) {
+    const key = d.id;
+    const prev = this.ripQueued.get(key);
+    if (prev) {
+      for (const x of poison) if (!prev.some((y) => sameNet(x, y))) prev.push(x);
+      return;
+    }
+    this.ripQueued.set(key, [...poison]);
+    this.at(1, () => {
+      const pz = this.ripQueued.get(key) ?? [];
+      this.ripQueued.delete(key);
+      if (!d.rip || !getDev(this.net, d.id)) return;
+      for (const i of this.ripIfaces(d)) {
+        if (i.name === except && !pz.length) continue;
+        this.ripSend(d, i, 'response', `Moja tablica się zmieniła – wysyłam aktualizację wyzwalaną (nie czekam 30 s na regularną).`, pz, true);
+      }
+    });
+  }
+
+  private ripRx(d: Device, ifc: Iface, p: IpPacket, ev: SimEvent) {
+    const m = p.udp!.rip!;
+    if (!this.has('routing')) return this.drop(ev, 'Pakiet „Routing dynamiczny” jest wyłączony – ignoruję RIP.');
+    if (!d.rip) return this.drop(ev, 'RIP nie jest włączony na tym routerze – pakiet ignoruję (rip network <sieć>/<prefiks>).');
+    if (!this.ripOn(d, ifc)) return this.drop(ev, `Interfejs ${ifc.name} nie należy do żadnej sieci RIP tego routera – nie słucham na nim RIP.`);
+    if (!inSubnet(p.src, ifc.ip, ifc.mask)) return this.drop(ev, `Nadawca ${p.src} jest spoza sieci interfejsu ${ifc.name} – RFC 2453 każe takie aktualizacje odrzucić.`);
+    if (m.cmd === 'request') {
+      ev.notes.push(`RIP Request od ${p.src} – sąsiad prosi o całą tablicę, więc mu ją wysyłam.`);
+      this.at(1, () => d.rip && this.ripSend(d, ifc, 'response', `Odpowiedź na RIP Request od ${p.src}: cała moja tablica (z podziałem horyzontu).`));
+      return;
+    }
+    const cfg = d.rip;
+    const changes: string[] = [];
+    const poison: { network: string; prefix: number }[] = [];
+    for (const e of m.entries) {
+      if (this.connectedNet(d, e.network, e.prefix)) continue;
+      const cur = cfg.routes.find((r) => r.network === e.network && r.prefix === e.prefix);
+      if (e.metric < RIP_INF) {
+        if (!cur) {
+          cfg.routes.push({ network: e.network, prefix: e.prefix, metric: e.metric, nextHop: p.src, iface: ifc.name });
+          changes.push(`nowa trasa ${e.network}/${e.prefix} przez ${p.src}, metryka ${e.metric}`);
+        } else if (cur.nextHop === p.src && cur.metric !== e.metric) {
+          changes.push(`${e.network}/${e.prefix}: metryka ${cur.metric} → ${e.metric} (ten sam sąsiad)`);
+          cur.metric = e.metric;
+          cur.iface = ifc.name;
+        } else if (cur.nextHop !== p.src && e.metric < cur.metric) {
+          changes.push(`${e.network}/${e.prefix}: krótsza droga przez ${p.src} (metryka ${e.metric} zamiast ${cur.metric})`);
+          cur.metric = e.metric;
+          cur.nextHop = p.src;
+          cur.iface = ifc.name;
+        }
+      } else if (cur && cur.nextHop === p.src) {
+        cfg.routes = cfg.routes.filter((r) => r !== cur);
+        poison.push({ network: e.network, prefix: e.prefix });
+        changes.push(`${e.network}/${e.prefix} jest teraz nieosiągalna (metryka 16) – usuwam trasę`);
+      }
+    }
+    if (!changes.length) {
+      ev.notes.push(`RIP Response od ${p.src}: nic nowego – znam już te sieci tą samą albo krótszą drogą.`);
+      return;
+    }
+    ev.notes.push(`RIP Response od ${p.src}: ${changes.join('; ')}. Metryka to liczba routerów do sieci – wygrywa najmniejsza.`);
+    this.ripTrigger(d, poison, ifc.name);
+  }
+
+  // ----- routing dynamiczny: OSPF v2 (RFC 2328, jeden obszar) -----
+
+  ospfOn(d: Device, i: Iface) {
+    return !!d.ospf && !i.tunnel && hasIp(i) && d.ospf.networks.some((n) => inPrefix(i.ip, n.network, n.prefix));
+  }
+
+  private ospfIfaces(d: Device) {
+    return d.ifaces.filter((i) => this.ospfOn(d, i) && ifaceStatus(this.net, d, i) === 'up');
+  }
+
+  /** Router ID: ustawiony ręcznie albo najwyższy adres IPv4 interfejsu. */
+  ospfRid(d: Device) {
+    if (d.ospf?.rid) return d.ospf.rid;
+    let best = '';
+    for (const i of d.ifaces) if (hasIp(i) && (!best || ipToInt(i.ip)! > ipToInt(best)!)) best = i.ip;
+    return best || '0.0.0.0';
+  }
+
+  ospfCost(d: Device, ifName: string) {
+    return d.ospf?.costs[ifName] ?? OSPF_COST;
+  }
+
+  private ospfArea(d: Device, i: Iface) {
+    return d.ospf!.networks.find((n) => inPrefix(i.ip, n.network, n.prefix))?.area ?? 0;
+  }
+
+  private ospfSend(d: Device, ifc: Iface, pdu: Omit<OspfPdu, 'rid' | 'area'>, why: string[]) {
+    const p: IpPacket = { v: 4, src: ifc.ip, dst: OSPF_GROUP, ttl: 1, id: ipId++, proto: 'OSPF', ospf: { ...pdu, rid: this.ospfRid(d), area: this.ospfArea(d, ifc) } };
+    this.transmit(d, ifc.name, { src: ifc.mac, dst: mcast4Mac(OSPF_GROUP), etherType: 'IPv4', ip: p }, why);
+  }
+
+  private ospfHello(d: Device, ifc: Iface, why: string) {
+    const nbs = d.ospf!.neighbors.filter((n) => n.iface === ifc.name).map((n) => n.rid);
+    this.ospfSend(d, ifc, { type: 'Hello', mask: ifc.mask, neighbors: nbs }, [
+      why,
+      `Hello na ${OSPF_GROUP} (wszystkie routery OSPF w łączu), TTL 1. W środku: mój Router ID ${this.ospfRid(d)}, maska sieci, obszar i lista sąsiadów, których już słyszę.`,
+    ]);
+  }
+
+  /** Buduje własny Router-LSA; zwraca true, gdy się zmienił (i rozesłał). */
+  private ospfOriginate(d: Device, force = false) {
+    const cfg = d.ospf!;
+    const rid = this.ospfRid(d);
+    const links: OspfLsa['links'] = [];
+    for (const n of cfg.neighbors) if (n.state === 'Full' && !links.some((l) => l.kind === 'router' && l.rid === n.rid)) links.push({ kind: 'router', rid: n.rid, cost: this.ospfCost(d, n.iface) });
+    for (const i of this.ospfIfaces(d)) links.push({ kind: 'stub', network: networkOf(i.ip, i.mask)!, prefix: maskToPrefix(i.mask)!, cost: this.ospfCost(d, i.name) });
+    const cur = cfg.lsdb.find((l) => l.rid === rid);
+    if (cur && !force && JSON.stringify(cur.links) === JSON.stringify(links)) return false;
+    const lsa: OspfLsa = { rid, seq: ++cfg.seq, links };
+    cfg.lsdb = [...cfg.lsdb.filter((l) => l.rid !== rid), lsa];
+    this.ospfFlood(d, [lsa], '', `Mój opis łączy (Router-LSA #${lsa.seq}) się zmienił – rozsyłam go sąsiadom (LSU).`);
+    this.ospfSpf(d);
+    return true;
+  }
+
+  private ospfFlood(d: Device, lsas: OspfLsa[], except: string, why: string) {
+    for (const i of this.ospfIfaces(d)) {
+      if (i.name === except) continue;
+      if (!d.ospf!.neighbors.some((n) => n.iface === i.name && n.state === 'Full')) continue;
+      this.ospfSend(d, i, { type: 'LSU', lsas: clone(lsas) }, [why, 'Zalewanie (flooding): każdy router przekazuje nowe LSA dalej, aż wszyscy w obszarze mają tę samą bazę LSDB.']);
+    }
+  }
+
+  /** Algorytm Dijkstry na bazie LSDB (RFC 2328 §16). */
+  private ospfSpf(d: Device) {
+    const cfg = d.ospf!;
+    const me = this.ospfRid(d);
+    const byRid = new Map(cfg.lsdb.map((l) => [l.rid, l]));
+    const dist = new Map<string, number>([[me, 0]]);
+    const first = new Map<string, string>();
+    const done = new Set<string>();
+    for (;;) {
+      let u = '';
+      for (const [k, v] of dist) if (!done.has(k) && (!u || v < dist.get(u)!)) u = k;
+      if (!u) break;
+      done.add(u);
+      for (const l of byRid.get(u)?.links ?? []) {
+        if (l.kind !== 'router') continue;
+        // łącze liczy się tylko wtedy, gdy sąsiad też je ogłasza (sprawdzenie dwukierunkowości)
+        if (!byRid.get(l.rid)?.links.some((k) => k.kind === 'router' && k.rid === u)) continue;
+        const nd = dist.get(u)! + l.cost;
+        if (!dist.has(l.rid) || nd < dist.get(l.rid)!) {
+          dist.set(l.rid, nd);
+          first.set(l.rid, u === me ? l.rid : first.get(u)!);
+        }
+      }
+    }
+    const routes: typeof cfg.routes = [];
+    for (const r of done) {
+      if (r === me) continue;
+      const hop = first.get(r)!;
+      const nb = cfg.neighbors.filter((n) => n.rid === hop && n.state === 'Full').sort((a, b) => this.ospfCost(d, a.iface) - this.ospfCost(d, b.iface))[0];
+      if (!nb) continue;
+      for (const l of byRid.get(r)!.links) {
+        if (l.kind !== 'stub' || this.connectedNet(d, l.network, l.prefix)) continue;
+        const cost = dist.get(r)! + l.cost;
+        const cur = routes.find((x) => x.network === l.network && x.prefix === l.prefix);
+        if (cur && cur.cost <= cost) continue;
+        const it = { network: l.network, prefix: l.prefix, cost, nextHop: nb.ip, iface: nb.iface };
+        if (cur) Object.assign(cur, it);
+        else routes.push(it);
+      }
+    }
+    cfg.routes = routes;
+  }
+
+  private ospfRx(d: Device, ifc: Iface, p: IpPacket, ev: SimEvent) {
+    const o = p.ospf!;
+    if (!this.has('routing')) return this.drop(ev, 'Pakiet „Routing dynamiczny” jest wyłączony – ignoruję OSPF.');
+    if (!d.ospf) return this.drop(ev, 'OSPF nie jest włączony na tym routerze – pakiet ignoruję (ospf network <sieć>/<prefiks> area 0).');
+    if (!this.ospfOn(d, ifc)) return this.drop(ev, `Interfejs ${ifc.name} nie należy do żadnej sieci OSPF tego routera.`);
+    const cfg = d.ospf;
+    const me = this.ospfRid(d);
+    if (o.area !== this.ospfArea(d, ifc)) return this.drop(ev, `Obszar ${o.area} w pakiecie, a mój interfejs ${ifc.name} jest w obszarze ${this.ospfArea(d, ifc)} – sąsiedztwo się nie zestawi.`);
+    if (o.type === 'Hello') {
+      if (o.rid === me) return this.drop(ev, `Sąsiad ma ten sam Router ID co ja (${me}) – to błąd konfiguracji, ignoruję Hello.`);
+      if (o.mask !== ifc.mask) return this.drop(ev, `Maska w Hello (${o.mask}) różni się od maski mojego interfejsu (${ifc.mask}) – RFC 2328 każe odrzucić Hello, sąsiedztwa nie będzie.`);
+      let nb = cfg.neighbors.find((n) => n.rid === o.rid && n.iface === ifc.name);
+      if (!nb) {
+        nb = { rid: o.rid, ip: p.src, iface: ifc.name, state: 'Init' };
+        cfg.neighbors.push(nb);
+        ev.notes.push(`Nowy sąsiad ${o.rid} (${p.src}) za ${ifc.name} – stan Init.`);
+      }
+      nb.ip = p.src;
+      const seesMe = (o.neighbors ?? []).includes(me);
+      if (seesMe && nb.state !== 'Full') {
+        nb.state = 'Full';
+        ev.notes.push(
+          `Sąsiad ${o.rid} wymienia mnie w swoim Hello – komunikacja dwukierunkowa (2-Way). Prawdziwy OSPF wymienia teraz opisy baz (DBD, LSR); symulator przechodzi od razu do stanu Full i wysyła sąsiadowi całą swoją bazę.`,
+        );
+        this.at(1, () => {
+          if (!d.ospf) return;
+          this.ospfHello(d, ifc, `Sąsiedztwo z ${o.rid} jest pełne – odpowiadam Hello, żeby on też zobaczył mnie na liście.`);
+          this.ospfOriginate(d);
+          const mine = d.ospf.lsdb;
+          if (mine.length) this.ospfSend(d, ifc, { type: 'LSU', lsas: clone(mine) }, [`Synchronizacja bazy z nowym sąsiadem ${o.rid}: wysyłam wszystkie LSA, które znam (${mine.map((l) => l.rid).join(', ')}).`]);
+        });
+      } else if (!seesMe) {
+        ev.notes.push(`Sąsiad ${o.rid} jeszcze mnie nie zna – odpowiadam swoim Hello z nim na liście.`);
+        this.at(1, () => d.ospf && this.ospfHello(d, ifc, `Odpowiedź na Hello od ${o.rid}: wpisuję go na listę sąsiadów.`));
+      } else {
+        ev.notes.push(`Hello od ${o.rid} – sąsiedztwo trwa (stan Full).`);
+      }
+      return;
+    }
+    const nb = cfg.neighbors.find((n) => n.ip === p.src && n.iface === ifc.name && n.state === 'Full');
+    if (!nb) return this.drop(ev, `${o.type} od ${p.src}, z którym nie mam pełnego sąsiedztwa – ignoruję.`);
+    if (o.type === 'LSAck') {
+      ev.notes.push(`Potwierdzenie (LSAck) od ${o.rid}: dostał moje LSA, nie muszę ich powtarzać.`);
+      return;
+    }
+    const fresh: OspfLsa[] = [];
+    for (const l of o.lsas ?? []) {
+      if (l.rid === me) continue;
+      const cur = cfg.lsdb.find((x) => x.rid === l.rid);
+      if (cur && cur.seq >= l.seq) continue;
+      cfg.lsdb = [...cfg.lsdb.filter((x) => x.rid !== l.rid), l];
+      fresh.push(l);
+    }
+    this.at(1, () => d.ospf && this.ospfSend(d, ifc, { type: 'LSAck', acks: (o.lsas ?? []).map((l) => ({ rid: l.rid, seq: l.seq })) }, [`Potwierdzam odbiór LSU od ${o.rid} (LSAck).`]));
+    if (!fresh.length) {
+      ev.notes.push(`LSU od ${o.rid}: znam już te LSA w tej samej albo nowszej wersji – tylko potwierdzam.`);
+      return;
+    }
+    ev.notes.push(`LSU od ${o.rid}: nowe LSA ${fresh.map((l) => `${l.rid} #${l.seq}`).join(', ')} – zapisuję w LSDB, przeliczam najkrótsze ścieżki (SPF) i przekazuję LSA dalej.`);
+    this.ospfSpf(d);
+    this.at(1, () => d.ospf && this.ospfFlood(d, fresh, ifc.name, `Przekazuję dalej nowe LSA (${fresh.map((l) => l.rid).join(', ')}) otrzymane od ${o.rid}.`));
+  }
+
+  /**
+   * Routing dynamiczny po zmianie: `d` – router, na którym zmieniono konfigurację (wysyła wszystko od nowa),
+   * bez argumentu – zmiana połączeń: każdy router sprawdza swoje interfejsy i sąsiadów.
+   * Zamiast liczników czasu (RIP: 180 s, OSPF: 40 s) zmiany wykrywane są od razu.
+   */
+  startRouting(only?: Device) {
+    if (!this.has('routing')) return;
+    for (const d of this.net.devices) {
+      if (d.type !== 'router') continue;
+      if (d.rip) this.ripCheck(d, d === only, !only);
+      if (d.ospf) this.ospfCheck(d, d === only);
+    }
+  }
+
+  private ripCheck(d: Device, force: boolean, topo: boolean) {
+    const cfg = d.rip!;
+    const up = this.ripIfaces(d).map((i) => i.name);
+    const poison: { network: string; prefix: number }[] = [];
+    cfg.routes = cfg.routes.filter((r) => {
+      const i = getIface(d, r.iface);
+      const owner = this.net.devices.find((x) => x.ifaces.some((k) => k.ip === r.nextHop));
+      const ok = !!i && up.includes(r.iface) && inSubnet(r.nextHop, i.ip, i.mask) && !!owner?.rip && this.ripOn(owner, owner.ifaces.find((k) => k.ip === r.nextHop)!);
+      if (!ok) poison.push({ network: r.network, prefix: r.prefix });
+      return ok;
+    });
+    const gone = (this.ripLast.get(d.id) ?? []).filter((n) => !this.ripIfaces(d).some((i) => networkOf(i.ip, i.mask) === n.network && maskToPrefix(i.mask) === n.prefix));
+    poison.push(...gone);
+    this.ripLast.set(d.id, this.ripIfaces(d).map((i) => ({ network: networkOf(i.ip, i.mask)!, prefix: maskToPrefix(i.mask)! })));
+    if (force || topo) {
+      for (const i of this.ripIfaces(d)) {
+        if (force || poison.length) this.ripSend(d, i, 'request', 'RIP na tym interfejsie właśnie ruszył – proszę sąsiadów o ich tablice (Request).');
+        this.ripSend(d, i, 'response', force ? 'Ogłaszam sąsiadom sieci, które znam (Response).' : 'Zmieniły się połączenia – ogłaszam aktualną tablicę.', poison);
+      }
+    } else if (poison.length) {
+      this.ripTrigger(d, poison);
+      // prośba o tablice sąsiadów – może któryś zna inną drogę do sieci, które właśnie straciłem
+      for (const i of this.ripIfaces(d)) this.ripSend(d, i, 'request', 'Straciłem trasy – pytam sąsiadów (Request), czy znają do tych sieci inną drogę.');
+    }
+  }
+
+  private ospfCheck(d: Device, force: boolean) {
+    const cfg = d.ospf!;
+    const ifs = this.ospfIfaces(d);
+    const before = cfg.neighbors.length;
+    cfg.neighbors = cfg.neighbors.filter((n) => {
+      const i = ifs.find((x) => x.name === n.iface);
+      if (!i || !inSubnet(n.ip, i.ip, i.mask)) return false;
+      const owner = this.net.devices.find((x) => x.ifaces.some((k) => k.ip === n.ip));
+      const oi = owner?.ifaces.find((k) => k.ip === n.ip);
+      return !!owner && !!owner.ospf && !!oi && this.ospfOn(owner, oi) && ifaceStatus(this.net, owner, oi) === 'up' && this.ospfRid(owner) === n.rid;
+    });
+    for (const i of ifs) {
+      if (force || !cfg.neighbors.some((n) => n.iface === i.name && n.state === 'Full')) {
+        this.ospfHello(d, i, force ? 'OSPF na tym interfejsie właśnie ruszył – szukam sąsiadów (Hello).' : 'Zmieniły się połączenia – witam się z routerami w tym łączu (Hello).');
+      }
+    }
+    if (this.ospfOriginate(d, force) || before !== cfg.neighbors.length) this.ospfSpf(d);
+  }
+
+  // ----- NAT dla IPv4: statyczny, dynamiczny, PAT (RFC 3022) -----
+
+  /** adresy globalne NAT (statyczne i z pul), za które router odpowiada na ARP */
+  natGlobals(d: Device): string[] {
+    const out = d.nat.statics.map((s) => s.global);
+    for (const p of d.nat.pools) {
+      const a = ipToInt(p.from)!;
+      const b = ipToInt(p.to)!;
+      for (let x = a; x <= b && x - a < 256; x++) out.push(intToIp(x));
+    }
+    return out;
+  }
+
+  private l4Ports(p: IpPacket): { src: number; dst: number } | null {
+    if (p.tcp) return { src: p.tcp.srcPort, dst: p.tcp.dstPort };
+    if (p.udp) return { src: p.udp.srcPort, dst: p.udp.dstPort };
+    if (p.icmp && (p.icmp.type === 8 || p.icmp.type === 0)) return { src: p.icmp.id, dst: p.icmp.id };
+    return null;
+  }
+
+  private setPort(p: IpPacket, which: 'src' | 'dst', v: number) {
+    if (p.tcp) p.tcp = which === 'src' ? { ...p.tcp, srcPort: v } : { ...p.tcp, dstPort: v };
+    else if (p.udp) p.udp = which === 'src' ? { ...p.udp, srcPort: v } : { ...p.udp, dstPort: v };
+    else if (p.icmp) p.icmp = { ...p.icmp, id: v };
+  }
+
+  private portLabel(p: IpPacket) {
+    return p.icmp ? 'id ICMP' : 'port';
+  }
+
+  /** Ruch z zewnątrz: zamiana adresu docelowego. Zwraca false, gdy pakiet odrzucono. */
+  private natIn(d: Device, p: IpPacket, ev: SimEvent): boolean {
+    const nat = d.nat;
+    const pr = this.l4Ports(p);
+    const proto = p.proto as NatXlate['proto'];
+    const pat = pr && nat.table.find((x) => x.kind === 'pat' && x.proto === proto && x.inGlobal === p.dst && x.inGlobalPort === pr.dst && x.outside === p.src);
+    if (pat) {
+      ev.notes.push(`NAT (PAT) z zewnątrz do środka: ${p.dst}:${pr!.dst} pasuje do wpisu w tablicy translacji → ${pat.inLocal}:${pat.inLocalPort}. Zmieniam adres docelowy${pat.inLocalPort !== pr!.dst ? ` i ${this.portLabel(p)}` : ''}.`);
+      p.dst = pat.inLocal;
+      if (pat.inLocalPort !== pr!.dst) this.setPort(p, 'dst', pat.inLocalPort);
+      return true;
+    }
+    const st = nat.statics.find((x) => x.global === p.dst);
+    if (st) {
+      ev.notes.push(`NAT statyczny: ${st.global} na stałe odpowiada adresowi wewnętrznemu ${st.local} – zmieniam adres docelowy. Dzięki temu serwer w sieci prywatnej jest osiągalny z zewnątrz.`);
+      p.dst = st.local;
+      return true;
+    }
+    const dyn = nat.table.find((x) => x.kind === 'dynamic' && x.inGlobal === p.dst);
+    if (dyn) {
+      ev.notes.push(`NAT dynamiczny: adres z puli ${dyn.inGlobal} jest teraz przydzielony hostowi ${dyn.inLocal} – zmieniam adres docelowy.`);
+      p.dst = dyn.inLocal;
+      return true;
+    }
+    if (this.natGlobals(d).includes(p.dst)) {
+      this.drop(ev, `${p.dst} to adres z puli NAT, ale w tablicy translacji nie ma dla niego wpisu – wpis tworzy dopiero ruch wychodzący ze środka. Pakiet odrzucam.`);
+      return false;
+    }
+    if (pr && d.ifaces.some((i) => i.ip === p.dst) && nat.rules.some((r) => r.overload && r.iface) && !(p.icmp && p.icmp.type === 8)) {
+      this.drop(ev, `Pakiet na ${p.dst}:${pr.dst} – adres routera używany przez PAT, ale nie pasuje do żadnego wpisu w tablicy translacji. Z zewnątrz nie da się otworzyć połączenia do hosta za PAT.`);
+      return false;
+    }
+    return true;
+  }
+
+  /** Ruch ze środka na zewnątrz: zamiana adresu źródłowego. Zwraca false, gdy pakiet odrzucono. */
+  private natOut(d: Device, p: IpPacket, ev: SimEvent): boolean {
+    const nat = d.nat;
+    const src = p.src;
+    const st = nat.statics.find((x) => x.local === src);
+    if (st) {
+      p.src = st.global;
+      ev.notes.push(`NAT statyczny: zamieniam adres źródłowy ${src} → ${st.global} (stałe przypisanie 1:1).`);
+      return true;
+    }
+    const rule = nat.rules.find((r) => inPrefix(src, r.network, r.prefix));
+    if (!rule) {
+      ev.notes.push(`Adres ${src} nie pasuje do żadnej reguły NAT – pakiet wychodzi bez translacji (z adresem prywatnym odpowiedź raczej nie wróci).`);
+      return true;
+    }
+    const proto = p.proto as NatXlate['proto'];
+    const pr = this.l4Ports(p);
+    if (!rule.overload) {
+      let e = nat.table.find((x) => x.kind === 'dynamic' && x.inLocal === src);
+      if (!e) {
+        const pool = nat.pools.find((x) => x.name === rule.pool);
+        if (!pool) {
+          this.drop(ev, `Reguła NAT wskazuje pulę „${rule.pool}”, której nie ma – pakiet odrzucony.`);
+          return false;
+        }
+        const used = new Set([...nat.table.filter((x) => x.kind === 'dynamic').map((x) => x.inGlobal), ...nat.statics.map((x) => x.global)]);
+        let free = '';
+        for (let x = ipToInt(pool.from)!; x <= ipToInt(pool.to)!; x++) if (!used.has(intToIp(x))) { free = intToIp(x); break; }
+        if (!free) {
+          const who = nat.table.filter((x) => x.kind === 'dynamic' && inPrefix(x.inGlobal, pool.from, 0)).map((x) => `${x.inGlobal} → ${x.inLocal}`);
+          this.drop(ev, `Pula NAT „${pool.name}” (${pool.from} – ${pool.to}) jest wyczerpana: ${who.join(', ')}. NAT dynamiczny daje każdemu hostowi osobny adres publiczny, więc ${src} musi czekać. Rozwiązanie: PAT (overload).`);
+          return false;
+        }
+        e = { kind: 'dynamic', proto: '*', inLocal: src, inLocalPort: 0, inGlobal: free, inGlobalPort: 0, outside: '', outsidePort: 0 };
+        nat.table.push(e);
+        ev.notes.push(`NAT dynamiczny: ${src} dostaje wolny adres z puli „${pool.name}”: ${free}. Nowy wpis w tablicy translacji.`);
+      } else ev.notes.push(`NAT dynamiczny: ${src} ma już przydzielony adres z puli ${e.inGlobal}.`);
+      p.src = e.inGlobal;
+      return true;
+    }
+    // PAT – wiele hostów pod jednym adresem, rozróżnianych portem (RFC 3022, NAPT)
+    let global = '';
+    if (rule.iface) global = getIface(d, rule.iface)?.ip ?? '';
+    else global = nat.pools.find((x) => x.name === rule.pool)?.from ?? '';
+    if (!global) {
+      this.drop(ev, 'Reguła PAT nie ma adresu (interfejs bez adresu albo brak puli) – pakiet odrzucony.');
+      return false;
+    }
+    if (!pr) {
+      this.drop(ev, 'PAT tłumaczy tylko TCP, UDP i ICMP Echo – ten pakiet odrzucam.');
+      return false;
+    }
+    let e = nat.table.find((x) => x.kind === 'pat' && x.proto === proto && x.inLocal === src && x.inLocalPort === pr.src && x.outside === p.dst);
+    if (!e) {
+      const taken = (port: number) => nat.table.some((x) => x.kind === 'pat' && x.proto === proto && x.inGlobal === global && x.inGlobalPort === port);
+      let port = pr.src;
+      if (taken(port)) for (port = 1024; taken(port); port++);
+      e = { kind: 'pat', proto, inLocal: src, inLocalPort: pr.src, inGlobal: global, inGlobalPort: port, outside: p.dst, outsidePort: pr.dst };
+      nat.table.push(e);
+      ev.notes.push(
+        `PAT: nowy wpis ${src}:${pr.src} ↔ ${global}:${port} (${proto}).${port === pr.src ? ` ${this.portLabel(p)[0].toUpperCase() + this.portLabel(p).slice(1)} ${port} jest wolny, więc zostaje bez zmian.` : ` ${this.portLabel(p)} ${pr.src} jest już zajęty przez inny host, więc dostaje ${port}.`} Wszystkie hosty wychodzą pod jednym adresem ${global}, a odpowiedzi rozróżnia ${this.portLabel(p)}.`,
+      );
+    } else ev.notes.push(`PAT: istniejący wpis ${src}:${pr.src} ↔ ${global}:${e.inGlobalPort}.`);
+    p.src = global;
+    if (e.inGlobalPort !== pr.src) this.setPort(p, 'src', e.inGlobalPort);
+    return true;
   }
 
   private icmpError(d: Device, inIfc: Iface, p: IpPacket, kind: 'unreach' | 'timex') {
@@ -1619,8 +2232,13 @@ export class Sim {
   // DNS (RFC 1034/1035)
 
   /** Rozwiązuje nazwę. Dla adresu literalnego wywołuje cb od razu. */
-  resolve(d: Device, name: string, type: RecordType, cb: (v: string | null, err?: string) => void) {
+  resolve(d: Device, name: string, type: RecordType, cb: (v: string | null, err?: string) => void, useHosts = true) {
     const n = name.toLowerCase().replace(/\.$/, '');
+    const h = useHosts && type !== 'MX' ? d.hosts.find((x) => x.name === n && fam(x.ip) === (type === 'AAAA' ? 6 : 4)) : undefined;
+    if (h) {
+      this.out(d.id, `${n} → ${h.ip} – z pliku hosts na tym urządzeniu, bez pytania serwera DNS`, 'hint');
+      return cb(h.ip);
+    }
     const hit = d.dnsCache.find((r) => r.name === n && r.type === type);
     if (hit) {
       this.out(d.id, `DNS: ${n} (${type}) → ${hit.value} – z pamięci podręcznej, bez zapytania`, 'hint');
@@ -1679,10 +2297,11 @@ export class Sim {
 
   startLookup(d: Device, name: string, type: RecordType) {
     this.out(d.id, `Serwer: ${d.dns || '(brak)'}`);
+    // nslookup pyta zawsze serwer DNS – pliku hosts nie czyta (dlatego może pokazać inny adres niż ping czy przeglądarka)
     this.resolve(d, name, type, (v, err) => {
       if (v) this.out(d.id, `${name}  ${type}  ${v}`);
       else this.out(d.id, err ?? 'brak odpowiedzi', 'err');
-    });
+    }, false);
   }
 
   private dnsServe(d: Device, p: IpPacket, ev: SimEvent) {

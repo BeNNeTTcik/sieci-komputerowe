@@ -115,7 +115,8 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
   if (p) {
     blocks.push({ label: v6 ? 'IPv6' : 'IPv4', color: L3, flex: v6 ? 4 : 3 });
     if (p.icmp) blocks.push({ label: ndp ? 'ICMPv6 / NDP' : v6 ? 'ICMPv6' : 'ICMP', color: PROTO_COLORS[ndp ? 'NDP' : 'ICMP'], flex: 2 });
-    if (p.udp) blocks.push({ label: 'UDP', color: L4, flex: 1 }, { label: p.udp.dhcp ? 'DHCP' : p.udp.dns ? 'DNS' : 'NTP', color: L7, flex: 3 });
+    if (p.udp) blocks.push({ label: 'UDP', color: L4, flex: 1 }, { label: p.udp.rip ? 'RIP v2' : p.udp.dhcp ? 'DHCP' : p.udp.dns ? 'DNS' : p.udp.data ? 'dane' : 'NTP', color: p.udp.rip ? PROTO_COLORS.RIP : L7, flex: 3 });
+    if (p.ospf) blocks.push({ label: `OSPF ${p.ospf.type}`, color: PROTO_COLORS.OSPF, flex: 4 });
     if (p.tcp) {
       blocks.push({ label: 'TCP', color: L4, flex: 2 });
       if (app?.tls || ev.protocol === 'HTTPS') blocks.push({ label: app?.enc ? 'TLS 🔒' : 'TLS', color: PROTO_COLORS.HTTPS, flex: app?.enc ? 4 : 3 });
@@ -212,9 +213,9 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
           <Fields
             rows={[
               ['Adres źródłowy', p.src || '(uzupełni nadawca)', p.src === '0.0.0.0' ? 'host nie ma jeszcze adresu' : undefined],
-              ['Adres docelowy', p.dst, p.dst === '255.255.255.255' ? 'broadcast ograniczony' : undefined],
+              ['Adres docelowy', p.dst, p.dst === '255.255.255.255' ? 'broadcast ograniczony' : p.dst === '224.0.0.9' ? 'multicast: wszystkie routery RIP v2' : p.dst === '224.0.0.5' ? 'multicast: wszystkie routery OSPF' : undefined],
               ['TTL', String(p.ttl), 'każdy router zmniejsza o 1'],
-              ['Protokół', p.proto === 'ICMP' ? '1' : p.proto === 'TCP' ? '6' : '17', p.proto],
+              ['Protokół', p.proto === 'ICMP' ? '1' : p.proto === 'TCP' ? '6' : p.proto === 'OSPF' ? '89' : '17', p.proto],
               ['Identyfikator', String(p.id), 'używany przy fragmentacji'],
               ['Suma kontrolna nagłówka', 'obecna', 'przeliczana na każdym routerze'],
             ]}
@@ -258,7 +259,7 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
           <Fields
             rows={[
               ['Port źródłowy', String(p.udp.srcPort), p.udp.srcPort > 49151 ? 'port efemeryczny' : undefined],
-              ['Port docelowy', String(p.udp.dstPort), { 67: 'serwer DHCP', 68: 'klient DHCP', 53: 'DNS', 123: 'NTP', 9: 'Discard (RFC 863)' }[p.udp.dstPort]],
+              ['Port docelowy', String(p.udp.dstPort), { 67: 'serwer DHCP', 68: 'klient DHCP', 53: 'DNS', 123: 'NTP', 9: 'Discard (RFC 863)', 520: 'RIP' }[p.udp.dstPort]],
               ...(p.udp.data ? ([['Długość', `${8 + p.udp.data.len} B`, '8 B nagłówka + dane']] as Row[]) : []),
               ['Suma kontrolna', 'obecna'],
             ]}
@@ -274,6 +275,37 @@ export function EventDetails({ ev, net }: { ev: SimEvent | null; net: Network })
             rows={[
               ['Dane', `${p.udp.data.len} B`],
               ['Część', `${p.udp.data.part} z ${p.udp.data.total}`, 'numer zna tylko aplikacja – w nagłówku UDP go nie ma'],
+            ]}
+          />
+        </Layer>
+      )}
+      {p?.udp?.rip && (
+        <Layer n="7" title="RIP v2 (RFC 2453)" color={PROTO_COLORS.RIP}>
+          <Fields
+            rows={[
+              ['Polecenie', p.udp.rip.cmd === 'request' ? '1 (Request)' : '2 (Response)', p.udp.rip.cmd === 'request' ? 'prośba o całą tablicę' : p.udp.rip.triggered ? 'aktualizacja wyzwalana zmianą' : 'ogłoszenie tablicy'],
+              ['Wersja', '2', 'z maską podsieci w każdym wpisie'],
+              ...(p.udp.rip.entries.map((e) => [`Trasa ${e.network}/${e.prefix}`, e.metric >= 16 ? '16' : String(e.metric), e.metric >= 16 ? 'nieosiągalna (zatrucie trasy)' : `metryka – liczba skoków do sieci`] as Row)),
+            ]}
+          />
+        </Layer>
+      )}
+      {p?.ospf && (
+        <Layer n="3" title={`OSPF v2 (RFC 2328) – ${p.ospf.type}`} color={PROTO_COLORS.OSPF}>
+          <Fields
+            rows={[
+              ['Typ pakietu', { Hello: '1 (Hello)', LSU: '4 (Link State Update)', LSAck: '5 (Link State Ack)' }[p.ospf.type]],
+              ['Router ID nadawcy', p.ospf.rid],
+              ['Obszar', String(p.ospf.area), p.ospf.area === 0 ? 'obszar szkieletowy' : undefined],
+              ...(p.ospf.type === 'Hello'
+                ? ([
+                    ['Maska sieci', p.ospf.mask ?? '-', 'musi być taka sama u obu sąsiadów'],
+                    ['Hello / Dead', '10 s / 40 s', 'w symulatorze Hello wysyłane po zmianach'],
+                    ['Sąsiedzi', p.ospf.neighbors?.join(', ') || '(brak)', 'routery, których Hello już słyszę'],
+                  ] as Row[])
+                : []),
+              ...((p.ospf.lsas ?? []).map((l) => [`Router-LSA ${l.rid} #${l.seq}`, l.links.map((k) => (k.kind === 'router' ? `→${k.rid} koszt ${k.cost}` : `${k.network}/${k.prefix} koszt ${k.cost}`)).join('; ')] as Row)),
+              ...((p.ospf.acks ?? []).map((a) => ['Potwierdzam', `Router-LSA ${a.rid} #${a.seq}`] as Row)),
             ]}
           />
         </Layer>
@@ -463,8 +495,13 @@ export function SequenceDiagram({
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth={sel ? 3.5 : 2} strokeDasharray={e.dropped ? '5 4' : undefined} markerEnd={`url(#arr-${e.protocol})`} />
             {e.dropped && <text x={x2 + (x2 > x1 ? -14 : 6)} y={y2 + 4} fill="#dc2626" fontWeight={700} fontSize={13}>✗</text>}
+            <title>{e.summary}</title>
             <text x={x1 + (x2 >= x1 ? 8 : -8)} y={y1 - 4} textAnchor={x2 >= x1 ? 'start' : 'end'} className={styles.seqLabel} fontWeight={sel ? 700 : 400}>
-              {e.summary.length > 34 ? e.summary.slice(0, 33) + '…' : e.summary}
+              {(() => {
+                // etykieta mieści się nad własną strzałką – nie wchodzi na sąsiednie zdarzenia z tej samej chwili
+                const max = Math.max(10, Math.floor((Math.abs(x2 - x1) - 12) / 5.7));
+                return e.summary.length > max ? e.summary.slice(0, max - 1) + '…' : e.summary;
+              })()}
             </text>
           </g>
         );

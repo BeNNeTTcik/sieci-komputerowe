@@ -4,7 +4,7 @@
 
 import type { DeviceType, Protocol, ServiceName } from './model';
 
-export type PackId = 'ipv4' | 'ipv6' | 'transition' | 'transport' | 'dhcp' | 'vlan' | 'security' | 'dns' | 'web' | 'ftp' | 'mail' | 'ntp' | 'print';
+export type PackId = 'ipv4' | 'ipv6' | 'routing' | 'nat' | 'transition' | 'transport' | 'dhcp' | 'vlan' | 'security' | 'dns' | 'web' | 'ftp' | 'mail' | 'ntp' | 'print';
 
 export interface Pack {
   id: PackId;
@@ -16,14 +16,16 @@ export interface Pack {
 }
 
 export const PACKS: Pack[] = [
-  { id: 'ipv4', name: 'IPv4', desc: 'Adresy IPv4, ARP, ICMP (ping, trace), routing statyczny.', protocols: ['ARP', 'ICMP'] },
-  { id: 'ipv6', name: 'IPv6', desc: 'Adresy IPv6, link-local, NDP, SLAAC, ICMPv6, routing IPv6.', protocols: ['NDP', 'ICMP'] },
+  { id: 'ipv4', name: 'IPv4', desc: 'Adresy IPv4, ARP, ICMP (ping, trace), routing statyczny, TCP i UDP.', protocols: ['ARP', 'ICMP', 'TCP', 'UDP'] },
+  { id: 'ipv6', name: 'IPv6', desc: 'Adresy IPv6, link-local, NDP, SLAAC, ICMPv6, routing IPv6, TCP i UDP.', protocols: ['NDP', 'ICMP', 'TCP', 'UDP'] },
+  { id: 'routing', name: 'Routing dynamiczny', desc: 'RIP v2 (RFC 2453) i OSPF v2 (RFC 2328) na routerach.', protocols: ['RIP', 'OSPF'], requires: ['ipv4'] },
+  { id: 'nat', name: 'NAT i PAT', desc: 'Translacja adresów IPv4: NAT statyczny, dynamiczny z puli i PAT (RFC 3022).', protocols: [], requires: ['ipv4'] },
   { id: 'transition', name: 'IPv4 ↔ IPv6', desc: 'Tunele 6in4 / 4in6 (RFC 4213, 2473), NAT64 (RFC 6146) i DNS64 (RFC 6147).', protocols: ['TUNNEL'], requires: ['ipv4', 'ipv6'] },
   {
     id: 'transport',
     name: 'TCP i UDP',
-    desc: 'Przesył danych testowych (tcp-send, udp-send) do usługi Discard (RFC 863), straty ramek na kablu, retransmisje TCP.',
-    protocols: ['TCP', 'UDP'],
+    desc: 'Narzędzia do porównania TCP i UDP: tcp-send, udp-send do usługi Discard (RFC 863) i straty ramek na kablu.',
+    protocols: [],
     service: ['discard'],
   },
   { id: 'vlan', name: 'VLAN', desc: 'Sieci wirtualne na przełączniku (IEEE 802.1Q).', protocols: [] },
@@ -51,6 +53,8 @@ export const PROFILES: Profile[] = [
   { id: 'dual', name: 'Dual stack', desc: 'IPv4 i IPv6 jednocześnie, DNS i WWW.', packs: ['ipv4', 'ipv6', 'dns', 'web'] },
   { id: 'services', name: 'Usługi sieciowe', desc: 'Serwer: DHCP, DNS, WWW, FTP, poczta, NTP.', packs: ['ipv4', 'dhcp', 'dns', 'web', 'ftp', 'mail', 'ntp'] },
   { id: 'transition', name: 'Przejście IPv4 → IPv6', desc: 'Tunele 6in4, NAT64 i DNS64.', packs: ['ipv4', 'ipv6', 'transition', 'dns', 'web'] },
+  { id: 'routing', name: 'Routing', desc: 'Trasy statyczne, RIP i OSPF.', packs: ['ipv4', 'routing'] },
+  { id: 'nat', name: 'NAT i PAT', desc: 'Sieć prywatna za routerem z NAT, WWW w Internecie.', packs: ['ipv4', 'nat', 'web'] },
   { id: 'transport', name: 'TCP i UDP', desc: 'Porównanie TCP i UDP, straty na łączu, retransmisje.', packs: ['ipv4', 'transport'] },
   { id: 'security', name: 'Bezpieczeństwo LAN', desc: '802.1X, limit MAC, ochrona DHCP, SAVI.', packs: ['ipv4', 'dhcp', 'security'] },
   { id: 'all', name: 'Wszystko', desc: 'Wszystkie pakiety naraz.', packs: PACKS.map((p) => p.id) },

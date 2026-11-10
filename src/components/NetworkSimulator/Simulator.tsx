@@ -23,13 +23,12 @@ import {
   removeDevice,
   sameIp,
 } from './model';
-import { OutputLine, Sim, SimEvent } from './engine';
+import { OutputLine, Sim, SimEvent, l4Info, transportOf } from './engine';
 import { startFtp, startHttp, startMailCheck, startMailSend, startPrint } from './apps';
 import { CliActions, CliResult, commandsFor, prompt, runCommand } from './cli';
 // jawnie folder scenarios/ – stary plik scenarios.ts (z poprzedniej wersji) nie może go przesłonić
-import { EXTRA_SCENARIOS, buildScenario, scenarioById, scenarioSig, variantOf, visibleScenarios } from './scenarios/index';
+import { EXTRA_SCENARIOS, buildScenario, scenarioById, scenarioSig, tasksOf, variantOf, visibleScenarios } from './scenarios/index';
 import { COPYRIGHT } from './license';
-import { TransportView } from './transport';
 import { PACKS, PROFILES, PackId, PackSet, devicesFor, matchProfile, packSet, protocolsFor, withDeps, without } from './packs';
 import { DeviceGlyph, DeviceIcon, UiIcon, UiIconName } from './icons';
 import { DeviceWindow, LastCmd, Win, tabsFor } from './DeviceWindow';
@@ -39,12 +38,14 @@ import type { Note } from './model';
 import styles from './styles.module.css';
 
 export interface SimulatorProps {
-  /** id scenariusza startowego: lan | routing | dhcp | static | vlan | services | relay | ipv6 | dual | tunnel | nat64 | security | empty */
+  /** id scenariusza startowego: lan | routing | dhcp | static | vlan | services | relay | ipv6 | dual | transport | tunnel | nat64 | security | segmentacja | empty */
   scenario?: string;
   /** dodatkowe scenariusze na pasku (obok bazowych); bez tej właściwości obowiązuje lista z scenarios/config.ts */
   scenarios?: string[];
   /** wariant stanu początkowego scenariusza startowego (id z pliku scenariusza); domyślnie `start` z tego pliku */
   variant?: string;
+  /** które warianty pokazać w polu „Stan początkowy” (np. bez klucza dla prowadzącego); domyślnie wszystkie */
+  variants?: string[];
   /** wysokość komponentu w pikselach (gdy nie używasz `fill`) */
   height?: number;
   /** ukrywa wybór scenariusza – przydatne w lekcji o jednym temacie */
@@ -99,6 +100,8 @@ interface Saved {
   sig?: string;
   /** wariant stanu początkowego */
   variant?: string;
+  /** stan odczytany z pamięci przeglądarki (a nie zbudowany od nowa) */
+  restored?: boolean;
 }
 
 function load(id: string, persist: boolean, variant?: string): Saved {
@@ -108,7 +111,7 @@ function load(id: string, persist: boolean, variant?: string): Saved {
       const raw = window.localStorage.getItem(STORE + id);
       if (raw) {
         const s = JSON.parse(raw) as Saved;
-        if (s?.net?.devices && s.sig === scenarioSig(id, s.variant)) return { net: shiftOld(normalizeNet(s.net)), done: s.done ?? {}, packs: withDeps({ ...packSet(sc.packs), ...s.packs }), variant: s.variant };
+        if (s?.net?.devices && s.sig === scenarioSig(id, s.variant)) return { net: shiftOld(normalizeNet(s.net)), done: s.done ?? {}, packs: withDeps({ ...packSet(sc.packs), ...s.packs }), variant: s.variant, restored: true };
       }
     } catch {
       /* brak dostępu do pamięci przeglądarki */
@@ -129,6 +132,11 @@ function fresh(id: string, variant?: string): Saved {
   }
 }
 
+/** Warianty widoczne na liście „Stan początkowy” (właściwość `variants` albo wszystkie bez `hidden`). */
+function pickableVariants(id: string, allowed?: string[], current?: string) {
+  return (scenarioById(id).variants ?? []).filter((v) => v.id === current || (allowed ? allowed.includes(v.id) : !v.hidden));
+}
+
 function loadLayout() {
   try {
     const raw = window.localStorage.getItem(LAYOUT);
@@ -139,10 +147,12 @@ function loadLayout() {
   return { side: 360, bottom: 300, list: 0.55 };
 }
 
-export default function Simulator({ scenario = 'lan', scenarios, variant: startVariant, height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
+export default function Simulator({ scenario = 'lan', scenarios, variant: startVariant, variants: allowedVariants, height = 860, lockScenario = false, persist = true, fill = false, showTasks = false }: SimulatorProps) {
   const [scenarioId, setScenarioId] = useState(scenarioById(scenario).id);
   const initial = useMemo(() => load(scenarioId, persist, startVariant), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [variant, setVariant] = useState<string | undefined>(initial.variant);
+  // okno wyboru stanu początkowego: przy pierwszym otwarciu scenariusza z wariantami (bez zapisanego postępu)
+  const [pickStart, setPickStart] = useState(() => !initial.restored && !startVariant && pickableVariants(scenarioId, allowedVariants).length > 1);
   const netRef = useRef<Network>(initial.net);
   const net = netRef.current;
   const [ver, bump] = useReducer((x: number) => x + 1, 0);
@@ -162,8 +172,6 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
   const [outputs, setOutputs] = useState<OutputLine[]>([]);
   const [runLabels, setRunLabels] = useState<Record<number, string>>({});
   const [seqRun, setSeqRun] = useState<number | null>(null);
-  /** prawy dolny panel: diagram sekwencji (wszystkie urządzenia) albo widok warstwy transportowej */
-  const [diagTab, setDiagTab] = useState<'seq' | 'transport'>(initial.packs.transport ? 'transport' : 'seq');
   const [mode, setMode] = useState<'sim' | 'realtime'>('sim');
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -197,6 +205,10 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
   const modeRef = useRef(mode);
   const runCounter = useRef(1);
   const idRef = useRef(1);
+  /** silnik na żywo: jeden obiekt Sim liczy ruch krok po kroku, razem z odtwarzaniem */
+  const simRef = useRef<Sim | null>(null);
+  /** ile zdarzeń i linii wyjścia silnika przekazano już do widoku */
+  const takenRef = useRef({ ev: 0, out: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -213,6 +225,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
   const W = round120(Math.max(MIN_W, ...net.devices.map((d) => d.x + GROW), ...allNotes.map((o) => noteBox(o).x + noteBox(o).w + GROW / 2)));
   const H = round120(Math.max(MIN_H, ...net.devices.map((d) => d.y + GROW), ...allNotes.map((o) => noteBox(o).y + noteBox(o).h + GROW / 2)));
   const sc = scenarioById(scenarioId);
+  const tasks = useMemo(() => tasksOf(sc, variant), [sc, variant]);
   const shown = useMemo(() => visibleScenarios(scenarios ?? EXTRA_SCENARIOS, scenario), [scenarios, scenario]);
   const activeProtos = protocolsFor(packs);
   const deviceTypes = devicesFor(packs);
@@ -237,7 +250,8 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       let np = phRef.current + dt * speed * STEPS_PER_SEC;
-      if (np >= endRef.current) {
+      advance(np);
+      if (np >= endRef.current && !simRef.current?.busy) {
         np = endRef.current;
         seek(np);
         setPlaying(false);
@@ -301,9 +315,9 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
 
   // ----- automatyczne sprawdzanie zadań -----
   useEffect(() => {
-    if (playing || !showTasks) return;
+    if (playing || !tasksOn) return;
     const upd: Record<number, boolean> = {};
-    sc.tasks.forEach((t, i) => {
+    tasks.forEach((t, i) => {
       if (t.check && !done[i]) {
         try {
           if (t.check({ net: netRef.current, events: events.filter((e) => e.t + 1 <= phRef.current + 1e-6) })) upd[i] = true;
@@ -318,28 +332,86 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
     }
   }, [ver, events, playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ----- symulacja -----
-  const nextBase = () => Math.ceil(Math.max(endRef.current, phRef.current));
+  // ----- symulacja na żywo -----
+  // Silnik nie liczy całej wymiany z góry: kolejka zdarzeń jest wykonywana tylko do bieżącej chwili odtwarzania.
+  // Dzięki temu odłączenie kabla, wyłączenie portu albo usunięcie urządzenia w trakcie pingu działa od razu.
 
-  const runSim = (label: string, jobs: Job[], base: number) => {
+  const liveSim = () => {
+    let s = simRef.current;
+    if (!s || s.net !== netRef.current) {
+      s = new Sim(netRef.current, Math.ceil(endRef.current), 0, idRef);
+      simRef.current = s;
+      takenRef.current = { ev: 0, out: 0 };
+    }
+    s.packs = packsRef.current;
+    return s;
+  };
+
+  /** przekazuje do widoku nowe zdarzenia i wyniki z silnika */
+  const flush = () => {
+    const s = simRef.current;
+    if (!s) return false;
+    const ev = s.events.slice(takenRef.current.ev);
+    const out = s.outputs.slice(takenRef.current.out);
+    takenRef.current = { ev: s.events.length, out: s.outputs.length };
+    if (!ev.length && !out.length) return false;
+    for (const e of ev) endRef.current = Math.max(endRef.current, e.t + (e.kind === 'hop' ? (e.dropped ? 1.8 : 1) : 1));
+    for (const o of out) endRef.current = Math.max(endRef.current, o.t);
+    if (ev.length) setEvents((x) => x.concat(ev));
+    if (out.length) setOutputs((x) => x.concat(out));
+    return true;
+  };
+
+  /** liczy ruch do chwili `t`; gdy nic nie jest w drodze, przeskakuje puste liczniki czasu */
+  const advance = (t: number) => {
+    const s = simRef.current;
+    if (!s) return;
+    s.packs = packsRef.current;
+    s.runUntil(t);
+    flush();
+    // nic widocznego przed nami – wykonaj następne działanie z kolejki (np. retransmisję po RTO albo pusty licznik ARP)
+    let guard = 0;
+    while (t >= endRef.current && s.busy && guard++ < 200) {
+      s.step();
+      if (flush()) break;
+    }
+  };
+
+  /** liczy wszystko, co zostało w kolejce (tryb „Czas rzeczywisty”, przycisk „Na koniec”) */
+  const finish = () => {
+    const s = simRef.current;
+    if (!s) return;
+    s.runAll();
+    flush();
+  };
+
+  const runSim = (label: string, jobs: Job[]) => {
+    const s = liveSim();
+    // nowe polecenie startuje „teraz”: w bieżącej chwili odtwarzania, ale nie wcześniej niż zegar silnika
+    const now = Math.max(Math.ceil(phRef.current - 1e-9), Math.ceil(s.t - 1e-9));
+    if (phRef.current < now) seek(now);
+    s.setNow(now);
     const run = runCounter.current++;
-    const sim = new Sim(netRef.current, base, run, idRef);
-    sim.packs = packsRef.current;
-    jobs.forEach((j) => j(sim));
-    sim.runAll();
-    const end = Math.max(sim.endTime, base);
-    endRef.current = Math.max(endRef.current, end);
-    setEvents((e) => e.concat(sim.events));
-    setOutputs((o) => o.concat(sim.outputs));
+    s.run = run;
+    jobs.forEach((j) => j(s));
     setRunLabels((r) => ({ ...r, [run]: label }));
     setSeqRun(run);
     if (modeRef.current === 'realtime') {
+      finish();
       seek(endRef.current);
       setPlaying(false);
     } else {
-      if (!playingRef.current) seek(base);
+      advance(now);
       setPlaying(true);
     }
+    return now;
+  };
+
+  /** Zmiana połączeń: routery z RIP/OSPF od razu wymieniają informacje (w prawdziwej sieci – po upływie liczników czasu). */
+  const topologyChanged = () => {
+    if (!packsRef.current.routing) return;
+    if (!netRef.current.devices.some((x) => x.type === 'router' && (x.rip || x.ospf))) return;
+    runSim('Zmiana połączeń – aktualizacja routingu dynamicznego', [(s) => s.startRouting()]);
   };
 
   const exec = (devId: string, line: string, source: 'gui' | 'cli'): CliResult | null => {
@@ -362,6 +434,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
       print: (x, h, doc, v) => jobs.push((s) => startPrint(s, x, h, doc, v)),
       tcpSend: (x, h, port, size, v) => jobs.push((s) => s.startTcpSend(x, h, port, size, v)),
       udpSend: (x, h, port, size, v) => jobs.push((s) => s.startUdpSend(x, h, port, size, v)),
+      routing: (x) => jobs.push((s) => s.startRouting(x)),
     };
     const pr = prompt(d);
     const r = runCommand(netRef.current, d, line, act, packsRef.current);
@@ -370,18 +443,19 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
       setOutputs((o) => o.filter((x) => x.dev !== devId || x.t > phRef.current));
       return r;
     }
-    const base = jobs.length ? nextBase() : phRef.current;
+    const base = jobs.length ? Math.max(Math.ceil(phRef.current - 1e-9), Math.ceil((simRef.current?.t ?? 0) - 1e-9)) : phRef.current;
     const lines: OutputLine[] = [
       { t: base, dev: devId, text: `${pr} ${line}${source === 'gui' ? '    # z okna' : ''}`, kind: 'cmd' },
       ...r.lines.map((l) => ({ t: base, dev: devId, text: l.text, kind: l.kind })),
     ];
     setOutputs((o) => o.concat(lines));
-    if (jobs.length) runSim(`${d.name}: ${line}`, jobs, base);
+    if (jobs.length) runSim(`${d.name}: ${line}`, jobs);
     bump();
     return r;
   };
 
   const clearEvents = () => {
+    simRef.current = null;
     setEvents([]);
     setOutputs((o) => o.map((x) => ({ ...x, t: 0 })));
     setRunLabels({});
@@ -402,12 +476,12 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
     setDraft(null);
     setDone(s.done);
     setPacksState(s.packs);
-    setDiagTab(s.packs.transport ? 'transport' : 'seq');
     setScenarioId(id);
     setWins([]);
     setOutputs([]);
     clearEvents();
     setSideTab('tasks');
+    setPickStart(!isFresh && !s.restored && pickableVariants(id, allowedVariants).length > 1);
     bump();
   };
 
@@ -552,6 +626,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
       removeDevice(net, id);
       setWins((ws) => ws.filter((w) => w.id !== id));
       say(`Usunięto ${d.name}.`);
+      topologyChanged();
       bump();
       return;
     }
@@ -787,7 +862,10 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
     }
     const r = connect(netRef.current, linkStart.dev, devId, linkStart.iface, chosen);
     if (typeof r === 'string') say(r);
-    else say(`Połączono ${getDev(netRef.current, r.a.dev)!.name} ${r.a.iface} ↔ ${getDev(netRef.current, r.b.dev)!.name} ${r.b.iface}.`);
+    else {
+      say(`Połączono ${getDev(netRef.current, r.a.dev)!.name} ${r.a.iface} ↔ ${getDev(netRef.current, r.b.dev)!.name} ${r.b.iface}.`);
+      topologyChanged();
+    }
     setLinkStart(null);
     bump();
   };
@@ -869,7 +947,15 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
 
   // ----- dane widoku -----
   const chipProtos = useMemo(() => [...activeProtos, ...(Object.keys(PROTO_COLORS) as Protocol[]).filter((p) => !activeProtos.includes(p) && events.some((e) => e.protocol === p))], [events, activeProtos.join()]); // eslint-disable-line react-hooks/exhaustive-deps
-  const visible = useMemo(() => events.filter((e) => filters[e.protocol]), [events, filters]);
+  // filtr warstwowy: odznaczenie TCP albo UDP ukrywa też aplikacje, które nimi jadą (np. HTTP, DNS)
+  const visible = useMemo(
+    () =>
+      events.filter((e) => {
+        const tr = transportOf(e.frame);
+        return filters[e.protocol] && (!tr || filters[tr]);
+      }),
+    [events, filters],
+  );
   const started = useMemo(() => visible.filter((e) => e.t <= playhead + 1e-6), [visible, Math.floor(playhead * 4)]); // eslint-disable-line react-hooks/exhaustive-deps
   const moving = visible.filter((e) => e.kind === 'hop' && e.t <= playhead && playhead < e.t + 1);
   const drops = visible.filter((e) => e.dropped && ((e.kind === 'hop' && playhead >= e.t + 1 && playhead < e.t + 1.8) || (e.kind === 'drop' && playhead >= e.t && playhead < e.t + 1)));
@@ -896,14 +982,20 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
   const togglePlay = () => {
     if (playing) setPlaying(false);
     else {
-      if (phRef.current >= endRef.current) seek(0);
+      if (phRef.current >= endRef.current && !simRef.current?.busy) seek(0);
       setPlaying(true);
     }
   };
   const step = (dir: 1 | -1) => {
     setPlaying(false);
     const v = dir > 0 ? Math.floor(phRef.current + 1e-6) + 1 : Math.ceil(phRef.current - 1e-6) - 1;
-    seek(Math.max(0, Math.min(endRef.current, v)));
+    if (dir > 0) advance(v);
+    seek(Math.max(0, Math.min(Math.max(endRef.current, simRef.current?.busy ? v : 0), v)));
+  };
+  const toEnd = () => {
+    setPlaying(false);
+    finish();
+    seek(endRef.current);
   };
 
   const termLines = (id: string) => outputs.filter((o) => o.dev === id && o.t <= playhead + 1e-6);
@@ -911,7 +1003,11 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
     const d = getDev(net, id);
     return d ? { x: d.x, y: d.y } : null;
   };
-  const doneCount = sc.tasks.filter((_, i) => done[i]).length;
+  const doneCount = tasks.filter((_, i) => done[i]).length;
+  // zadania: włączone właściwością showTasks albo przez scenariusz-ćwiczenie (exercise: true)
+  const tasksOn = showTasks || !!sc.exercise;
+  // warianty w polu „Stan początkowy” – właściwość `variants` może ukryć np. klucz dla prowadzącego (bieżący zostaje widoczny)
+  const shownVariants = pickableVariants(scenarioId, allowedVariants, variant);
   const resetBtn = (
     <button
       type="button"
@@ -1084,6 +1180,11 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
             <button type="button" className={styles.tbtn} onClick={clearTables} title="Czyści tablice ARP, sąsiadów, MAC i pamięć DNS">Wyczyść tablice</button>
             <button type="button" className={styles.tbtn} onClick={exportJson} title="Zapisz topologię do pliku JSON">Eksport</button>
             <button type="button" className={styles.tbtn} onClick={() => fileRef.current?.click()} title="Wczytaj topologię z pliku JSON">Import</button>
+            {shownVariants.length > 1 && (
+              <button type="button" className={`${styles.tbtn} ${pickStart ? styles.tbtnOn : ''}`} onClick={() => setPickStart((o) => !o)} title="Wybierz, od jakiego stanu sieci zaczyna się scenariusz">
+                Stan początkowy: {variantOf(sc, variant)?.name ?? '–'}
+              </button>
+            )}
             {resetBtn}
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           </div>
@@ -1160,6 +1261,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
                       e.stopPropagation();
                       netRef.current.links = netRef.current.links.filter((x) => x.id !== l.id);
                       say('Usunięto kabel.');
+                      topologyChanged();
                       bump();
                     }}
                   >
@@ -1333,6 +1435,38 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
                     : 'Kliknij urządzenie, aby otworzyć jego okno. Przeciągnij tło (albo użyj pasków), aby przesunąć widok; Ctrl + kółko – powiększenie.')}
             </div>
 
+            {pickStart && shownVariants.length > 1 && (
+              <div className={styles.startPick} role="dialog" aria-label="Wybór stanu początkowego">
+                <div className={styles.startPickBox}>
+                  <h4>{sc.title}</h4>
+                  <p className={styles.muted}>Od czego zaczynasz? Wybór wczytuje scenariusz od nowa – później zmienisz go przyciskiem „Stan początkowy” na pasku.</p>
+                  <div className={styles.startPickList}>
+                    {shownVariants.map((v) => (
+                      <button
+                        type="button"
+                        key={v.id}
+                        className={`${styles.startPickItem} ${v.id === variant ? styles.startPickOn : ''}`}
+                        onClick={() => {
+                          loadScenario(scenarioId, true, v.id);
+                          setPickStart(false);
+                          say(`Stan początkowy: ${v.name}.`);
+                        }}
+                      >
+                        <strong>
+                          {v.name}
+                          {v.id === (sc.start ?? sc.variants![0].id) ? ' (domyślny)' : ''}
+                        </strong>
+                        {v.description && <span>{v.description}</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className={styles.tbtn} onClick={() => setPickStart(false)}>
+                    Zostaw obecny stan
+                  </button>
+                </div>
+              </div>
+            )}
+
             {portPick && getDev(net, portPick.dev) && (
               <PortPicker
                 net={net}
@@ -1378,7 +1512,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
 
           <aside className={styles.side}>
             <div className={styles.tabs} role="tablist">
-              {([['packet', 'Pakiet'], ['tasks', showTasks ? `Zadania${sc.tasks.length ? ` ${doneCount}/${sc.tasks.length}` : ''}` : 'Scenariusz'], ['help', 'Pomoc']] as const).map(([k, l]) => (
+              {([['packet', 'Pakiet'], ['tasks', tasksOn ? `Zadania${tasks.length ? ` ${doneCount}/${tasks.length}` : ''}` : 'Scenariusz'], ['help', 'Pomoc']] as const).map(([k, l]) => (
                 <button type="button" role="tab" aria-selected={sideTab === k} key={k} className={sideTab === k ? styles.tabOn : ''} onClick={() => setSideTab(k)}>
                   {l}
                 </button>
@@ -1389,28 +1523,13 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
               {sideTab === 'tasks' && (
                 <div className={styles.tasks}>
                   <h3>{sc.title}</h3>
-                  <p className={styles.muted}>{showTasks ? `Poziom: ${sc.level} · ` : ''}pakiety: {PACKS.filter((p) => packs[p.id]).map((p) => p.name).join(', ')}</p>
-                  <p>{sc.description}</p>
-                  {(sc.variants?.length ?? 0) > 1 && (
-                    <div className={styles.variantBox}>
-                      <label className={styles.variantLabel}>
-                        <span>Stan początkowy</span>
-                        <select value={variant ?? ''} onChange={(e) => loadScenario(scenarioId, true, e.target.value)}>
-                          {sc.variants!.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.name}
-                              {v.id === (sc.start ?? sc.variants![0].id) ? ' (domyślny)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {variantOf(sc, variant)?.description && <p className={styles.muted}>{variantOf(sc, variant)!.description}</p>}
-                      <p className={styles.muted}>Zmiana wariantu wczytuje scenariusz od nowa.</p>
-                    </div>
-                  )}
-                  {showTasks && (
+                  <p className={styles.muted}>{tasksOn ? `Poziom: ${sc.level} · ` : ''}pakiety: {PACKS.filter((p) => packs[p.id]).map((p) => p.name).join(', ')}</p>
+                  {sc.description.split('\n').filter((l) => l.trim()).map((l, i) => (
+                    <p key={i}>{l}</p>
+                  ))}
+                  {tasksOn && (
                   <ol>
-                    {sc.tasks.map((t, i) => (
+                    {tasks.map((t, i) => (
                       <li key={i} className={done[i] ? styles.taskDone : ''}>
                         <label>
                           <input type="checkbox" checked={!!done[i]} disabled={!!t.check} onChange={() => setDone((d) => ({ ...d, [i]: !d[i] }))} />
@@ -1427,8 +1546,8 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
                     ))}
                   </ol>
                   )}
-                  {showTasks && !sc.tasks.length && <p className={styles.muted}>Ten scenariusz nie ma zadań – eksperymentuj swobodnie.</p>}
-                  {!showTasks && (
+                  {tasksOn && !tasks.length && <p className={styles.muted}>Ten scenariusz nie ma zadań – eksperymentuj swobodnie.</p>}
+                  {!tasksOn && (
                     <p className={styles.muted}>
                       Scenariusz to gotowa topologia startowa. Zmieniaj ją dowolnie – przycisk „Reset” przywraca stan początkowy, a „Pusty projekt” daje czystą kartkę.
                     </p>
@@ -1452,8 +1571,7 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
               className={`${styles.tbtn} ${mode === 'realtime' ? styles.tbtnOn : ''}`}
               onClick={() => {
                 setMode('realtime');
-                setPlaying(false);
-                seek(endRef.current);
+                toEnd();
               }}
             >
               Czas rzeczywisty
@@ -1461,11 +1579,11 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
           </div>
             <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(0); }} title="Na początek" aria-label="Na początek"><UiIcon name="first" /></button>
             <button type="button" className={styles.tbtn} onClick={() => step(-1)} title="Krok wstecz" aria-label="Krok wstecz"><UiIcon name="back" /></button>
-            <button type="button" className={`${styles.tbtn} ${styles.play}`} onClick={togglePlay} disabled={!events.length} title={playing ? 'Pauza' : 'Odtwórz'} aria-label={playing ? 'Pauza' : 'Odtwórz'}>
+            <button type="button" className={`${styles.tbtn} ${styles.play}`} onClick={togglePlay} disabled={!events.length && !simRef.current?.busy} title={playing ? 'Pauza' : 'Odtwórz'} aria-label={playing ? 'Pauza' : 'Odtwórz'}>
               <UiIcon name={playing ? 'pause' : 'play'} />
             </button>
             <button type="button" className={styles.tbtn} onClick={() => step(1)} title="Krok naprzód" aria-label="Krok naprzód"><UiIcon name="step" /></button>
-            <button type="button" className={styles.tbtn} onClick={() => { setPlaying(false); seek(endRef.current); }} title="Na koniec" aria-label="Na koniec"><UiIcon name="last" /></button>
+            <button type="button" className={styles.tbtn} onClick={toEnd} title="Na koniec" aria-label="Na koniec"><UiIcon name="last" /></button>
             <label className={styles.speed}>
               tempo
               <input type="range" min={0.25} max={4} step={0.25} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
@@ -1507,8 +1625,21 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
                             <td>{e.t}</td>
                             <td>{getDev(net, e.from)?.name ?? '?'}</td>
                             <td>{e.kind === 'drop' ? '—' : getDev(net, e.to)?.name ?? '?'}</td>
-                            <td><span className={styles.chip} style={{ background: PROTO_COLORS[e.protocol] }}>{PROTO_LABEL[e.protocol]}</span></td>
-                            <td className={styles.evSum}>{e.summary}</td>
+                            <td className={styles.evProto}>
+                              {(() => {
+                                const tr = transportOf(e.frame);
+                                return tr && tr !== e.protocol ? <span className={styles.chip} style={{ background: PROTO_COLORS[tr] }}>{tr}</span> : null;
+                              })()}
+                              <span className={styles.chip} style={{ background: PROTO_COLORS[e.protocol] }}>{PROTO_LABEL[e.protocol]}</span>
+                            </td>
+                            <td className={styles.evSum}>
+                              {e.summary}
+                              {(() => {
+                                const tr = transportOf(e.frame);
+                                const info = tr ? l4Info(e.frame, tr !== e.protocol && !e.summary.startsWith('TCP ')) : '';
+                                return info ? <span className={styles.evL4}> · {info}</span> : null;
+                              })()}
+                            </td>
                             <td>{e.dropped ? <span className={styles.bad} title={e.notes[e.notes.length - 1]}>✗</span> : <span className={styles.good}>✓</span>}</td>
                           </tr>
                         );
@@ -1521,26 +1652,16 @@ export default function Simulator({ scenario = 'lan', scenarios, variant: startV
             <div className={styles.vsplit} onPointerDown={startSplit('list')} role="separator" aria-orientation="vertical" aria-label="Zmień proporcje listy i diagramu" />
             <div className={styles.pane} style={{ flexGrow: 1 - layout.list, flexBasis: 0 }}>
               <div className={styles.paneHead}>
-                <div className={styles.paneTabs} role="tablist" aria-label="Rodzaj diagramu">
-                  {([['seq', 'Diagram sekwencji'], ['transport', 'TCP / UDP']] as const).map(([k, l]) => (
-                    <button key={k} type="button" role="tab" aria-selected={diagTab === k} className={diagTab === k ? styles.paneTabOn : undefined} onClick={() => setDiagTab(k)}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
+                Diagram sekwencji
                 <span className={styles.spacer} />
-                {diagTab === 'seq' && runs.length > 0 && (
+                {runs.length > 0 && (
                   <select className={styles.runSel} value={seqRun ?? runs[runs.length - 1]} onChange={(e) => setSeqRun(Number(e.target.value))} aria-label="Przebieg na diagramie">
                     {runs.map((r) => <option key={r} value={r}>{runLabels[r]}</option>)}
                   </select>
                 )}
               </div>
               <div className={styles.events}>
-                {diagTab === 'seq' ? (
-                  <SequenceDiagram events={seqEvents} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
-                ) : (
-                  <TransportView events={events} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
-                )}
+                <SequenceDiagram events={seqEvents} net={net} playhead={playhead} selected={selEvent} onSelect={selectEvent} />
               </div>
             </div>
           </div>

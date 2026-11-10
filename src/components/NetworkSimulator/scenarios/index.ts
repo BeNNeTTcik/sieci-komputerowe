@@ -7,8 +7,8 @@ import { Device, Network, connect, createDevice, emptyNetwork } from '../model';
 import { Sim } from '../engine';
 import { ALL_PACKS, PackSet, packSet } from '../packs';
 import { startFtp, startHttp, startMailCheck, startMailSend, startPrint } from '../apps';
-import { newNote } from '../notes';
-import type { Scenario, Variant } from './types';
+import { newNote } from '../noteData';
+import type { Scenario, Task, Variant } from './types';
 
 import lan from './lan';
 import routing from './routing';
@@ -23,6 +23,11 @@ import tunnel from './tunnel';
 import nat64 from './nat64';
 import security from './security';
 import transport from './transport';
+import routingDyn from './routingDyn';
+import nat from './nat';
+import usterkiHosty from './usterkiHosty';
+import usterkiDns from './usterkiDns';
+import segmentacja from './segmentacja';
 import empty from './empty';
 
 export type { CheckCtx, Task, Scenario, Variant, DeviceSpec, DeviceConfig, ZoneSpec } from './types';
@@ -30,7 +35,7 @@ export { defineScenario } from './types';
 export { EXTRA_SCENARIOS } from './config';
 
 /** kolejność na pasku („Pusty projekt” na końcu) */
-export const SCENARIOS: Scenario[] = [lan, routing, dhcp, staticRoutes, vlan, services, relay, ipv6, dual, transport, tunnel, nat64, security, empty];
+export const SCENARIOS: Scenario[] = [lan, routing, dhcp, staticRoutes, vlan, services, relay, ipv6, dual, transport, routingDyn, nat, usterkiHosty, usterkiDns, tunnel, nat64, security, segmentacja, empty];
 
 export const scenarioById = (id: string) => SCENARIOS.find((s) => s.id === id) ?? SCENARIOS[0];
 
@@ -38,6 +43,11 @@ export const scenarioById = (id: string) => SCENARIOS.find((s) => s.id === id) ?
 export function variantOf(sc: Scenario, id?: string): Variant | undefined {
   const vs = sc.variants ?? [];
   return vs.find((v) => v.id === id) ?? vs.find((v) => v.id === sc.start) ?? vs[0];
+}
+
+/** zadania scenariusza razem z zadaniami wybranego wariantu */
+export function tasksOf(sc: Scenario, variant?: string): Task[] {
+  return [...sc.tasks, ...(variantOf(sc, variant)?.tasks ?? [])];
 }
 
 /** podpis stanu początkowego – gdy plik scenariusza się zmieni, zapisany w przeglądarce stan jest porzucany */
@@ -74,13 +84,16 @@ export function buildScenarioChecked(id: string, variant?: string): { net: Netwo
   const where = `scenarios/${sc.id}`;
   const byName = new Map<string, Device>();
 
-  for (const [name, spec] of Object.entries(sc.devices)) {
+  const v = variantOf(sc, variant);
+  // wariant może dołożyć urządzenia, kable i obszary (np. router w kolejnym kroku ćwiczenia)
+  const devices = { ...sc.devices, ...(v?.devices ?? {}) };
+  for (const [name, spec] of Object.entries(devices)) {
     const d = createDevice(net, spec.type, spec.x + OX, spec.y + OY, name);
     if (spec.dhcp) d.dhcp = true;
     byName.set(name, d);
   }
-  for (const z of sc.zones ?? []) newNote(net, 'zone', z.x + OX, z.y + OY, { w: z.w, h: z.h, text: z.text, color: z.color });
-  for (const [a, b] of sc.links ?? []) {
+  for (const z of [...(sc.zones ?? []), ...(v?.zones ?? [])]) newNote(net, 'zone', z.x + OX, z.y + OY, { w: z.w, h: z.h, text: z.text, color: z.color });
+  for (const [a, b] of [...(sc.links ?? []), ...(v?.links ?? [])]) {
     const [an, ai] = a.split(':');
     const [bn, bi] = b.split(':');
     const da = byName.get(an);
@@ -120,6 +133,7 @@ export function buildScenarioChecked(id: string, variant?: string): { net: Netwo
         print: (dd, h, doc, v) => jobs.push((s) => startPrint(s, dd, h, doc, v)),
         tcpSend: (dd, h, port, size, v) => jobs.push((s) => s.startTcpSend(dd, h, port, size, v)),
         udpSend: (dd, h, port, size, v) => jobs.push((s) => s.startUdpSend(dd, h, port, size, v)),
+        routing: (dd) => jobs.push((s) => s.startRouting(dd)),
       };
       const r = runCommand(net, d, line, act, ALL_PACKS);
       if (r.error) warnings.push(`${label}, ${name}: „${line}” – ${r.lines.map((l) => l.text).join(' ')}`);
@@ -133,8 +147,7 @@ export function buildScenarioChecked(id: string, variant?: string): { net: Netwo
     }
   };
 
-  for (const [name, spec] of Object.entries(sc.devices)) exec(name, spec.config, where);
-  const v = variantOf(sc, variant);
+  for (const [name, spec] of Object.entries(devices)) exec(name, spec.config, where);
   if (v?.config) for (const [name, text] of Object.entries(v.config)) exec(name, text, `${where}, wariant „${v.id}”`);
   return { net, warnings };
 }

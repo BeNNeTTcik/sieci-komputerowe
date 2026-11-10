@@ -24,7 +24,7 @@ import {
   prefixToMask,
   routingTable,
 } from './model';
-import { CliResult, prompt } from './cli';
+import { CliResult, Completion, completeCommand, prompt } from './cli';
 import type { OutputLine } from './engine';
 import { PackSet, serviceEnabled } from './packs';
 import { DeviceIcon } from './icons';
@@ -386,7 +386,7 @@ function Panel(p: Props & { tab: WinTab; gui: Gui }) {
     case 'users':
       return <UsersPanel dev={dev} gui={gui} packs={packs} />;
     case 'term':
-      return <Terminal dev={dev} lines={p.lines} exec={(l) => p.exec(l, 'cli')} />;
+      return <Terminal dev={dev} lines={p.lines} exec={(l) => p.exec(l, 'cli')} complete={(l) => completeCommand(p.net, dev, l, packs)} />;
     case 'xlat':
       return <XlatPanel dev={dev} gui={gui} />;
     case 'security':
@@ -700,18 +700,18 @@ function RoutesPanel({ net, dev, gui, packs }: { net: Network; dev: Device; gui:
   const [via, setVia] = useState('');
   const [via6, setVia6] = useState('');
   const rt = routingTable(net, dev).filter((e) => (e.fam === 4 ? packs.ipv4 : packs.ipv6));
-  const label = { connected: 'C', static: 'S', default: 'S*', nat64: 'N' } as const;
+  const label = { connected: 'C', static: 'S', default: 'S*', nat64: 'N', rip: 'R', ospf: 'O' } as const;
   return (
     <div className={styles.panel}>
       <T
         head={['Typ', 'Sieć docelowa', 'Następny skok', 'Interfejs', 'Stan', '']}
         rows={rt.map((e) => [
           <span title={e.kind}>{label[e.kind]}</span>,
-          `${e.network}/${e.prefix}`,
+          `${e.network}/${e.prefix}${e.metric !== undefined ? ` [${e.kind === 'rip' ? 'skoki' : 'koszt'} ${e.metric}]` : ''}`,
           e.nextHop || 'bezpośrednio',
           e.iface || '?',
           e.active ? <span className={styles.good}>aktywna</span> : <span className={styles.bad}>nieaktywna</span>,
-          e.kind === 'connected' || e.kind === 'nat64' ? '' : <Btn onClick={() => gui(`route del ${e.kind === 'default' ? `default${e.fam === 6 ? ' -6' : ''}` : `${e.network}/${e.prefix}`}`)}>Usuń</Btn>,
+          e.kind === 'connected' || e.kind === 'nat64' || e.kind === 'rip' || e.kind === 'ospf' ? '' : <Btn onClick={() => gui(`route del ${e.kind === 'default' ? `default${e.fam === 6 ? ' -6' : ''}` : `${e.network}/${e.prefix}`}`)}>Usuń</Btn>,
         ])}
         empty="Tablica routingu jest pusta – nadaj adres interfejsowi."
       />
@@ -1075,8 +1075,10 @@ function MailPanel({ dev, gui, lines }: { dev: Device; gui: Gui; lines: OutputLi
   );
 }
 
-export function Terminal({ dev, lines, exec }: { dev: Device; lines: OutputLine[]; exec: (l: string) => CliResult | null }) {
+export function Terminal({ dev, lines, exec, complete }: { dev: Device; lines: OutputLine[]; exec: (l: string) => CliResult | null; complete?: (l: string) => Completion }) {
   const [v, setV] = useState('');
+  /** możliwości pokazane po Tab, gdy uzupełnienie nie jest jednoznaczne */
+  const [opts, setOpts] = useState<string[]>([]);
   const hist = useRef<string[]>([]);
   const hi = useRef(-1);
   const box = useRef<HTMLDivElement>(null);
@@ -1085,6 +1087,16 @@ export function Terminal({ dev, lines, exec }: { dev: Device; lines: OutputLine[
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [lines.length]);
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') {
+      // Tab uzupełnia polecenie zamiast przenosić fokus (Shift+Tab nadal wychodzi z pola)
+      if (e.shiftKey || !complete) return;
+      e.preventDefault();
+      const r = complete(v);
+      setV(r.line);
+      setOpts(r.options);
+      return;
+    }
+    setOpts([]);
     if (e.key === 'Enter') {
       if (v.trim()) hist.current.push(v);
       hi.current = -1;
@@ -1105,8 +1117,9 @@ export function Terminal({ dev, lines, exec }: { dev: Device; lines: OutputLine[
   };
   return (
     <div className={styles.term} ref={box} onClick={() => input.current?.focus()}>
-      {!lines.length && <div className={styles.t_hint}>Wpisz „help”, aby zobaczyć polecenia. Strzałki ↑/↓ przywołują historię.</div>}
+      {!lines.length && <div className={styles.t_hint}>Wpisz „help”, aby zobaczyć polecenia. Tab uzupełnia polecenie, strzałki ↑/↓ przywołują historię.</div>}
       {lines.map((l, i) => <div key={i} className={styles['t_' + l.kind]}>{l.text || ' '}</div>)}
+      {opts.length > 0 && <div className={styles.t_hint}>{opts.join('   ')}</div>}
       <div className={styles.termLine}>
         <span>{prompt(dev)}</span>
         <input ref={input} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={onKey} spellCheck={false} autoComplete="off" aria-label="Polecenie" />

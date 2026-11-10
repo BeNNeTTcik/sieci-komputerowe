@@ -14,13 +14,18 @@
 //   ipv6      – IPv6: SLAAC i NDP                         (ipv6.ts)
 //   dual      – Dual stack: IPv4 i IPv6 razem             (dual.ts)
 //   transport – Transport: TCP i UDP                      (transport.ts)
+//   routing-dyn – Routing statyczny, RIP i OSPF          (routingDyn.ts)
+//   nat       – NAT statyczny, dynamiczny i PAT           (nat.ts)
+//   usterki-hosty – Rozwiązywanie problemów: komputery   (usterkiHosty.ts)
+//   usterki-dns – Rozwiązywanie problemów: DNS           (usterkiDns.ts)
 //   tunnel    – Tunelowanie: IPv6 przez sieć IPv4 (6in4)  (tunnel.ts)
 //   nat64     – Translacja: NAT64 z DNS64                 (nat64.ts)
 //   security  – Bezpieczeństwo w sieci lokalnej           (security.ts)
+//   segmentacja – Segmentacja sieci szkolnej, Etap 1     (segmentacja.ts)
 //
 // Na pojedynczej stronie listę można nadpisać właściwością komponentu, np.
 //   <NetworkSimulator scenarios={['ipv6', 'dual']} />
 //
 // Konfigurację urządzeń i warianty stanu początkowego zmieniasz w pliku danego scenariusza.
 
-export const EXTRA_SCENARIOS: string[] = ['transport'];
+export const EXTRA_SCENARIOS: string[] = ['transport', 'routing-dyn', 'nat', 'usterki-hosty', 'usterki-dns', 'segmentacja'];

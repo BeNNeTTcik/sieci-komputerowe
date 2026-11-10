@@ -15,7 +15,7 @@ export interface CheckCtx {
 export interface Task {
   text: string;
   hint?: string;
-  /** automatyczne sprawdzenie (używane, gdy symulator ma włączone `showTasks`) */
+  /** automatyczne sprawdzenie (gdy go nie ma, student sam zaznacza zadanie, np. odpowiedź na pytanie) */
   check?: (c: CheckCtx) => boolean;
 }
 
@@ -48,20 +48,31 @@ export interface ZoneSpec {
 /** Wariant stanu początkowego – polecenia dopisywane do konfiguracji bazowej. */
 export interface Variant {
   id: string;
-  /** nazwa widoczna w symulatorze (panel „Scenariusz” → „Stan początkowy”) */
+  /** nazwa widoczna w symulatorze (przycisk „Stan początkowy” na pasku narzędzi) */
   name: string;
   description?: string;
+  /** wariant ukryty na liście „Stan początkowy” (np. klucz dla prowadzącego); pokaże go właściwość `variants` albo `variant` */
+  hidden?: boolean;
   config?: DeviceConfig;
+  /** urządzenia, kable i obszary dodawane tylko w tym wariancie (np. router w kolejnym kroku ćwiczenia) */
+  devices?: Record<string, DeviceSpec>;
+  links?: [string, string][];
+  zones?: ZoneSpec[];
+  /** zadania tylko dla tego wariantu (dopisywane po zadaniach scenariusza) */
+  tasks?: Task[];
 }
 
 export interface Scenario {
   id: string;
   /** scenariusz bazowy – zawsze widoczny na pasku */
   base?: boolean;
+  /** ćwiczenie: zadania widać i sprawdzają się zawsze, także bez właściwości `showTasks` */
+  exercise?: boolean;
   /** krótka nazwa na przycisku */
   short: string;
   title: string;
   level: 'podstawowy' | 'średni' | 'zaawansowany';
+  /** opis w zakładce „Zadania”; każdy wiersz to osobny akapit */
   description: string;
   packs: PackId[];
   /** urządzenia w kolejności tworzenia i konfigurowania (najpierw serwery, potem klienci) */

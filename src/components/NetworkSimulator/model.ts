@@ -6,8 +6,8 @@ import { fmt6, inPrefix6, isIp6, isLinkLocal6, linkLocal, net6, norm6, parse6 } 
 
 export type DeviceType = 'pc' | 'server' | 'router' | 'switch' | 'printer';
 
-export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'TUNNEL' | 'EAP' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP' | 'UDP';
-export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'TUNNEL', 'EAP', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP', 'UDP'];
+export type Protocol = 'ARP' | 'NDP' | 'ICMP' | 'TUNNEL' | 'EAP' | 'RIP' | 'OSPF' | 'DHCP' | 'DNS' | 'NTP' | 'HTTP' | 'HTTPS' | 'FTP' | 'EMAIL' | 'IPP' | 'TCP' | 'UDP';
+export const PROTOCOLS: Protocol[] = ['ARP', 'NDP', 'ICMP', 'TUNNEL', 'EAP', 'RIP', 'OSPF', 'DHCP', 'DNS', 'NTP', 'HTTP', 'HTTPS', 'FTP', 'EMAIL', 'IPP', 'TCP', 'UDP'];
 
 export const PROTO_COLORS: Record<Protocol, string> = {
   ARP: '#d97706',
@@ -15,6 +15,8 @@ export const PROTO_COLORS: Record<Protocol, string> = {
   ICMP: '#7c3aed',
   TUNNEL: '#0f766e',
   EAP: '#be123c',
+  RIP: '#0d9488',
+  OSPF: '#9333ea',
   DHCP: '#059669',
   DNS: '#0891b2',
   NTP: '#475569',
@@ -33,6 +35,8 @@ export const PROTO_LABEL: Record<Protocol, string> = {
   ICMP: 'ICMP',
   TUNNEL: 'Tunel',
   EAP: '802.1X',
+  RIP: 'RIP',
+  OSPF: 'OSPF',
   DHCP: 'DHCP',
   DNS: 'DNS',
   NTP: 'NTP',
@@ -103,6 +107,24 @@ export const PROTO_INFO: Record<Protocol, { name: string; layer: string; text: s
       { id: 'IEEE 802.1X-2020', title: 'Port-Based Network Access Control' },
       { id: 'RFC 3748', title: 'Extensible Authentication Protocol (EAP)' },
       { id: 'RFC 3579', title: 'RADIUS Support for EAP' },
+    ],
+  },
+  RIP: {
+    name: 'RIP v2 – Routing Information Protocol',
+    layer: 'warstwa aplikacji (UDP 520), multicast 224.0.0.9',
+    text: 'Protokół wektora odległości: router wysyła sąsiadom swoją tablicę (sieć i metrykę = liczbę skoków), a sąsiad wybiera najkrótszą drogę i rozsyła ją dalej. Metryka 16 oznacza „nieosiągalna”, więc sieć może mieć najwyżej 15 skoków. Podział horyzontu (split horizon) – nie ogłaszam trasy z powrotem tam, skąd ją dostałem – ogranicza pętle. Prawdziwe routery wysyłają tablicę co 30 s; symulator wysyła aktualizacje wyzwalane (po każdej zmianie).',
+    refs: [
+      { id: 'RFC 2453', title: 'RIP Version 2' },
+      { id: 'RFC 1058', title: 'Routing Information Protocol' },
+    ],
+  },
+  OSPF: {
+    name: 'OSPF v2 – Open Shortest Path First',
+    layer: 'warstwa 3 (protokół IP 89), multicast 224.0.0.5',
+    text: 'Protokół stanu łącza: routery witają się pakietami Hello i nawiązują sąsiedztwo, potem rozsyłają opisy swoich łączy (LSA) w pakietach LSU. Każdy router ma tę samą bazę LSDB i sam liczy najkrótsze ścieżki algorytmem Dijkstry (SPF). Metryką jest koszt łącza – wolniejsze łącze ma wyższy koszt. Symulator pomija wymianę opisów bazy (DBD, LSR) i pracuje w jednym obszarze 0.',
+    refs: [
+      { id: 'RFC 2328', title: 'OSPF Version 2' },
+      { id: 'RFC 1812', title: 'Requirements for IP Version 4 Routers' },
     ],
   },
   DHCP: {
@@ -346,6 +368,106 @@ export interface NatEntry {
   port: number;
 }
 
+// ---------- routing dynamiczny: RIP v2 (RFC 2453) i OSPF v2 (RFC 2328) ----------
+
+export interface NetPrefix {
+  network: string;
+  prefix: number;
+}
+
+export interface RipRoute extends NetPrefix {
+  /** liczba skoków (16 = nieosiągalna) */
+  metric: number;
+  nextHop: string;
+  iface: string;
+}
+
+export interface RipCfg {
+  /** sieci, w których RIP działa: interfejsy z adresem z tych sieci wysyłają i odbierają RIP, a ich sieci są ogłaszane */
+  networks: NetPrefix[];
+  /** trasy nauczone od sąsiadów */
+  routes: RipRoute[];
+}
+
+export interface OspfNeighbor {
+  rid: string;
+  ip: string;
+  iface: string;
+  state: 'Init' | '2-Way' | 'Full';
+}
+
+export type OspfLink = { kind: 'router'; rid: string; cost: number } | { kind: 'stub'; network: string; prefix: number; cost: number };
+
+/** Router-LSA (typ 1): opis łączy jednego routera */
+export interface OspfLsa {
+  rid: string;
+  seq: number;
+  links: OspfLink[];
+}
+
+export interface OspfRoute extends NetPrefix {
+  cost: number;
+  nextHop: string;
+  iface: string;
+}
+
+export interface OspfCfg {
+  /** identyfikator routera ustawiony ręcznie; pusty – najwyższy adres IPv4 interfejsu */
+  rid: string;
+  networks: (NetPrefix & { area: number })[];
+  /** koszt interfejsu (domyślnie 10) */
+  costs: Record<string, number>;
+  neighbors: OspfNeighbor[];
+  lsdb: OspfLsa[];
+  seq: number;
+  routes: OspfRoute[];
+}
+
+export const OSPF_COST = 10;
+
+// ---------- NAT dla IPv4 (RFC 3022, RFC 2663) ----------
+
+export interface NatStatic {
+  local: string;
+  global: string;
+}
+
+export interface NatPool {
+  name: string;
+  from: string;
+  to: string;
+}
+
+/** reguła translacji źródła: kto (sieć wewnętrzna) i na co (pula albo adres interfejsu); overload = PAT */
+export interface NatRule extends NetPrefix {
+  pool?: string;
+  iface?: string;
+  overload: boolean;
+}
+
+export interface NatXlate {
+  kind: 'static' | 'dynamic' | 'pat';
+  /** '*' – translacja samego adresu (statyczna i dynamiczna) */
+  proto: 'TCP' | 'UDP' | 'ICMP' | '*';
+  inLocal: string;
+  inLocalPort: number;
+  inGlobal: string;
+  inGlobalPort: number;
+  outside: string;
+  outsidePort: number;
+}
+
+export interface Nat44 {
+  inside: string[];
+  outside: string[];
+  statics: NatStatic[];
+  pools: NatPool[];
+  rules: NatRule[];
+  table: NatXlate[];
+}
+
+export const emptyNat = (): Nat44 => ({ inside: [], outside: [], statics: [], pools: [], rules: [], table: [] });
+
 export interface Mail {
   from: string;
   to: string;
@@ -379,6 +501,8 @@ export interface Device {
   nd: ArpEntry[];
   macTable: MacEntry[];
   dnsCache: DnsRecord[];
+  /** plik hosts: nazwy przypisane na stałe na tym urządzeniu – mają pierwszeństwo przed DNS (nslookup ich nie używa) */
+  hosts: { name: string; ip: string }[];
   jobs: PrintJob[];
   /** przesunięcie zegara urządzenia w ms względem czasu wzorcowego */
   clock: number;
@@ -386,6 +510,10 @@ export interface Device {
   nat64: Nat64 | null;
   natTable: NatEntry[];
   dns64: { prefix: string; len: number } | null;
+  // routing dynamiczny i NAT (router)
+  rip: RipCfg | null;
+  ospf: OspfCfg | null;
+  nat: Nat44;
   // bezpieczeństwo (przełącznik)
   security: SwitchSecurity;
   bindings: Binding[];
@@ -624,11 +752,15 @@ export function createDevice(net: Network, type: DeviceType, x: number, y: numbe
     nd: [],
     macTable: [],
     dnsCache: [],
+    hosts: [],
     jobs: [],
     clock: server ? 0 : Math.round((Math.random() * 2 - 1) * 240000),
     nat64: null,
     natTable: [],
     dns64: null,
+    rip: null,
+    ospf: null,
+    nat: emptyNat(),
     security: { dhcpGuard: false, savi: false, raGuard: false, users: [] },
     bindings: [],
     services: server ? { dhcp: false, dns: true, http: true, https: true, ftp: true, mail: true, ntp: true, discard: true } : noServices(),
@@ -736,12 +868,14 @@ export const STATUS_LABEL: Record<IfStatus, string> = {
 
 export interface RouteEntry {
   fam: 4 | 6;
-  kind: 'connected' | 'static' | 'default' | 'nat64';
+  kind: 'connected' | 'static' | 'default' | 'nat64' | 'rip' | 'ospf';
   network: string;
   prefix: number;
   iface: string;
   nextHop: string;
   active: boolean;
+  /** metryka trasy dynamicznej (RIP: skoki, OSPF: koszt) */
+  metric?: number;
 }
 
 export function routingTable(net: Network, d: Device): RouteEntry[] {
@@ -783,6 +917,21 @@ export function routingTable(net: Network, d: Device): RouteEntry[] {
       active = !!via;
     }
     r.push({ fam: f, kind: s.prefix === 0 ? 'default' : 'static', network: netOf(s.network, s.prefix), prefix: s.prefix, iface, nextHop: s.nextHop, active });
+  }
+  // trasy dynamiczne – po statycznych, więc przy tym samym prefiksie wygrywa statyczna (mniejsza odległość administracyjna),
+  // a z dynamicznych OSPF (110) przed RIP (120)
+  if (router) {
+    const taken = (n: string, p: number) => r.some((x) => x.fam === 4 && x.network === n && x.prefix === p && x.active);
+    const dyn = (kind: 'rip' | 'ospf', list: { network: string; prefix: number; nextHop: string; iface: string; metric: number }[]) => {
+      for (const x of list) {
+        if (x.metric >= 16 && kind === 'rip') continue;
+        if (taken(x.network, x.prefix)) continue;
+        const i = getIface(d, x.iface);
+        r.push({ fam: 4, kind, network: x.network, prefix: x.prefix, iface: x.iface, nextHop: x.nextHop, active: !!i && ifaceStatus(net, d, i) === 'up', metric: x.metric });
+      }
+    };
+    if (d.ospf) dyn('ospf', d.ospf.routes.map((x) => ({ ...x, metric: x.cost })));
+    if (d.rip) dyn('rip', d.rip.routes);
   }
   return r;
 }

@@ -2,7 +2,7 @@
 id: symulator
 title: Symulator sieci
 sidebar_label: Symulator
-sidebar_position: 21
+sidebar_position: 20
 hide_table_of_contents: true
 ---
 
@@ -16,11 +16,13 @@ w terminalu, a ruch oglądasz krok po kroku – ramka po ramce, warstwa po warst
 
 ## Jak korzystać
 
-- **Scenariusze** u góry to gotowe topologie startowe. Zawsze widać bazowe (LAN, router, „Pusty projekt” – start od zera); pozostałe włącza prowadzący w pliku `scenarios/config.ts`. Jeśli scenariusz ma kilka wariantów (np. „Serwer działa” albo „Serwer nieskonfigurowany”), wybierzesz je w panelu **Scenariusz** → **Stan początkowy**.
-- **Pakiety** włączają tylko potrzebne protokoły: IPv4, IPv6, VLAN, DHCP, DNS, WWW, FTP, poczta, NTP, drukowanie.
+- **Scenariusze** u góry to gotowe topologie startowe. Zawsze widać bazowe (LAN, router, „Pusty projekt” – start od zera); pozostałe włącza prowadzący w pliku `scenarios/config.ts`. Jeśli scenariusz ma kilka wariantów (np. „Serwer działa” albo „Serwer nieskonfigurowany”), wybierzesz je w zakładce **Zadania** → **Stan początkowy**.
+- **Pakiety** włączają tylko potrzebne protokoły: IPv4, IPv6, VLAN, DHCP, DNS, WWW, FTP, poczta, NTP, drukowanie, TCP i UDP, przejście IPv4 ↔ IPv6, bezpieczeństwo.
 - Urządzenia **przeciągasz** z paska na obszar roboczy, łączysz narzędziem **Kabel** (z wyborem portów) i konfigurujesz po kliknięciu.
 - Narzędzia **Tekst** i **Obszar** dodają opisy na schemacie, np. prostokąt „Sieć A · 192.168.1.0/24”. Zaznaczony opis przesuwasz, zmieniasz mu rozmiar, kolor i treść (Enter), a Delete go usuwa.
 - Obszar roboczy przewijasz paskami albo przeciągając tło; **Ctrl + kółko** powiększa, przycisk **Dopasuj** pokazuje całą sieć.
+- Segmenty **TCP** i datagramy **UDP** widać na liście zdarzeń jak ARP: etykieta warstwy transportowej obok etykiety aplikacji (np. TCP · HTTP) i skrót nagłówka – porty, flagi, seq, ack, okno, długość. Filtry TCP i UDP ukrywają też aplikacje, które nimi jadą.
+- W terminalu urządzenia **Tab** uzupełnia polecenia, a odłączenie kabla czy wyłączenie portu w trakcie pingu działa od razu – kolejne pakiety już nie przejdą.
 - W trybie **Symulacja** ruch jest odtwarzany powoli. Kliknij ramkę na schemacie, na liście zdarzeń albo na diagramie sekwencji, aby zobaczyć jej zawartość i decyzje urządzeń.
 
 Składnia wszystkich poleceń: [Polecenia CLI](./cli).

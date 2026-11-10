@@ -9,7 +9,7 @@ export default defineScenario({
   level: 'średni',
   packs: ['ipv4', 'transport'],
   description:
-    'Komputery wysyłają te same dane do serwera raz przez TCP, raz przez UDP (usługa Discard, port 9). Między routerami jest łącze, na którym można ustawić gubienie ramek. W widoku „TCP / UDP” na dole widać uzgadnianie, numery sekwencyjne, okno, potwierdzenia i retransmisje – albo ich brak w UDP.',
+    'Komputery wysyłają te same dane do serwera raz przez TCP, raz przez UDP (usługa Discard, port 9). Między routerami jest łącze, na którym można ustawić gubienie ramek. Na liście zdarzeń i na diagramie sekwencji widać uzgadnianie, numery sekwencyjne, okno, potwierdzenia i retransmisje – albo ich brak w UDP.',
 
   devices: {
     SRV1: {
@@ -62,7 +62,7 @@ export default defineScenario({
       config: `
         ip add 192.168.1.10/24 dev eth0
         route add default via 192.168.1.1
-        # rozgrzewka: tablice ARP wypełnione, więc w widoku TCP / UDP zostaje sam transport
+        # rozgrzewka: tablice ARP wypełnione, więc na liście zdarzeń zostaje sam transport
         ping 192.168.2.10 count 1
       `,
     },
@@ -110,13 +110,13 @@ export default defineScenario({
 
   tasks: [
     {
-      text: 'Wyślij 4000 B przez TCP z PC1 do serwera i obejrzyj w widoku „TCP / UDP” uzgadnianie, okno i potwierdzenia.',
+      text: 'Wyślij 4000 B przez TCP z PC1 do serwera i znajdź na liście zdarzeń uzgadnianie, segmenty z danymi i potwierdzenia.',
       hint: 'Terminal PC1: tcp-send 192.168.2.10 (albo okno PC1 → Narzędzia)',
       check: (c) => arrived(c, 'SRV1', (e) => !!e.frame.ip?.tcp && e.frame.ip.tcp.dstPort === 9 && e.frame.ip.tcp.len > 0),
     },
     {
       text: 'Wyślij to samo przez UDP. Ile pakietów i ile bajtów nagłówków transportowych potrzebował każdy protokół?',
-      hint: 'udp-send 192.168.2.10 – podsumowanie jest nad diagramem w widoku „TCP / UDP”.',
+      hint: 'udp-send 192.168.2.10 – policz wiersze TCP i UDP na liście zdarzeń (każdy segment TCP ma 20 B nagłówka, datagram UDP – 8 B).',
       check: (c) => arrived(c, 'SRV1', (e) => !!e.frame.ip?.udp?.data),
     },
     {
