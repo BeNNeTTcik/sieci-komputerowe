@@ -180,7 +180,7 @@ Tab.2 Mechanizmy bezpieczeństwa
 | Hasło na liniach zdalnych | `line vty 0 4` → `password` + `login` | zdalny dostęp przez telnet/SSH |
 | Szyfrowanie haseł w konfiguracji | `service password-encryption` | odczytanie haseł "z ekranu" przy podglądaniu `show running-config` |
 | Automatyczne wylogowanie | `exec-timeout minuty sekundy` | pozostawiona bez nadzoru, zalogowana sesja |
-| Wyłączenie tłumaczenia literówek na DNS | `no ip domain-lookup` | wielosekundowe zawieszenie CLI przy błędnie wpisanym poleceniu |
+| Wyłączenie tłumaczenia literówek na DNS | `no ip domain lookup` | wielosekundowe zawieszenie CLI przy błędnie wpisanym poleceniu |
 
 :::warning `enable secret` a nie `enable password`
 `enable secret` haszuje hasło silnym algorytmem (MD5, w nowszych IOS możliwy też mocniejszy) i zawsze wygrywa z `enable password`, jeśli oba są ustawione. `enable password` to starsze, dużo słabsze polecenie (hasło widoczne w formie odwracalnego szyfru "typu 7" nawet z `service password-encryption`) — w praktyce nie powinno się go już używać.
@@ -191,7 +191,8 @@ Pełna konfiguracja na **SW-X**:
 ```
 SW-X(config)# enable secret Cisco
 SW-X(config)# service password-encryption
-SW-X(config)# no ip domain-lookup
+SW-X(config)# no ip domain lookup
+SW-X(config)# ip domain name lab2.wi.local
 
 SW-X(config)# line console 0
 SW-X(config-line)# password Cisco
