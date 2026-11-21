@@ -14,7 +14,7 @@ import KeywordAnswer from '@site/src/components/KeywordAnswer';
 import OpenQuestion from '@site/src/components/OpenQuestion';
 import Checklist from '@site/src/components/Checklist';
 import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
-import PermissionCalculator from '@site/src/components/PermissionCalculator';
+import PermissionCalculator from '@site/src/components/Permissioncalculator';
 
 # Laboratorium wstępne: Podstawy pracy w Windows 11 i Debian
 
