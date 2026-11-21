@@ -24,7 +24,6 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
-  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 10: Routing dynamiczny — OSPF (single area)"
   storageKey="cwiczenie-10"
 />

@@ -51,6 +51,24 @@ const config = {
         sidebarPath: './sidebars-po-adm-sieci.js',
       },
     ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'bezpieczenstwo-sieci',
+        path: 'docs-po-bezp-sieci',
+        routeBasePath: 'bezpieczenstwo-sieci',
+        sidebarPath: './sidebars-po-bezp-sieci.js',
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'sys-win-linux',
+        path: 'docs-po-win-linux',
+        routeBasePath: 'utwardzanie-systemu-windows-i-linux',
+        sidebarPath: './sidebars-po-win-linux.js',
+      },
+    ],
   ],
 
   themeConfig:
@@ -61,6 +79,8 @@ const config = {
         items: [
           { type: 'docSidebar', docsPluginId: 'sieci', sidebarId: 'cwiczeniaSidebar', label: 'Sieci komputerowe', position: 'left' },
           { type: 'docSidebar', docsPluginId: 'administrowanie-sieciami', sidebarId: 'administrowanie-sieciamiSidebar', label: 'Administrowanie sieciami', position: 'left' },
+          { type: 'docSidebar', docsPluginId: 'bezpieczenstwo-sieci', sidebarId: 'bezpieczenstwo-sieciSidebar', label: 'Testowanie bezpieczeństwa sieci TCP/IP', position: 'left' },
+          { type: 'docSidebar', docsPluginId: 'sys-win-linux', sidebarId: 'sys-win-linuxSidebar', label: 'Utwardzanie systemu Windows i Linux', position: 'left' },
         ],
       },
       footer: {
@@ -72,6 +92,8 @@ const config = {
               { label: 'Strona główna', to: '/' },
               { label: 'Sieci komputerowe', to: '/sieci/intro' },
               { label: 'Administrowanie sieciami', to: '/administrowanie-sieciami/intro' },
+              { label: 'Testowanie bezpieczeństwa sieci TCP/IP', to: '/bezpieczenstwo-sieci/intro' },
+              { label: 'Utwardzanie systemu Windows i Linux', to: '/utwardzanie-systemu-windows-i-linux/intro' },
             ],
           },
         ],

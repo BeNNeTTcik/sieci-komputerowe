@@ -152,7 +152,8 @@ Kurose i Ross wskazują IPv6 jako właściwe rozwiązanie problemu, który NAT j
 
 ## II. Zadania do wykonania
 
-
+routing statycznczny scaneriusz
+nat i pat scenariusz
 
 [^kurose-r4]: J. F. Kurose, K. W. Ross, [Sieci komputerowe. Ujęcie całościowe](https://www.google.com/search?q=%22Sieci+komputerowe%22+Kurose+Ross+Helion+wydanie+7), wyd. 7, Helion – rozdz. 4 „Warstwa sieci: płaszczyzna danych”: 4.1 (przekazywanie a routing, płaszczyzna danych i sterowania), 4.2.1 (przekazywanie według adresu docelowego, reguła najdłuższego dopasowania prefiksu).
 

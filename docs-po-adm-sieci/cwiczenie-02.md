@@ -73,30 +73,6 @@ Tab.1 Komendy diagnostyczne
 | `nslookup` (tryb interaktywny, `set type=`) | `dig`, `host`, `resolvectl query` | zapytania DNS do wybranego serwera | odpowiedź nieautorytatywna, rozbieżność między serwerami |
 | `arp -a`, `route print`, `Test-NetConnection` | `ip neigh`, `ip route`, `nc -zv` | pamięć ARP, tablica routingu hosta, test portu TCP | brak wpisu bramy w ARP, nadmiarowe trasy |
 
-### Konfiguracja urządzeń sieciowych
-
-**Minimum bezpieczeństwa urządzenia sieciowego**
-
-<div className="justify">
-Zanim jeszcze urządzenie zacznie cokolwiek routować czy przełączać, powinno mieć skonfigurowane podstawowe zabezpieczenia dostępu to standardowa checklista, od której zaczyna się konfigurację każdego urządzenia, niezależnie od jego docelowej roli:
-- **Nazwa własna (hostname)** - żeby wiedzieć, na którym urządzeniu się jest (istotne, gdy pracuje się na kilku naraz przez wiele okien PuTTY).
-- **Baner ostrzegawczy (banner motd)** - jednoznaczna informacja, że dostęp jest tylko dla autoryzowanych osób.
-- **Hasło do trybu uprzywilejowanego (`enable secret`)** - bez niego każdy, kto dostanie się do trybu podstawowego, może przejść do pełnej kontroli urządzenia.
-- **Hasła na liniach dostępowych (console, vty)** - same urządzenie fizycznie/sieciowo dostępne to jeszcze nie problem, dopóki nie da się na nim niczego zrobić bez hasła.
-- **Szyfrowanie zapisanych haseł (`service password-encryption`)** - żeby hasła nie były czytelne "z ekranu" przy podglądzie konfiguracji.
-- **SSH zamiast Telnetu** - żeby hasło logowania nie były przesyłane siecią jawnym tekstem.
-</div>
-
-**Konfiguracja urządzeń**
-
-Na stronie [Dokumentacja 2.1](/docs-po-adm-sieci/dokumentacja-021.md) przedstawiono komendy do pracy z urządzeniami Cisco.
-
-Na stronie [Dokumentacja 2.2](/docs-po-adm-sieci/dokumentacja-022.md) przedstawiono komendy do pracy z urządzeniami Mikrotik.
-
-Na stronie [Dokumentacja 2.3](/docs-po-adm-sieci/dokumentacja-023.md) przedstawiono komendy do pracy z urządzeniami Fortinet.
-
-Na stronie [Dokumentacja 2.4](/docs-po-adm-sieci/dokumentacja-024.md) przedstawiono komendy do pracy z urządzeniami Dell.
-
 ## II. Zadania do wykonania
 
 ### Inwentaryzacja konfiguracji stanowiska
@@ -406,6 +382,8 @@ allowRemoveRows={false}
 ### Znajdź usterkę
 
 Use case -> 2x
+pierwszy problem z cfg pc
+drugi problem z dns
 
 [^RFC1122]: [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) - Requirements for Internet Hosts - Communication Layers, 1989.
 

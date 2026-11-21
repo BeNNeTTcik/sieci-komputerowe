@@ -250,7 +250,7 @@ Tab. 5 Urządzenia etapu 1
 <StepByStep>
 <Step title="1.1 Sieć płaska">
 
-### scenatriusz dla mojego projektu
+<!-- <NetworkSimulator scenario="segmentacja" variant="płaska" /> -->
 
 Połącz przełączniki kablem (SW-U G0/1 – SW-N G0/1) i nadaj adresy z Tabeli 5. Przejdź w tryb **Simulation**, w *Edit Filters* zostaw tylko **ARP** i **ICMP**, a następnie z PC-U1 wyślij ping do PC-U2. Potem z PC-U1 otwórz w przeglądarce stronę `http://192.168.1.50`.
 
@@ -274,17 +274,26 @@ allowRemoveRows={false}
 <Step title="1.2 Całkowite odcięcie">
 Usuń kabel między przełącznikami i powtórz testy z Tabeli 6.
 
-<OpenQuestion
-  title="Kiedy całkowite odcięcie połączenia między przełącznikami ma sens?"
-  question="Teraz uczniowie nie mają dostępu do nauczycieli, ale nauczyciele nie mają też dostępu do… czegokolwiek poza swoim pokojem i serwerem. Podaj dwa przykłady sieci, które w praktyce rozdziela się fizycznie bez żadnego połączenia, i wyjaśnij dlaczego."
-  minLength={60}
-  storageKey="cw3_e1_airgap"
+<EditableTable
+title="Tab. 6b Całkowite odcięcie"
+storageKey="cw3_e1_odciecie"
+columns={[
+{ key: 'test', label: 'Test', readOnly: true },
+{ key: 'wynik', label: 'Wynik' },
+]}
+initialRows={[
+{ test: 'Do ilu urządzeń dotarło zapytanie ARP z PC-U1?' },
+{ test: 'Czy uczeń (PC-U1.1) otworzył stronę dziennika?' },
+{ test: 'Czy uczeń może spingować komputer nauczyciela (PC-N.1)?' },
+]}
+allowAddRows={false}
+allowRemoveRows={false}
 />
 </Step>
 
 <Step title="1.3 Router jako jedyne przejście">
 <div className="justify">
-Dodaj router **2911** (R1). Podłącz SW-U G0/1 do R1 G0/0, a SW-N G0/1 do R1 G0/1. Sieci muszą mieć teraz różne adresy, dlatego podziel `192.168.1.0/24` na dwie równe podsieci: pierwszą dla uczniów, drugą dla nauczycieli. Bramą jest pierwszy adres hosta w podsieci.
+Dodaj router R1. Podłącz SW-U G0/1 do R1 G0/0, a SW-N G0/1 do R1 G0/1. Sieci muszą mieć teraz różne adresy, dlatego podziel `192.168.1.0/24` na dwie równe podsieci: pierwszą dla uczniów, drugą dla nauczycieli. Bramą jest pierwszy adres hosta w podsieci.
 </div>
 
 <EditableTable
@@ -327,7 +336,7 @@ storageKey="cw3_e1_inwentarz"
 columns={[
 { key: 'element', label: 'Element', readOnly: true },
 { key: 'e1', label: 'Etap 1 – fizyczna' },
-{ key: 'e2', label: 'Etap 2 – VLAN' },
+{ key: 'e2', label: 'Etap 2 – VLAN' }
 ]}
 initialRows={[
 { element: 'Liczba przełączników' },
@@ -338,14 +347,6 @@ initialRows={[
 ]}
 allowAddRows={false}
 allowRemoveRows={false}
-/>
-
-<OpenQuestion
-  title="Dyrektor ma nowy pomysł"
-  question="Szkoła dostaje drugi budynek. Powstanie w nim druga pracownia uczniów, pokój nauczycielski i sekretariat (nowa, trzecia grupa). Co trzeba dokupić i ile kabli poprowadzić między budynkami, jeśli zostaniemy przy segmentacji fizycznej? Ile wolnych portów router 2911 ma do dyspozycji?"
-  modelAnswer="Przy segmentacji fizycznej każda grupa w każdym budynku potrzebuje osobnego przełącznika (w budynku B trzy przełączniki) i osobnego połączenia z resztą swojej grupy albo z routerem – razem co najmniej trzy kable między budynkami. Router 2911 ma tylko trzy porty Gigabit Ethernet, a jeden jest potrzebny do Internetu, więc nie obsłuży trzech grup bez dodatkowej karty. Większość portów przełączników pozostanie przy tym wolna."
-  minLength={80}
-  storageKey="cw3_e1_rozbudowa"
 />
 </Step>
 
@@ -371,7 +372,7 @@ allowRemoveRows={false}
 </Step>
 </StepByStep>
 
-## Etap 2. VLAN i dobór adresacji (35 min)
+#### Etap 2. VLAN i dobór adresacji
 
 <div className="justify">
 Zamiast kupować przełącznik dla każdej grupy, w każdym budynku stawiamy jeden przełącznik, a grupy rozdzielamy VLAN-ami. Operator przydzielił szkole na sieć wewnętrzną tylko pulę `172.16.X.0/24`, więc trzeba ją podzielić oszczędnie, metodą **VLSM** – zaczynając od największej grupy.
@@ -404,26 +405,6 @@ initialRows={[
 allowAddRows={false}
 allowRemoveRows={false}
 />
-
-<KeywordAnswer
-  title="Zapas na rozbudowę"
-  question="Jaka część puli 172.16.X.0/24 została wolna po przydzieleniu wszystkich VLAN-ów? Podaj ją jako adres z prefiksem."
-  keywords={['.128/25']}
-  explanation="Pięć VLAN-ów zajmuje adresy .0–.127 (64 + 32 + 16 + 8 + 8 = 128 adresów). Wolna jest cała druga połowa puli: 172.16.X.128/25 – można z niej utworzyć kolejne podsieci, np. dla drugiej pracowni."
-  storageKey="cw3_e2_zapas"
-/>
-
-<details>
-<summary>Klucz do Tabeli 10 (dla prowadzącego)</summary>
-
-| VLAN | Adres sieci | Prefiks | Maska | Brama | Broadcast | Wildcard |
-|---|---|---|---|---|---|---|
-| 10 | 172.16.X.0 | /26 | 255.255.255.192 | 172.16.X.1 | 172.16.X.63 | 0.0.0.63 |
-| 20 | 172.16.X.64 | /27 | 255.255.255.224 | 172.16.X.65 | 172.16.X.95 | 0.0.0.31 |
-| 30 | 172.16.X.96 | /28 | 255.255.255.240 | 172.16.X.97 | 172.16.X.111 | 0.0.0.15 |
-| 40 | 172.16.X.112 | /29 | 255.255.255.248 | 172.16.X.113 | 172.16.X.119 | 0.0.0.7 |
-| 99 | 172.16.X.120 | /29 | 255.255.255.248 | 172.16.X.121 | 172.16.X.127 | 0.0.0.7 |
-</details>
 </Step>
 
 <Step title="2.2 Adresy urządzeń">
@@ -452,12 +433,6 @@ initialRows={[
 allowAddRows={false}
 allowRemoveRows={false}
 />
-
-<details>
-<summary>Klucz do Tabeli 11 (dla prowadzącego)</summary>
-
-PC-U1 .2, PC-U2 .3, PC-N1 .66, PC-N2 .67, PC-SEKR .98, SRV-DZIENNIK .114, SW-1 .122, SW-2 .123, PC-ADMIN .126.
-</details>
 </Step>
 
 <Step title="2.3 Budowa topologii">
@@ -568,81 +543,7 @@ W trybie **Simulation** wyślij ping z PC-U1 do PC-U2 i sprawdź, do których ur
   storageKey="cw3_e2_porownanie"
 />
 </Step>
-
-<Step title="2.5 Atak przez wolne gniazdko i utwardzenie">
-:::warning
-Ćwiczenie wykonujemy **wyłącznie w Packet Tracerze**.
-:::
-
-Ktoś wpiął własny przełącznik w wolne gniazdko w budynku B. Dodaj **SW-INTRUZ** (2960) i połącz jego Fa0/24 z **Fa0/24** przełącznika SW-2. Do SW-INTRUZ Fa0/1 podłącz **PC-INTRUZ**.
-
-```
-SW-INTRUZ(config)# vlan 30
-SW-INTRUZ(config-vlan)# exit
-SW-INTRUZ(config)# interface fastEthernet 0/24
-SW-INTRUZ(config-if)# switchport mode dynamic desirable
-SW-INTRUZ(config-if)# interface fastEthernet 0/1
-SW-INTRUZ(config-if)# switchport mode access
-SW-INTRUZ(config-if)# switchport access vlan 30
-```
-
-PC-INTRUZ: `172.16.X.110/28`, brama `172.16.X.97`. Sprawdź, czy pinguje PC-SEKR, i wykonaj na SW-2 `show interfaces trunk`.
-
-<KeywordAnswer
-  title="Jak intruz dostał się do sekretariatu?"
-  question="Nikt nie konfigurował portu Fa0/24 na SW-2, a mimo to intruz ma dostęp do VLAN-u administracji. Dlaczego?"
-  keywords={['DTP', 'dynamic', 'negocj', 'trunk']}
-  explanation="Porty przełącznika 2960 domyślnie pracują w trybie dynamic auto i negocjują tryb pracy protokołem DTP. Obcy przełącznik zaproponował trunk (dynamic desirable), a SW-2 go przyjął – od tej chwili przez gniazdko przechodzą wszystkie VLAN-y."
-  storageKey="cw3_e2_atak"
-/>
-
-<Checklist
-title="Utwardzanie SW-1 i SW-2"
-storageKey="cw3_e2_obrona"
-sections={[
-{ title: 'Porty nieużywane', items: [
-'switchport mode access',
-'switchport access vlan 999 – VLAN „czarna dziura”',
-'shutdown',
-]},
-{ title: 'Porty użytkowników', items: [
-'switchport nonegotiate – wyłączenie DTP',
-]},
-{ title: 'Trunki', items: [
-'switchport trunk allowed vlan 10,20,30,40,99',
-'switchport trunk native vlan 999 – na wszystkich trunkach po obu stronach łącza między przełącznikami',
-]},
-]}
-/>
-
-Włącz Fa0/24 na SW-2 (`no shutdown`) i powtórz atak – trunk nie powinien się zestawić.
-</Step>
-
-<Step title="2.6 Dla chętnych: IPv6 w każdym VLAN-ie">
-Każdy VLAN dostaje własny prefiks `/64`, a numer VLAN-u zapisujemy w identyfikatorze podsieci, np. VLAN 10 → `2001:db8:X:10::/64`.
-
-```
-R1-X(config)# ipv6 unicast-routing
-R1-X(config)# interface gigabitEthernet 0/0.10
-R1-X(config-subif)# ipv6 address 2001:db8:X:10::1/64
-```
-
-Powtórz dla pozostałych podinterfejsów, a na komputerach wybierz *IPv6 Configuration ⇒ Automatic*. Sprawdź, czy PC-U1 pinguje PC-N1 po adresie IPv6.
-
-<KeywordAnswer
-  title="IPv6 a VLSM"
-  question="Dlaczego w IPv6 nie trzeba dobierać prefiksu do liczby hostów, tak jak zrobiliśmy to w Tabeli 10?"
-  keywords={['/64', '64', 'SLAAC', 'zawsze']}
-  explanation="W IPv6 każda sieć z hostami ma prefiks /64 niezależnie od liczby urządzeń (tego wymaga m.in. SLAAC), a adresów jest tyle, że oszczędzanie nie ma sensu. Planuje się tylko liczbę podsieci /64, a nie ich rozmiar."
-  storageKey="cw3_e2_ipv6"
-/>
-</Step>
 </StepByStep>
-
-1. fizyczna
-2. vlan
-3. adresacja
-4. kontrola ruchu
 
 [^sekurak1]: Sekurak.Academy - Szkolenie: "Bezpieczna architektura sieci w małej firmie i mikroprzedsiębiorstwie.", 07.2025.
 

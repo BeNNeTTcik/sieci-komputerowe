@@ -37,6 +37,29 @@ function IconAdministrowanie() {
   );
 }
 
+function IconBezpieczenstwo() {
+  return (
+    <svg viewBox="0 0 64 64" width="96" height="96" aria-hidden="true">
+      <path d="M32 6 L54 14 V32 C54 46 44 54 32 58 C20 54 10 46 10 32 V14 Z"
+        fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M22 32 l7 7 l13 -15" fill="none" stroke="currentColor"
+        strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconSysWinLinux() {
+  return (
+    <svg viewBox="0 0 64 64" width="96" height="96" aria-hidden="true">
+      <rect x="8" y="12" width="48" height="32" rx="3" fill="none" stroke="currentColor" strokeWidth="3" />
+      <line x1="24" y1="52" x2="40" y2="52" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      <line x1="32" y1="44" x2="32" y2="52" stroke="currentColor" strokeWidth="3" />
+      <rect x="26" y="24" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M28 24 v-3 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
 // --- Lista kursów ---------------------------------------------------------
 // Nowy kurs = nowy obiekt w tablicy. `to` to ścieżka BEZ baseUrl
 // (bez /sieci-komputerowe) — skopiuj ją z paska adresu po kliknięciu
@@ -56,6 +79,20 @@ const courses = [
     to: '/administrowanie-sieciami/intro',
     Icon: IconAdministrowanie,
     img: '/img/administrowanie-sieciami.png',
+  },
+  {
+    title: 'Testowanie bezpieczeństwa sieci TCP/IP',
+    desc: 'Laboratoria z audytu, monitoringu, wykrywania i analizy incydentów.',
+    to: '/bezpieczenstwo-sieci/intro',
+    Icon: IconBezpieczenstwo,
+    img: '/img/testowanie-bezpieczenstwa-tcp-ip.png',
+  },
+  {
+    title: 'Utwardzanie systemu Windows i Linux',
+    desc: 'Laboratoria z utwardzania systemów operacyjnych Windows i Linux.',
+    to: '/utwardzanie-systemu-windows-i-linux/intro',
+    Icon: IconSysWinLinux,
+    img: '/img/sys-win-linux.png',
   },
 ];
 

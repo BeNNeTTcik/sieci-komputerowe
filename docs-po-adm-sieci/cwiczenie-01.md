@@ -292,7 +292,7 @@ Sprawdź, czy w programie Wireshark pojawiły się przechwycone ramki, po czym z
 
 ### IPv4 i IPv6 w szkolnej pracowni
 
-Cisco Packet tracer 2 sieci do zrobienia + testy działania
+Cisco Packet tracer 2 sieci do zrobienia + testy działania + 2 scenariusze w dual
 
 <!-- <NetworkSimulator scenarios={['ipv6']} /> -->
 

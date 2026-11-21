@@ -21,7 +21,6 @@ import ProjectSaveLoad from '@site/src/components/ProjectSaveLoad';
 *Część II — Zajęcia praktyczne*
 
 <SprawozdanieHeader
-  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 15: Projekt zaliczeniowy"
   storageKey="cwiczenie-15"
   solo

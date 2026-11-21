@@ -22,7 +22,6 @@ import Question from '@site/src/components/Question';
 _Część II — Zajęcia praktyczne_
 
 <SprawozdanieHeader
-  thema="Sieci komputerowe"
   exerciseTitle="Ćwiczenie 14: Projektowanie adresacji IP i podział na podsieci"
   storageKey="cwiczenie-14"
   solo

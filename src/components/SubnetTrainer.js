@@ -5,6 +5,31 @@ function normalize(str) {
   return String(str ?? '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
+// Zamienia zapis IPv6 (pełny, skrócony z "::", z wiodącymi zerami lub bez,
+// wielkimi lub małymi literami) na liczbę — dzięki temu "fd00:0:0:1::" i
+// "FD00::1:0:0:0:0" porównują się po WARTOŚCI, a nie po tekście.
+// Zwraca null, jeśli tekst nie jest poprawnym adresem IPv6.
+function ipv6ToBigInt(str) {
+  const s = String(str ?? '').trim().toLowerCase();
+  if (!s.includes(':') || !/^[0-9a-f:]+$/.test(s)) return null;
+  const parts = s.split('::');
+  if (parts.length > 2) return null;
+  const head = parts[0] ? parts[0].split(':') : [];
+  const tail = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (parts.length === 1 ? missing !== 0 : missing < 1) return null;
+  const groups = [...head, ...Array(parts.length === 2 ? missing : 0).fill('0'), ...tail];
+  if (groups.some(g => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.reduce((acc, g) => (acc << 16n) | BigInt(parseInt(g, 16)), 0n);
+}
+
+function answersMatch(given, expected) {
+  if (normalize(given) === normalize(expected)) return true;
+  const a = ipv6ToBigInt(given);
+  const b = ipv6ToBigInt(expected);
+  return a !== null && b !== null && a === b;
+}
+
 function sample(arr, count) {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -149,7 +174,7 @@ export default function SubnetTrainer({countIPv4 = 7, countIPv6 = 3, title, stor
     return problems[problemIdx].blanks.every(b => isFieldFilled(problemIdx, b.key));
   }
   function isFieldCorrect(problemIdx, blank) {
-    return normalize(answers[problemIdx][blank.key]) === normalize(blank.answer);
+    return answersMatch(answers[problemIdx][blank.key], blank.answer);
   }
   function isProblemFullyCorrect(problemIdx) {
     return problems[problemIdx].blanks.every(b => isFieldCorrect(problemIdx, b));
